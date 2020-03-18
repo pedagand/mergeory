@@ -1,0 +1,41 @@
+// Original
+fn f() {
+    let a = 0;
+    let a = 4;
+    a
+}
+
+// M1: rename a_1 -> b
+fn f() {
+    let a = 0;
+    let b = 4;
+    b
+}
+
+// M2: rename a_0 -> c
+fn f() {
+    let c = 0;
+    let a = 4;
+    a
+}
+
+// (M1; M3): rename a_1 -> b; change return value to a
+fn f() {
+    let a = 0;
+    let b = 4;
+    a
+}
+
+// M1 & M2: rename a_0 -> c, a_1 -> b
+fn f() {
+    let c = 0;
+    let b = 4;
+    b
+}
+
+// M2 & (M1; M3): rename a_0 -> c, a_1 -> b; change return value to c
+fn f() {
+    let c = 0;
+    let b = 4;
+    c // Standard merge would incorrectly write `a` here
+}

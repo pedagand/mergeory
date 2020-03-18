@@ -1,0 +1,51 @@
+// Original
+fn f() { 42 }
+fn g() {
+    let factor = 2;
+    let x = f();
+    factor * x
+}
+
+// M1: Change f's signature
+// Can be interpreted as:
+// A. add new function f(x); replace f() by f(42); remove function f()
+// Or as:
+// B. generalize f() to f(42)
+fn f(x) { x }
+fn g() {
+    let factor = 2;
+    let x = f(42);
+    factor * x
+}
+
+// M2: Create a new instance of f inside g
+fn g() {
+    let factor = f();
+    let x = f();
+    factor * x
+}
+
+// M1.A & M2: conflicts: f() does not exist anymore
+// M1.B & M2: OK
+fn g() {
+    let factor = f(42);
+    let x = f(42);
+    factor * x
+}
+
+// Proposal B seems more convenient, but will be hard to auto-detect.
+
+// M3: change usage of f inside g
+fn g() {
+    let factor = 2;
+    let x = f();
+    factor / x;
+}
+
+// M1 & M3: Ok if f() replacement preserves semantics. How to know that?
+fn f(x) { x }
+fn g() {
+    let factor = 2;
+    let x = f(42);
+    factor / x
+}

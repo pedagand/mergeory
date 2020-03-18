@@ -1,0 +1,27 @@
+// Original
+fn f(x, y) {
+    let xx = 100 / x;
+    let yy = 100 / y;
+    xx + yy
+}
+
+// M1: Crash on xx fix
+fn f(x, y) {
+    let xx = if (x == 0) { 0 } else { 100 / x };
+    let yy = 100 / y;
+    xx + yy
+}
+
+// M2: Crash on yy fix
+fn f(x, y) {
+    let xx = 100 / x;
+    let yy = if (y == 0) { 0 } else { 100 / y };
+    xx + yy
+}
+
+// M1 & M2: Both crash fixes
+fn f(x, y) {
+    let xx = if (x == 0) { 0 } else { 100 / x };
+    let yy = if (y == 0) { 0 } else { 100 / y };
+    xx + yy
+}

@@ -1,0 +1,40 @@
+// Original
+fn f() { 42 }
+fn g() {
+    let factor = 2;
+    let x = f();
+    factor * x
+}
+
+// M1: Change f return value
+fn f() { 0 }
+
+// M2: Create a new instance of f inside g
+fn g() {
+    let factor = f();
+    let x = f();
+    factor * x
+}
+
+// M1 & M2: Unclear, but if functions embody implicit specs could be :
+fn f() { 0 }
+fn g() {
+    let factor = f();
+    let x = f();
+    factor * x
+}
+
+// M3: change usage of f inside g
+fn g() {
+    let factor = 2;
+    let x = f();
+    factor / x;
+}
+
+// M1 & M3: Implicit specs could create crashes...
+fn f() { 0 }
+fn g() {
+    let factor = 2;
+    let x = f();
+    factor / x
+}

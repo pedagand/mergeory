@@ -1,0 +1,70 @@
+// Original
+fn f(c) {
+    let x;
+    if (true) {
+        x = 3;
+    }
+    else {
+        x = 1;
+    }
+    x + 1
+}
+
+// M1: Remove else branch
+fn f(c) {
+    let x;
+    x = 3;
+    x + 1
+}
+
+// M2: Change the condition expr
+fn f(c) {
+    let x;
+    if (!c) {
+        x = 3;
+    }
+    else {
+        x = 1;
+    }
+    x + 1
+}
+
+// M1 & M2: Conflicts, first branch removal assumes a condition
+
+// M3: Change something in else branch
+fn f(c) {
+    let x;
+    if (c) {
+        x = 3;
+    }
+    else {
+        x = 1;
+        x = x * 2;
+    }
+    x + 1
+}
+
+// M1 & M3: Conflicts, added code is also removed
+// But might be resolved in favor of removal: M1 & M3 = M1
+
+// M4: Change something in then branch
+fn f(c) {
+    let x;
+    if (c) {
+        x = 3;
+        x = x * 2;
+    }
+    else {
+        x = 1;
+    }
+    x + 1
+}
+
+// M1 & M4: Could result in this change
+fn f(c) {
+    let x;
+    x = 3;
+    x = x * 2;
+    x + 1
+}
+

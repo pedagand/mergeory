@@ -1,0 +1,37 @@
+// Original
+fn f() {
+    let a = 0;
+    let b = 1;
+    a + b
+}
+
+// M1: rename a -> foo
+fn f() {
+    let foo = 0;
+    let b = 1;
+    foo + b
+}
+
+// M2: rename b -> bar
+fn f() {
+    let a = 0;
+    let bar = 1;
+    a + bar
+}
+
+// M1 & M2: rename (a -> foo, b -> bar)
+fn f() {
+    let foo = 0;
+    let bar = 1;
+    foo + bar
+}
+
+// M3: rename a -> bar
+fn f() {
+    let bar = 0;
+    let b = 1;
+    bar + b
+}
+
+// M1 & M3: conflicts
+// M2 & M2: conflicts and might not be detected by current merge

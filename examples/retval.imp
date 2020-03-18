@@ -1,0 +1,56 @@
+// Original
+fn f() {
+    let a = 0;
+    let b = 1;
+    a + b
+}
+
+// M1: change a expression
+fn f() {
+    let a = 1; // changed
+    let b = 1;
+    a + b // changed
+}
+
+// M2: change b expression, taints return value
+fn f() {
+    let a = 0;
+    let b = 2; // changed
+    a + b // changed
+}
+
+// M1 & M2: ??
+fn f() {
+    let a = 1; // changed
+    let b = 2; // changed
+    a + b // conflict here? a and b simultaneously changed.
+}
+
+// M3: Equivalent expression
+fn f() {
+    let a = 1 - 1; // rewritten
+    let b = 1;
+    a + b // unchanged
+}
+
+// M2 & M3: change b, replace by equivalent in a
+fn f() {
+    let a = 1 - 1; // rewritten
+    let b = 2; // changed
+    a + b // changed
+}
+
+// M4: Compensated
+fn f() {
+    let a = 1; // changed
+    let b = 1;
+    a + b - 1 // compensated
+}
+
+// M2 & M4: change b, change a compensated in retval
+fn f() {
+    let a = 1;
+    let b = 2;
+    a + b - 1
+}
+

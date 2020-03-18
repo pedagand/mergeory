@@ -1,0 +1,58 @@
+// Original
+fn f(c) {
+    let x;
+    if (c) {
+        x = 3;
+        x = x * 2;
+    }
+    else {
+        x = 1;
+        x = x * 2;
+    }
+    x + 1
+}
+
+// M1: Refactor common trailing code
+fn f(c) {
+    let x;
+    if (c) {
+        x = 3;
+    }
+    else {
+        x = 1;
+    }
+    x = x * 2;
+    x + 1
+}
+
+// M2: Change expression for x
+fn f(c) {
+    let x;
+    if (c) {
+        x = 3;
+        x = x * 2;
+    }
+    else {
+        x = 42;
+        x = x * 2;
+    }
+    x + 1
+}
+
+// M1 & M2: OK
+
+// M3: Change expression for x in one branch
+fn f(c) {
+    let x;
+    if (c) {
+        x = 3;
+        x = x * 3;
+    }
+    else {
+        x = 1;
+        x = x * 2;
+    }
+    x + 1
+}
+
+// M1 & M3: Conflicts, factorizing does not work anymore

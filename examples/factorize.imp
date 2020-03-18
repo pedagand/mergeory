@@ -1,0 +1,24 @@
+// Original
+fn f() {
+    let a = 0;
+    let b = 1;
+    a + b
+}
+
+// M1: factorize add
+fn add(a, b) { a + b }
+
+fn f() {
+    let a = 0;
+    let b = 1;
+    add(a, b)
+}
+
+// M2: change return value
+fn f() {
+    let a = 0;
+    let b = 1;
+    a + b + 1 // changed
+}
+
+// M1 & M2: ???
