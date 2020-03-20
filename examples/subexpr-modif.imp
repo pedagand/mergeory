@@ -1,0 +1,31 @@
+// Original
+fn f(c, cc) {
+    let x = if (c) { 3 } else { 1 };
+    x + 1
+}
+
+// M1: change then branch
+fn f(c, cc) {
+    let x = if (c) { 2 } else { 1 };
+    x + 1
+}
+
+// M2: change condition expression
+fn f(c, cc) {
+    let x = if (cc) { 3 } else { 1 };
+    x + 1
+}
+
+// M1 & M2: Impossible
+
+// M3: change else branch
+fn f(c, cc) {
+    let x = if (c) { 3 } else { 4 };
+    x + 1
+}
+
+// M1 & M3: Ok because working on independant branches
+fn f(c, cc) {
+    let x = if (c) { 2 } else { 4 };
+    x + 1
+}

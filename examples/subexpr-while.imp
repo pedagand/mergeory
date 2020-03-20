@@ -1,0 +1,31 @@
+// Original
+fn count_iter(cell, next) {
+    let res = 0;
+    while (cell) {
+        res += 1;
+        cell = next(cell);
+    }
+    res
+}
+
+// M1
+fn count_iter(cell, next) {
+    let res = 0;
+    while (!cell->stop) {
+        res += 1;
+        cell = next(cell);
+    }
+    res
+}
+
+// M2
+fn count_iter(cell, next) {
+    let res = 1;
+    while (cell) {
+        res += 1;
+        cell = next(cell);
+    }
+    res
+}
+
+// M1 & M2: Impossible: both might have the same effect on the result
