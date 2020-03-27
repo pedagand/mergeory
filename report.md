@@ -26,7 +26,7 @@ Can we replace that with a change priorization system?
 Is there a systematic way of describing compatible changes?
 
 Idea:
-For $i \in \{1,2\}$, if $\Delta_i$, is a difference of the form 
+For $i \in \{1,2\}$, if $\Delta_i$, is a difference of the form
 $\delta_{i,1}, \ldots, \delta_{i,n}$.
 Then $\Delta_1 & \Delta_2$ is well defined if any interleaving
 of $\delta_{i,n}$ is equivalent.
@@ -127,13 +127,15 @@ I(mf, ((k1, S1), (k2, S2), mx) =
 Interpretation function = in very high level pseudo-code
 ```
 match k1, k2 with
-    | skip, skip | sequence _ _, sequence _ _
+    | skip, skip
+    | sequence _ _, sequence _ _
     | if (c) _ else _, if (c) _ else _ when c not in mx or mf
     | while (g) _, while (g) _ when g not in mx or mf
     | assert (b), assert (b) when b not in mx or mf
-    | x = e, x = e when e does not contain anything in mx or mf
     | halt, halt ->
         progress by one in each program, do not change mx
+    | x = e, x = e when e does not contain anything in mx or mf ->
+        progress by one in each program, remove x from mx
     | x = e1, x = e2 -> (* For our usecase do not treat divisors separately *)
         progress by one in each program, add x to mx
     | if (c1) et1 else ee1, if (c2) et2 else ee2 ->
@@ -186,3 +188,194 @@ remove the program shape preservation.
 Still, restricting ourselves to specific kind of correlation oracles seems
 necessary.
 Then what could be a good expressive enough correlation oracle family?
+
+What about addition / deletion of control struture.
+Branch modifications seems to be manageable in the same way as changing values.
+What about loops?
+
+Conflict resolutions
+====================
+
+How can conflicts be solved if there is any and how to represent a conflict?
+
+ExprChange: Another representation for ValueChange-like oracles
+---------------------------------------------------------------
+Change point of view: We do not use two programs as input but a single one
+and a potential modification for each original expression.
+
+We denote by `new(e)` the modified version of `e` by the list of modifications.
+
+Static evaluation environment = Set of non-spec preserved functions * list of modifications
+Dynamic evaluation environment = States of original program * Store of the modified program * modified variables
+
+In case of crash, replace the corresponding store by \bottom. If both stores
+are crashed, crash the correlation as well.
+
+Invariant = `I(mf, ((k, S), new_S, mx)) = forall x not in mx, S(x) = new_S(x)`
+
+Interpretation function = in very high level pseudo-code
+```
+match k with
+    | skip
+    | sequence _ _
+    | halt ->
+        progress by one instruction, do not change mx
+    | if (c) _ else _
+    | while (c) _
+    | assert (c) ->
+        if (c preserved by new and does not contain anything in mx or mf):
+            go to the next step, do not change mx
+        else:
+            progress until exiting the branch, add all assigned variables to mx
+    | x = e ->
+        if (e is preserved by new and does not contain anything in mx or mf):
+            progress by one instruction, remove x from mx
+        else:
+            progress by one instruction, add x to mx
+```
+
+This new representation shows the fact that a program not modifying structure
+but maybe control flow can be tracked with only keeping the states of the source
+program.
+
+Merge two ExprChange modifications
+----------------------------------
+The description of ExprChange make it easy to derive a correlation corresponding
+to two changes in parallel by fusing the lists of modifications as the modified
+programs are now implicit.
+
+However, doing so might create conflicts when an expression is modified in both
+or if a modified expression uses a variable also modified in the other program.
+
+Therefore a merging of two concurrent change is described with three sets of
+expression modifications.
+Two of them denoted by `left(e)` and `right(e)` are the merged modifications and
+play symmetrical roles.
+A third one `override(e)` is used for solving conflicts between the
+modifications.
+If `dom(override) is empty`, then the two sets of modifications are independant
+and can be easily combined without manual input.
+However, some concurrent modification will require an override expression that
+must be given by the user.
+
+To check that a program is indeed a merge of two ExprChange, we can use an
+oracle MergeExprChange similar to ExprChange but with more parameters.
+It will ensure that all conflicts are solved by manual overriding (and can
+detect a potential missing override entry).
+
+
+Static evaluation environment = Set of non-spec preserved functions * list of modifications (left, right and override)
+Dynamic evaluation environment = States of original program * Store of the left program * Store of the right program * Store of the merged program * Set of touched variables (lx, rx and ox)
+
+Where partial stores only contain values that differ from the original program.
+
+In case of crash, replace the corresponding store by \bottom. If all stores
+are crashed, crash the correlation as well.
+
+Invariant = ```
+I(mf, ((k, S), S_left, S_right, S_merged, (lx, rx, ox))) =
+    forall x not in lx, S(x) = S_left(x),
+    forall x not in rx, S(x) = S_right(x),
+    forall x not in lx \cup rx \cup ox, S(x) = S_merged(x),
+    lx \cap rx \subseteq ox
+```
+
+Interpretation function = in very high level pseudo-code
+```
+enum ModifStatus { UNCHANGED, OVERRIDEN, LEFT, RIGHT, CONFLICT }
+fn expr_modif(expr) {
+    if expr in override:
+        return OVERRIDEN
+    if expr in left:
+        if expr in right:
+            return CONFLICT
+        for litt in left(expr):
+            if litt in rx and not in ox:
+                return CONFLICT
+        return LEFT
+    if expr in right:
+        for litt in right(expr):
+            if litt in lx and not in ox:
+                return CONFLICT
+        return RIGHT
+
+    # The expression itself is not modified but it might depend on modified
+    variables
+    flags = {}
+    for litt in expr:
+        if litt in ox:
+            flags += OVERRIDEN
+        else:
+            if litt in lx:
+                flags += LEFT
+            if litt in rx:
+                flags += RIGHT
+
+    match flags with
+    | {} -> UNCHANGED
+    | {LEFT, RIGHT, ...} -> CONFLICT
+    | {LEFT, ...} -> LEFT
+    | {RIGHT, ...} -> RIGHT
+    | {OVERRIDEN} -> OVERRIDEN
+}
+
+match k with
+    | skip
+    | sequence _ _
+    | halt ->
+        progress by one instruction, do not change lx, rx or ox
+    | if (c) _ else _
+    | while (c) _
+    | assert (c) ->
+        match expr_modif(c) with
+        | NONE ->
+            go to the next step, do not change lx, rx or ox
+        | OVERRIDEN ->
+            for expr_inside in branches:
+                match expr_modif(expr_inside) with
+                | NONE | OVERRIDEN -> pass
+                | _ -> assert false
+            progress until end of block and add all modified variables to ox
+        | LEFT ->
+            for expr_inside in branches:
+                match expr_modif(expr_inside) with
+                | RIGHT | CONFLICT -> assert false
+                | _ -> pass
+            progress until end of block and add all modified variables to lx
+        | RIGHT -> (symmetrical from left...)
+        | CONFLICT -> assert false
+    | x = e ->
+        match expr_modif(e) with
+        | NONE ->
+            go to the next step, remove x from lx, rx and ox
+        | OVERRIDEN ->
+            go to the next step, remove x from lx and rx, add x to ox
+        | LEFT ->
+            go to the next step, remove x from rx and ox, add x to lx
+        | RIGHT ->
+            go to the next step, remove x from lx and ox, add x to rx
+        | CONFLICT -> assert false
+```
+
+The following case must be considered seriously:
+```
+let a = modified by left;
+let b = modified by right;
+let o = [overriden] a + b;
+let c = a + o;
+let d = c + b;
+
+a         b
+|         |
++···>o<···+
+|    |    |
+|    v    |
++--->c    |
+     |    |
+     v    |
+     d<---+
+```
+We should consider that the variable c is modified by the left change but also
+partly overriden.
+Indeed, it will have a value different from just applying the left patch, but
+it should also collide with d.
