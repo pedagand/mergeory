@@ -129,6 +129,71 @@ let c = a + b; // Collision
 \caption{Collision created after modification of two independant variables}
 \end{figure}
 
+\paragraph{Origin graph and control flow} If the value of a variable is used for defining control flow, it will gain create a dependancy on all the variables inside the branches.
+
+\begin{figure}[ht]
+\begin{minipage}{.5\textwidth}
+\begin{lstlisting}
+let a = 2;
+let b = 5;
+let c = a;
+while (c < b) {
+    c += 1;
+}
+\end{lstlisting}
+\end{minipage}\hfill
+\begin{minipage}{.45\textwidth}
+\centering\begin{tikzpicture}
+  \node[varnode] (a) {a};
+  \node[varnode, right=1.5cm of a] (b) {b};
+  \node[varnode] (c) at ($(a)!0.5!(b)+(0,-1)$) {c};
+
+  \draw[->] (a) -- (c);
+  \draw[->] (b) -- (c);
+\end{tikzpicture}
+\end{minipage}
+\caption{Origin graph at the end of a program containing a while-loop. Note that $c$ keeps its dependancy on $a$ as it used its previous value inside the loop.}
+\end{figure}
+
+However incompatible branches can be treated independantly and do not generate conflicts by themselves.
+\begin{figure}[ht]
+\begin{minipage}{.5\textwidth}
+\begin{lstlisting}
+let b = 2; // Modified by B
+let x;
+if (c) {
+    x = 1; // Modified by A
+} else {
+    x = b; // Touched by B
+}
+let y = x - 1; // OK
+let z = y + b; // Conflict
+\end{lstlisting}
+\end{minipage}\hfill
+\begin{minipage}{.45\textwidth}
+\centering\begin{tikzpicture}
+  \node[varnode] (b) {b};
+  \node[modnode, above=0.5cm of b] (B_b) {B:1: b = 2};
+  \node[modnode, left=0.5cm of b] (A_x) {A:4: x = 1};
+  \node[varnode, left=1cm of A_x] (c) {c};
+  \node[varnode] (x) at ($(c)!0.5!(A_x)+(0,-1)$) {x};
+  \node[varnode, below=0.5cm of x] (y) {y};
+  \node[varnode, below=0.5cm of y] (z) {z};
+
+
+  \draw[->] (B_b) -- (b);
+  \draw[->] (c) -- (x);
+  \draw[->] (A_x) -- (x);
+  \draw[->] (x) -- (y);
+  \draw[->] (y) -- (z);
+  \draw[->] (b) to[out=-90, in=45] (z);
+\end{tikzpicture}
+\end{minipage}
+\caption{Origin graph at the end of a program after taking the then branch, showing that there is no collision on $x$ but still one on $z$.}
+\end{figure}
+
+This might become a problem if care is not taken in origin graph checks, because each branch combination might need to be examined.
+
 \paragraph{Solving collisions by overriding}
 In order to be able to solve collisions, I extend the definition of a merge with a set of modification overrides in addition to the set of concurrent commits.
 A modification in the override set, take precedence over any modification in any of the merged commits. Moreover we can consider that these overrides are done knowing what is inside all the concurrent commits.
@@ -209,5 +274,8 @@ let d = c + b;
 \caption{Origin graph for the same example as before except that now line 2 is
 overriden marking that $b$ has a preserved semantic. Therefore, line 5 is not showing a conflict anymore.}
 \end{figure}
+
+\section{Modification of expressions only}
+This idea works very well for commits that only consist of modifications of expressions and preserve the whole program structure (but maybe not the control flow).
 
 \end{document}
