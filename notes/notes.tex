@@ -91,7 +91,7 @@ If at a given point of a program, a node of the origin graph is transitively lin
 \begin{figure}[ht]
 \centering\begin{tikzpicture}
   \node[varnode] (x) {x};
-  \node[varnode, below=1cm of x] (y) {y};
+  \node[varnode, below=1cm of x, red] (y) {y};
 
   \node[modnode, left=1.5cm of x] (x_A) {A:1: x = 2};
   \draw[->] (x_A) -- (x);
@@ -115,7 +115,7 @@ let c = a + b; // Collision
 \centering\begin{tikzpicture}
   \node[varnode] (a) {a};
   \node[varnode, right=1.5cm of a] (b) {b};
-  \node[varnode] (c) at ($(a)!0.5!(b)+(0,-1)$) {c};
+  \node[varnode, red] (c) at ($(a)!0.5!(b)+(0,-1)$) {c};
 
   \node[modnode, above=0.5cm of a] (A_a) {A:1: a = 0};
   \node[modnode, above=0.5cm of b] (B_b) {B:2: b = 1};
@@ -178,7 +178,7 @@ let z = y + b; // Conflict
   \node[varnode, left=1cm of A_x] (c) {c};
   \node[varnode] (x) at ($(c)!0.5!(A_x)+(0,-1)$) {x};
   \node[varnode, below=0.5cm of x] (y) {y};
-  \node[varnode, below=0.5cm of y] (z) {z};
+  \node[varnode, below=0.5cm of y, red] (z) {z};
 
 
   \draw[->] (B_b) -- (b);
@@ -218,7 +218,7 @@ let d = c + b; // Collision!
   \node[varnode, right=1.5cm of a] (b) {b};
   \node[varnode, double] (o) at ($(a)!0.5!(b)+(0,-1)$) {o};
   \node[varnode, below=0.5cm of o] (c) {c};
-  \node[varnode, below=0.5cm of c] (d) {d};
+  \node[varnode, below=0.5cm of c, red] (d) {d};
 
   \node[modnode, above=0.5cm of a] (A_a) {A:1: a = 0};
   \node[modnode, above=0.5cm of b] (B_b) {B:2: b = 1};
