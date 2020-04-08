@@ -67,7 +67,7 @@ if (c) {
 let y = x + 1; // touched but unambiguous
 \end{lstlisting}
 
-\paragraph{A generic definition of a valid merge} A merge is valid if for any state of the program, there is a single unambiguous trace after applying all the modifications of the concurrent commits. There should be no automatic choice in favor of any of the commits. This means that if two commits touched the same state of the program or the same variable at the same time, the merge will be considered not valid. We call a point in a trace where the semantic is ambiguous a collision.
+\paragraph{A generic definition of a valid merge} A merge is valid if for any state of the program, there is a single unambiguous trace after applying all the modifications of the concurrent commits. There should be no automatic choice in favor of any of the commits. This means that if two commits touched the same state of the program or the same expression at the same time, the merge will be considered not valid. We call a point in a trace where the semantic is ambiguous a collision.
 Note that I consider that this includes a case where commit $A$ modifies a variable $x$ and then commit $B$ changes the value of $y$ to the new value of $x$.
 
 \noindent
@@ -96,9 +96,9 @@ let y = x; // !!!
 \begin{lstlisting}[label=lst:change_introducing_modified, caption={Colliding changes by using a variable modified by someone else}]
 \end{lstlisting}
 
-To keep track of potential collisions we can create a graph of origins that is updated between each program state. This graph has a node for each variable plus one node for each modification (labelled by the commit). Two nodes are linked by an edge if the value of a variable comes from the value of another variable or comes directly from a modification.
+\paragraph{Origin graphs for functionnal programs} To keep track of potential collisions we can create a graph of origins that is updated between each program state. In a program where variables are never mutable, this graph has a node for each variable plus one node for each modification (labelled by the commit). Two nodes are linked by an edge if the value of a variable comes from the value of another variable or comes directly from a modification.
 
-If at a given point of a program, a node of the origin graph is transitively linked to modifications of different concurrent commits, then there is a collision at this point.
+If at a given point of a program, a node of the origin graph is transitively linked to modifications of different concurrent commits, then there is a collision on the variable definition.
 
 \begin{figure}[ht]
 \centering\begin{tikzpicture}
@@ -141,44 +141,22 @@ let c = a + b; // Collision
 \end{minipage}
 \caption{Collision created after modification of two independant variables}
 \end{figure}
+\FloatBarrier
 
-\paragraph{Origin graph and control flow} If the value of a variable is used for defining control flow, it will gain create a dependancy on all the variables inside the branches.
-
-\begin{figure}[ht]
-\begin{minipage}{.5\textwidth}
-\begin{lstlisting}
-let a = 2;
-let b = 5;
-let c = a;
-while (c < b) {
-    c += 1;
-}
-\end{lstlisting}
-\end{minipage}\hfill
-\begin{minipage}{.45\textwidth}
-\centering\begin{tikzpicture}
-  \node[varnode] (a) {a};
-  \node[varnode, right=1.5cm of a] (b) {b};
-  \node[varnode] (c) at ($(a)!0.5!(b)+(0,-1)$) {c};
-
-  \draw[->] (a) -- (c);
-  \draw[->] (b) -- (c);
-\end{tikzpicture}
-\end{minipage}
-\caption{Origin graph at the end of a program containing a while-loop. Note that $c$ keeps its dependancy on $a$ as it used its previous value inside the loop.}
-\end{figure}
+\paragraph{Origin graph and control flow} If the value of a variable is used for defining control flow, all the variables inside the branches will gain a dependancy on it.
 
 However incompatible branches can be treated independantly and do not generate conflicts by themselves.
+
 \begin{figure}[ht]
 \begin{minipage}{.5\textwidth}
 \begin{lstlisting}
 let b = 2; // Modified by B
-let x;
-if (c) {
-    x = 1; // Modified by A
-} else {
-    x = b; // Touched by B
-}
+let x =
+    if (c) {
+        1 // Modified by A
+    } else {
+        b // Touched by B
+    };
 let y = x - 1; // OK
 let z = y + b; // Conflict
 \end{lstlisting}
@@ -289,23 +267,21 @@ let d = c + b;
 overriden marking that $b$ has a preserved semantic. Therefore, line 5 is not showing a conflict anymore.}
 \end{figure}
 
-\section{Practical usage}
-\paragraph{Modification of expressions only} This idea works very well for commits that only consist of modifications of expressions and preserve the whole program structure (but maybe not the control flow).
-
-If we number all the expressions used in a program, then a commit is a partial map from expression indices to new expressions (and same for the override list).
-
-\paragraph{Graph coloring to check conflicts} For being able to quickly check that an assignment does not introduce a conflict, we can simply keep a coloring of the graph, that links each variable to the single unambiguous commit that modifies its semantic. Therefore a wellformed graph without conflicts only have incoming edges from nodes without coloring or with the same color as itself.
+\section{From trace to program point origin graphs}
+\paragraph{Graph coloring to check conflicts} For being able to quickly check that an assignment does not introduce a conflict, we can simply keep a coloring of the graph, that links each variable to the single unambiguous commit that modifies its semantic.
+Therefore a well-formed graph without conflicts only have incoming edges from nodes without coloring or with the same color as itself.
+Overriden variables will never be colored as they are considered to never collide with any of the concurrent commits.
 
 \begin{figure}[ht]
 \begin{minipage}{.5\textwidth}
 \begin{lstlisting}
 let b = 2; // Modified by B
-let x;
-if (c) {
-    x = 1; // Modified by A
-} else {
-    x = b; // Touched by B
-}
+let x =
+    if (c) {
+        1 // Modified by A
+    } else {
+        b // Touched by B
+    };
 let y = x - 1; // OK
 let z = y + b; // Conflict
 \end{lstlisting}
@@ -333,7 +309,7 @@ let z = y + b; // Conflict
 \label{fig:origin_graph_branches_color}
 \end{figure}
 
-\paragraph{Program point origin graph} Also, to ease verification we need to switch from origins graph specified for a given trace to origin graphs specified at a given program point. In absence of control flow expressions, we have no problem for defining it as there is only one trace going from the begining of the program to its end. However we need to deal with conditions and loops and arbitrary nesting of these two.
+\paragraph{Program point origin graph} Also, to ease verification we need to switch from origins graph specified for a given trace to origin graphs specified at a given program point. In absence of control flow expressions, we have no problem for defining it as there is only one trace going from the begining of the program to its end. However we need to deal with conditions and recursive calls (analoguous to loops but in a functional setup) and arbitrary nesting of these two.
 
 A good origin graph at a given program point must be projectable on any trace leading to the program point, and show conflict if at least one of the trace has a conflict.
 
@@ -419,9 +395,147 @@ let v = z + u; // !
 \label{fig:multiple_if}
 \end{figure}
 
-We can easily compute the projection on a trace that take a given path by choosing one of the two original colors as a replacement for each color create by merges (and remove the unmatching edges).
+We can easily compute the projection on a trace that take a given path by choosing one of the two original colors as a replacement for each color created by merges (and remove the unmatching edges).
+
+An explosion of the number of colors is impossible as the number of colors is bounded at a given point by the number of variables.
 
 This strategy might incur a loss of precision by marking with different colors two distinct conditional expressions on the same condition but is a safe approximation. If necessary, we can refine this by remember the conditions involved to later check that indeed the conflicting case can happen, and print the conflicting path to the user.
 \FloatBarrier
+
+\paragraph{Handling recursive functions} In presence of functions we need to add a node for the return value of the function and also add nodes for each functions calls. For the moment, I consider that the result of a function call depends on all the arguments, and only that.
+
+Recursive functions will create some kind of loop in the origin graph (that is representing the implicit looping control flow). Therefore in their presence, we have to be careful and do the coloring after the full construction of the origin graph.
+\begin{figure}[!ht]
+\begin{minipage}{.5\textwidth}
+\begin{lstlisting}
+fn f(l: List) -> i32 {
+    match l {
+        Nil => a,
+        Cons(_, t) => b + f(t)
+    }
+}
+\end{lstlisting}
+\end{minipage}\hfill
+\begin{minipage}{.45\textwidth}
+\centering\begin{tikzpicture}
+  \node[varnode] (l) {l};
+  \node[varnode, below=0.5cm of l] (t) {t};
+  \node[varnode, below=0.5cm of t] (ft) {f(t)};
+  \node[varnode, left=1cm of ft] (b) {b};
+  \node[varnode] (cons_tmp) at ($(ft)!0.5!(b)+(0,-1)$) {};
+  \node[varnode, left=1cm of cons_tmp] (a) {a};
+  \node[condnode] (switch) at ($(a)!0.5!(cons_tmp)+(0,-1)$) {};
+  \node[varnode, below=0.5cm of switch] (res) {f(l)};
+
+  \draw[->] (l) -- (t);
+  \draw[->] (t) -- (ft);
+  \draw[->] (ft) -- (cons_tmp);
+  \draw[->] (b) -- (cons_tmp);
+  \draw (a) -- (switch);
+  \draw (cons_tmp) -- (switch);
+  \draw[->] (switch) -- (res);
+  \draw[->] (l) to[out=-45, in=0] (res);
+  \draw[->] (res) to[out=45, in=-90] (ft);
+\end{tikzpicture}
+\end{minipage}
+\caption{Origin graph of a recursive function.}
+\label{fig:fun_rec}
+\end{figure}
+
+
+\paragraph{Higher order programs with closures} What happens if functions can be inside variables? Seems that simply considering that the function (and all its arguments) is a dependancy of all its calls is enough.
+
+We just need to be careful with captures. A conservative approach would consider that if a function captures a variable, then it gets a dependancy on it. But this can create conflicts that do not exist, if captured variables are used in different branches. A more natural approach is to analyze the inside of the function in the definition environment and then keep the color of the result for the function itself at the end.
+
+\begin{figure}[!ht]
+\begin{minipage}{.5\textwidth}
+\begin{lstlisting}
+let a = 1; // Modified by A
+let b = 2; // Modified by B
+let f = |x, c| {
+    if (c) {
+        x + a
+    } else {
+        x + b
+    }
+};
+let r = f(b, true);
+\end{lstlisting}
+\end{minipage}\hfill
+\begin{minipage}{.45\textwidth}
+\centering\begin{tikzpicture}
+  \node[varnode, colorA] (a) {a};
+  \node[varnode, right=1.5cm of a, colorB] (b) {b};
+  \node[modnode, above=0.5cm of b, colorB] (B_b) {B:1: b = 2};
+  \node[modnode, above=0.5cm of a, colorA] (A_a) {A:4: x = 1};
+  \node[condnode, colorC] (if) at ($(A_x)!0.5!(b)+(0,-1)$) {};
+  \node[varnode, below=0.5cm of if, colorC] (f) {f};
+  \node[varnode, below=0.5cm of f, conflict] (r) {r};
+
+  \draw[->] (A_a) -- (a);
+  \draw[->] (B_b) -- (b);
+  \draw (A_x) -- (if);
+  \draw (b) -- (if);
+  \draw[->] (if) -- (f);
+  \draw[->] (f) -- (r);
+  \draw[->] (b) to[out=-90, in=45] (r);
+\end{tikzpicture}
+\end{minipage}
+\caption{Origin graph with a closure. The conflict could actually disappear if inlining of $f$ is applied.}
+\label{fig:closure}
+\end{figure}
+
+\section{Oracles for structure preserving modifications}
+
+\paragraph{Modification of expressions only} This idea works very well for commits that only consist of modifications of expressions and preserve the whole program structure (but maybe not the control flow).
+
+If we number all the expressions used in a program, then a commit is a partial map from expression indices to new expressions (and same for the override list).
+
+For conditional branches (\lstinline$if$ or \lstinline$match$), we can consider them both as expressions and as structure. Therefore we can either choose to replace them totally, or to only replace expressions of branches, condition and/or scrutinee.
+Obviously, replacing the whole expression, is also a modification of all the branches.
+
+\paragraph{Linking programs before and after commits} For any source program and set of structure preserving modification with matching indices, we can build a correlation oracle that links the program before and the program after the commit together.
+
+The only problem here occurs with programs whose termination status is modified by the commit. To simplify our problem, we will consider first programs that do always terminate.
+
+The correlation oracle can be constructed with as static environment the expression modifications and the origin graph at the end of the program, and as dynamic environment the state of the original program, and the store of the modified program.
+
+The preserved invariant checks that only colored variables in the origin graph have a different value in the store of programs before and after the commit. It should also check the origin of values in the stack.
+
+The interpretation function is executing programs in lockstep manner except that it has to perform a big step if there is a conditional with different conditions in different branches.
+
+If a given program crashes because of a runtime exception, we have to continue executing the other one, relating all its following states to the crashing one.
+
+\paragraph{A correlation oracle to check fusion} Suppose that we have already proven that there is an origin graph including all modifications of all the concurrent commits, with a given list of overrides.
+
+TODO: finish that
+
+\section{Checking imperative programs}
+
+\paragraph{Origin graph and mutable variables} In presence of mutable variables we should track not variables but assignment expressions inside the origin graph, and separately keep a link from variables to their definition at the current program point.
+
+\begin{figure}[ht]
+\begin{minipage}{.5\textwidth}
+\begin{lstlisting}
+let a = 2;
+let b = 5;
+let mut c = a;
+while (c < b) {
+    c += 1;
+}
+\end{lstlisting}
+\end{minipage}\hfill
+\begin{minipage}{.45\textwidth}
+\centering\begin{tikzpicture}
+  \node[varnode] (a) {a};
+  \node[varnode, right=1.5cm of a] (b) {b};
+  \node[varnode] (c) at ($(a)!0.5!(b)+(0,-1)$) {c};
+
+  \draw[->] (a) -- (c);
+  \draw[->] (b) -- (c);
+\end{tikzpicture}
+\end{minipage}
+\caption{Origin graph at the end of a program containing a while-loop. Note that $c$ keeps its dependancy on $a$ as it used its previous value inside the loop.}
+\end{figure}
 
 \end{document}
