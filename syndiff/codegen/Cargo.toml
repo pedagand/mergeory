@@ -1,0 +1,18 @@
+[package]
+name = "mrsop-codegen"
+version = "0.1.0"
+authors = ["Guillaume Bertholon <guillaume.bertholon@ens.fr>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = { version = "1.0.17", features = ["full", "fold", "visit"] }
+quote = "1.0"
+proc-macro2 = "1.0"
+synstructure = "0.12"
+syn-codegen = "0.1"
+serde_json = "1.0"
