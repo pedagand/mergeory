@@ -29,7 +29,7 @@ pub fn get_nodes() -> Vec<DeriveInput> {
                     let fields = fields.iter().map(|(fname, ftyp)| {
                         let fname = format_ident!("{}", fname);
                         let ftyp = get_type_tokens(ftyp, &syn_private_types);
-                        quote!(#fname: #ftyp,)
+                        quote!(pub #fname: #ftyp,)
                     });
                     Some(parse_quote!(struct #name {
                         #(#fields)*

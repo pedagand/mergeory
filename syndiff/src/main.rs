@@ -4,10 +4,14 @@ use std::process;
 
 mod ast;
 mod convert;
+mod ellided_tree;
 mod hash_tree;
+mod visit;
 
 use convert::Convert;
+use ellided_tree::{Ellider, WantedEllisionFinder};
 use hash_tree::{tables_intersection, HashTables};
+use visit::Visit;
 
 struct SourceCode {
     filename: String,
@@ -36,17 +40,53 @@ fn main() {
     let origin_src = SourceCode::from_file(origin_filename).expect("Unable to read origin file");
     let modified_src =
         SourceCode::from_file(modified_filename).expect("Unable to read modified file");
-    diff_src(&origin_src, &modified_src)
+
+    let file_change = compute_change(&origin_src, &modified_src)
+
+    // Merge the deletion and the insertion tree on their common part to create
+    // a spine of unchanged structure.
+    todo!()
 }
 
-fn diff_src(origin_src: &SourceCode, modified_src: &SourceCode) {
+struct FileChange {
+    deletion_ast: ast::ellided::File,
+    insertion_ast: ast::ellided::File,
+}
+
+pub fn compute_change(origin_src: &SourceCode, modified_src: &SourceCode) -> FileChange {
+    // Parse both input files and hash their AST
     let (origin_hash_ast, origin_hash_tables) = parse_and_hash_src(origin_src);
     let (modified_hash_ast, modified_hash_tables) = parse_and_hash_src(modified_src);
 
+    // Find the common subtrees between original and modified versions
     let unified_hash_tables = tables_intersection(origin_hash_tables, modified_hash_tables);
+
+    // Find which of the common subtrees will actually be ellided in both trees.
+    // This avoids ellided part appearing only inside one of the subtrees.
+    let mut origin_ellision_finder = WantedEllisionFinder::new(&unified_hash_tables);
+    origin_ellision_finder.visit(&origin_hash_ast);
+    let mut modified_ellision_finder = WantedEllisionFinder::new(&unified_hash_tables);
+    modified_ellision_finder.visit(&modified_hash_ast);
+    let ellision_tables = tables_intersection(
+        origin_ellision_finder.wanted_ellisions,
+        modified_ellision_finder.wanted_ellisions,
+    );
+
+    // Remove any reference to subtrees inside unified_hash_tables such that either:
+    // * The subtree must be ellided
+    // * The Rc counter of the subtree is 1
+    drop(unified_hash_tables);
+
+    // Compute the difference as a deletion and an insertion tree by elliding
+    // parts reused from original to modified
+    let deletion_ast = Ellider::new(&ellision_tables).convert(origin_hash_ast);
+    let insertion_ast =
+        Ellider::new(&ellision_tables).convert(modified_hash_ast);
+
+    FileChange { deletion_ast, insertion_ast }
 }
 
-fn parse_and_hash_src(src: &SourceCode) -> (ast::hash_tree::File, HashTables) {
+fn parse_and_hash_src(src: &SourceCode) -> (ast::hash::File, HashTables) {
     let ast = syn::parse_file(&src.code).unwrap_or_else(|err| {
         let err_start = err.span().start();
         let err_end = err.span().end();
@@ -65,6 +105,6 @@ fn parse_and_hash_src(src: &SourceCode) -> (ast::hash_tree::File, HashTables) {
     });
 
     let mut hash_tables = HashTables::default();
-    let hash_ast: ast::hash_tree::File = hash_tables.convert(ast);
+    let hash_ast: ast::hash::File = hash_tables.convert(ast);
     (hash_ast, hash_tables)
 }

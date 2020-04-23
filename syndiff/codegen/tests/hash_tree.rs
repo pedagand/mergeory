@@ -95,7 +95,7 @@ mrsop_codegen! {
             }
         }
 
-        impl_convert!(super -> self for HashTables);
+        family_impl!(Convert<super, self> for HashTables);
     }
 }
 

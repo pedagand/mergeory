@@ -8,26 +8,30 @@ use std::rc::Rc;
 pub struct HashSum(u64);
 
 macro_rules! make_tables {
-    { $($table_name:ident: $type:ty,)* } => {
+    { $($name:ident: $type:ty,)* } => {
         #[derive(Default)]
         pub struct HashTables {
-            $($table_name: HashMap<HashSum, Rc<$type>>,)*
+            $($name: HashMap<HashSum, Rc<$type>>,)*
         }
 
         pub trait HasHashTable: Sized + Hash + PartialEq {
-            fn get_table(hash_tables: &mut HashTables) -> &mut HashMap<HashSum, Rc<Self>>;
+            fn get_table(hash_tables: &HashTables) -> &HashMap<HashSum, Rc<Self>>;
+            fn get_table_mut(hash_tables: &mut HashTables) -> &mut HashMap<HashSum, Rc<Self>>;
         }
 
         $(impl HasHashTable for $type {
-            fn get_table(hash_tables: &mut HashTables) -> &mut HashMap<HashSum, Rc<$type>> {
-                &mut hash_tables.$table_name
+            fn get_table(hash_tables: &HashTables) -> &HashMap<HashSum, Rc<$type>> {
+                &hash_tables.$name
+            }
+            fn get_table_mut(hash_tables: &mut HashTables) -> &mut HashMap<HashSum, Rc<$type>> {
+                &mut hash_tables.$name
             }
         })*
 
         pub fn tables_intersection(table1: HashTables, table2: HashTables) -> HashTables {
             HashTables {
-                $($table_name: table1.$table_name.into_iter().filter(|(h, v1)| {
-                    match table2.$table_name.get(h) {
+                $($name: table1.$name.into_iter().filter(|(h, v1)| {
+                    match table2.$name.get(h) {
                         Some(v2) => {
                             assert!(v1 == v2);
                             true
@@ -41,15 +45,15 @@ macro_rules! make_tables {
 }
 
 make_tables! {
-    expr_table: ast::hash_tree::Expr,
-    item_table: ast::hash_tree::Item,
-    stmt_table: ast::hash_tree::Stmt,
+    expr: ast::hash::Expr,
+    item: ast::hash::Item,
+    stmt: ast::hash::Stmt,
 }
 
 #[derive(Debug)]
 pub struct HashTagged<T> {
-    data: Rc<T>,
-    hash: HashSum,
+    pub data: Rc<T>,
+    pub hash: HashSum,
 }
 
 impl<T: Hash> From<T> for HashTagged<T> {
@@ -85,7 +89,7 @@ where
     fn convert(&mut self, input: In) -> HashTagged<Out> {
         let converted_input = self.convert(input);
         let hash_tagged = HashTagged::from(converted_input);
-        let existing_item = HasHashTable::get_table(self)
+        let existing_item = Out::get_table_mut(self)
             .entry(hash_tagged.hash)
             .or_insert_with(|| hash_tagged.data.clone());
         assert!(*existing_item == hash_tagged.data);

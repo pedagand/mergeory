@@ -15,7 +15,7 @@ use syn::parse::{Parse, ParseStream};
 use syn::spanned::Spanned;
 use syn::{parse_macro_input, DeriveInput, Error, Item, ItemMod, Path, Result};
 
-mod convert;
+mod auto_impl;
 mod extend;
 mod family;
 mod modgen;
@@ -67,7 +67,7 @@ mod syn_family;
 ///             }
 ///         }
 ///
-///         impl_convert!(super-> self for ComputeLength);
+///         family_impl!(Convert<super, self> for ComputeLength);
 ///
 ///         pub(super) fn compute(foo: super::Foo) -> usize {
 ///             match ComputeLength.convert(foo) {
@@ -278,59 +278,93 @@ pub fn extend_family(_: TokenStream) -> TokenStream {
     panic!("extend_family! can only be used inside mrsop_codegen! modules");
 }
 
-/// Create implementations of a `Convert` trait that transforms instances of
-/// the recursive family.
+/// Create implementations for all members of the family for one of the
+/// following trait:
 ///
-/// `Convert` trait should be a locally defined trait with the following
-/// definition:
+/// * `Convert` trait that recursively transforms an instance of the recursive
+/// family into a potentially different extension of the recursive family.
+/// The implemented trait must have the following definition:
 /// ```
 /// trait Convert<In, Out> {
 ///     fn convert(&mut self, input: In) -> Out;
 /// }
 /// ```
-/// Sadly, Rust doesn't allow to import a trait defined by a proc-macro crate,
-/// so users need to redefine it.
 ///
-/// The `Convert` trait will be implemented for all types in the family, turning
-/// one variant of it into another (or transforming elements inside the same
-/// variant).
+/// * `Visit` trait that recursively walk through an instance of a variant of
+/// the recursive family.
+/// The implemented trait must have the following definition:
+/// ```
+/// trait Visit<T> {
+///     fn visit(&mut self, input: &T);
+/// }
+/// ```
+///
+/// * `VisitMut` trait that visits a tree and potentially allows for in place
+/// modifications.
+/// The implemented trait must have the following definition:
+/// ```
+/// trait VisitMut<T> {
+///     fn visit_mut(&mut self, input: &mut T);
+/// }
+/// ```
+///
+/// Sadly, Rust doesn't allow to import a trait defined by a proc-macro crate,
+/// so users need to redefine Convert, Visit and VisitMut when they need to use
+/// them.
+///
+/// The traits will be implemented for all types in the family by simply
+/// performing a recursion.
 /// However, you will have to manually specify how to deal with types outside
 /// the family that are containing members of the family.
 ///
-/// Generally the `Convert` implementation will simply move elements that have
-/// a type outside the family. If you want to generate a call to convert inside
-/// them, you can add an `#[extra_conversion(OtherType)]` attribute to force
-/// all occurences of `OtherType` to also be converted by using a manually
-/// supplied converter.
+/// For `Convert`, it will turn one variant of the AST into another (or
+/// transforming elements inside the same variant).
 ///
-/// Currently the syntax of `impl_convert!` is the following:
-/// `impl_convert!(mod_input -> mod_output for T)` where `mod_*` represent a
-/// path to the module containing the family (e.g. `self` for a mutually
-/// recursive family generated in the current module by [`extend_family!`],
-/// `super` for the family in the parent module and `syn` for the Rust AST).
+/// Generally the generated implementations will simply ignore or move
+/// elements that have a type outside the family.
+/// If you want to generate a recursive call for external types, you can add
+/// an `#[extra_call(OtherType)]` attribute to force all occurences of
+/// `OtherType` to also be processed by a manually supplied implementation.
+///
+/// Currently the syntax of `family_impl!` is one of the following (depending
+/// on the generated trait implementation):
+///
+/// * `family_impl!(Convert<input_mod, output_mod> for T)`
+/// * `family_impl!(Visit<visited_mod> for T)`
+/// * `family_impl!(VisitMut<visited_mod> for T)`
+///
+/// where `*_mod` represent a path to the module containing the family variant
+/// (e.g. `self` for a mutually recursive family generated in the current module
+/// by [`extend_family!`], `super` for the family in the parent module and
+/// `syn` for the Rust AST).
 ///
 /// [`extend_family!`]: macro.extend_family.html
 ///
 /// # Example
+/// This example shows two different ways to increment every integer inside a
+/// tree, one using a `Convert` implementation and the other a `VisitMut` one.
 /// ```
 /// trait Convert<In, Out> {
 ///     fn convert(&mut self, input: In) -> Out;
 /// }
 ///
+/// trait VisitMut<T> {
+///     fn visit_mut(&mut self, input: &mut T);
+/// }
+///
+/// struct Incr;
+///
 /// # use mrsop_codegen::mrsop_codegen;
 /// mrsop_codegen! {
-///     #[derive(PartialEq, Eq, Debug)]
+///     #[derive(PartialEq, Eq, Debug, Clone)]
 ///     pub enum A {
 ///         Empty,
 ///         Num(i32),
 ///         List(Vec<A>),
 ///     }
 ///
-///     mod incr {
-///         use crate::Convert;
-///         use super::A;
-///
-///         struct Incr;
+///     mod convert_incr {
+///         use crate::{Convert, Incr};
 ///
 ///         impl Convert<i32, i32> for Incr {
 ///             fn convert(&mut self, i: i32) -> i32 {
@@ -339,32 +373,52 @@ pub fn extend_family(_: TokenStream) -> TokenStream {
 ///         }
 ///
 ///         // You need to specify how to cross container types outside the family
-///         impl<T> Convert<Vec<T>, Vec<T>> for Incr where Incr: Convert<T, T> {
-///             fn convert(&mut self, v: Vec<T>) -> Vec<T> {
+///         impl<In, Out> Convert<Vec<In>, Vec<Out>> for Incr where Incr: Convert<In, Out> {
+///             fn convert(&mut self, v: Vec<In>) -> Vec<Out> {
 ///                 v.into_iter().map(|elt| self.convert(elt)).collect()
 ///             }
 ///         }
 ///
 ///         // i32 is outside the family so we have to explicily request to make
 ///         // conversion calls for it
-///         #[extra_conversion(i32)]
-///         impl_convert!(super -> super for Incr);
+///         #[extra_call(i32)]
+///         family_impl!(Convert<super, super> for Incr);
+///     }
 ///
-///         pub fn incr(a: A) -> A {
-///             Incr.convert(a)
+///     mod visit_mut_incr {
+///         use crate::{Incr, VisitMut};
+///
+///         impl VisitMut<i32> for Incr {
+///             fn visit_mut(&mut self, i: &mut i32) {
+///                 *i = *i+1
+///             }
 ///         }
+///
+///         impl<T> VisitMut<Vec<T>> for Incr where Incr: VisitMut<T> {
+///             fn visit_mut(&mut self, v: &mut Vec<T>) {
+///                 for elt in v {
+///                     self.visit_mut(elt)
+///                 }
+///             }
+///         }
+///
+///         #[extra_call(i32)]
+///         family_impl!(VisitMut<super> for Incr);
 ///     }
 /// }
 ///
 /// fn main() {
-///     let a = A::List(vec![A::Empty, A::Num(0), A::List(vec![A::Num(1)])]);
-///     assert_eq!(
-///         incr::incr(a),
-///         A::List(vec![A::Empty, A::Num(1), A::List(vec![A::Num(2)])])
-///     )
+///     let a1 = A::List(vec![A::Empty, A::Num(0), A::List(vec![A::Num(1)])]);
+///     let mut a2 = a1.clone();
+///     let a_incr = A::List(vec![A::Empty, A::Num(1), A::List(vec![A::Num(2)])]);
+///
+///     assert_eq!(Incr.convert(a1), a_incr);
+///
+///     Incr.visit_mut(&mut a2);
+///     assert_eq!(a2, a_incr);
 /// }
 /// ```
 #[proc_macro]
-pub fn impl_convert(_: TokenStream) -> TokenStream {
-    panic!("impl_convert! can only be used inside mrsop_codegen! modules");
+pub fn family_impl(_: TokenStream) -> TokenStream {
+    panic!("family_impl! can only be used inside mrsop_codegen! modules");
 }

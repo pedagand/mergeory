@@ -1,5 +1,5 @@
 use crate::family::Family;
-use crate::{convert, extend};
+use crate::{auto_impl, extend};
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::fold::Fold;
@@ -14,17 +14,9 @@ impl<'a> Fold for ModuleTransformer<'a> {
             Item::Macro(item) => {
                 let item = self.fold_item_macro(item);
                 if item.mac.path.is_ident("extend_family") {
-                    Item::Verbatim(extend::extend_family(
-                        item.mac.tokens.clone(),
-                        &item.attrs,
-                        self.0,
-                    ))
-                } else if item.mac.path.is_ident("impl_convert") {
-                    Item::Verbatim(convert::impl_convert(
-                        item.mac.tokens.clone(),
-                        &item.attrs,
-                        self.0,
-                    ))
+                    Item::Verbatim(extend::extend_family(item.mac.tokens, &item.attrs, self.0))
+                } else if item.mac.path.is_ident("family_impl") {
+                    Item::Verbatim(auto_impl::family_impl(item.mac.tokens, &item.attrs, self.0))
                 } else {
                     Item::Macro(item)
                 }
