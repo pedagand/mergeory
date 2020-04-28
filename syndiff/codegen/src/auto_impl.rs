@@ -1,6 +1,6 @@
 use crate::family::Family;
 use proc_macro2::TokenStream;
-use quote::quote;
+use quote::{format_ident, quote};
 use std::collections::HashSet;
 use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
@@ -17,6 +17,7 @@ enum FamilyImplPattern {
     Convert(Path, Path),
     Visit(Path),
     VisitMut(Path),
+    Merge(Path, Path, Path),
 }
 
 impl Parse for FamilyImplInput {
@@ -35,6 +36,13 @@ impl Parse for FamilyImplInput {
         } else if pattern_name == "VisitMut" {
             let visited_mod = input.parse()?;
             pattern = FamilyImplPattern::VisitMut(visited_mod);
+        } else if pattern_name == "Merge" {
+            let in1_mod = input.parse()?;
+            let _ = input.parse::<Token![,]>()?;
+            let in2_mod = input.parse()?;
+            let _ = input.parse::<Token![,]>()?;
+            let out_mod = input.parse()?;
+            pattern = FamilyImplPattern::Merge(in1_mod, in2_mod, out_mod);
         } else {
             return Err(Error::new(
                 pattern_name.span(),
@@ -104,6 +112,15 @@ fn generate_impl(
         FamilyImplPattern::VisitMut(visited_mod) => {
             generate_visit_impl(item, true, &visited_mod, &req.self_typ, family, extra_calls)
         }
+        FamilyImplPattern::Merge(in1_mod, in2_mod, out_mod) => generate_merge_impl(
+            item,
+            &in1_mod,
+            &in2_mod,
+            &out_mod,
+            &req.self_typ,
+            family,
+            extra_calls,
+        ),
     }
 }
 
@@ -190,6 +207,75 @@ fn generate_visit_impl(
                 match input {
                     #visit_arms
                     _ => panic!("Unhandled variant for type {}", stringify!(#item_name)),
+                }
+            }
+        }
+    }
+}
+
+fn generate_merge_impl(
+    item: &DeriveInput,
+    in1_mod: &Path,
+    in2_mod: &Path,
+    out_mod: &Path,
+    self_typ: &Type,
+    family: &Family,
+    extra_calls: &HashSet<Type>,
+) -> TokenStream {
+    let item_name = &item.ident;
+    let mut s = Structure::new(item);
+    s.bind_with(|_| BindStyle::Move);
+
+    let mut can_merge_arms = TokenStream::new();
+    let mut merge_arms = TokenStream::new();
+    for vi in s.variants() {
+        let pattern1 = vi.pat();
+        let mut vi2 = vi.clone();
+        vi2.binding_name(|_, n| format_ident!("__binding2_{}", n));
+        let pattern2 = vi2.pat();
+        let pattern = quote!((#in1_mod::#pattern1, #in2_mod::#pattern2));
+
+        let mut can_merge_expr = quote!(true);
+
+        let construct = vi.construct(|field, i| {
+            let binding1 = &vi.bindings()[i].binding;
+            let binding2 = &vi2.bindings()[i].binding;
+            if family.is_inside_type(&field.ty) || contains_type_inside(&field.ty, extra_calls) {
+                can_merge_expr.extend(quote!(&& self.can_merge(#binding1, #binding2)));
+                quote!(self.merge(#binding1, #binding2))
+            } else {
+                can_merge_expr.extend(quote!(&& #binding1 == #binding2));
+                quote!(#binding1)
+            }
+        });
+
+        can_merge_arms.extend(quote!(#pattern => #can_merge_expr,));
+        merge_arms.extend(quote!(#pattern => #out_mod::#construct,));
+    }
+
+    quote! {
+        impl Merge<#in1_mod::#item_name, #in2_mod::#item_name, #out_mod::#item_name>
+            for #self_typ
+        {
+            fn can_merge(
+                &mut self,
+                in1: &#in1_mod::#item_name,
+                in2: &#in2_mod::#item_name
+            ) -> bool {
+                match (in1, in2) {
+                    #can_merge_arms
+                    _ => false,
+                }
+            }
+
+            fn merge(
+                &mut self,
+                in1: #in1_mod::#item_name,
+                in2: #in2_mod::#item_name
+            ) -> #out_mod::#item_name {
+                match (in1, in2) {
+                    #merge_arms
+                    _ => panic!("Incompatible arms when merging with {}", stringify!(#self_typ)),
                 }
             }
         }

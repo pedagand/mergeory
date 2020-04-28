@@ -308,6 +308,19 @@ pub fn extend_family(_: TokenStream) -> TokenStream {
 /// }
 /// ```
 ///
+/// * `Merge` trait that tries to merge two trees of recursive families into
+/// a third one. The `merge` method should not be called unless `can_merge`
+/// returns true.
+/// Two values of types outside the family are merged together if they are
+/// equal regarding their `PartialEq` implementation. In this case, the value
+/// from `i1` is kept.
+/// ```
+/// trait Merge<I1, I2, O> {
+///     fn can_merge(&mut self, i1: &I1, i2: &I2) -> bool;
+///     fn merge(&mut self, i1: I1, i2: I2) -> O;
+/// }
+/// ```
+///
 /// Sadly, Rust doesn't allow to import a trait defined by a proc-macro crate,
 /// so users need to redefine Convert, Visit and VisitMut when they need to use
 /// them.

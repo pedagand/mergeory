@@ -46,4 +46,43 @@ syn_codegen! {
         family_impl!(Visit<super::hash> for WantedEllisionFinder<'_>);
         family_impl!(Convert<super::hash, self> for Ellider<'_>);
     }
+
+    pub mod scoped {
+        use crate::convert::Convert;
+        use crate::ellided_tree::MaybeEllided;
+        use crate::scoped_tree::{MetavarScope, ComputeScopes, ForgetScopes};
+
+        extend_family! {
+            Expr as MaybeEllided<MetavarScope<Expr>>,
+            Item as MaybeEllided<MetavarScope<Item>>,
+            Stmt as MaybeEllided<MetavarScope<Stmt>>,
+
+            proc_macro2::TokenStream as (),
+            proc_macro2::Literal as (),
+            proc_macro2::Span as (),
+            Reserved as (),
+        }
+
+        family_impl!(Convert<super::ellided, self> for ComputeScopes);
+        family_impl!(Convert<self, super::ellided> for ForgetScopes);
+    }
+
+    pub mod patch {
+        use crate::merge::Merge;
+        use crate::patch_tree::{DiffNode, SpineZipper};
+
+        #[derive(Debug)]
+        extend_family! {
+            Expr as DiffNode<Expr, super::ellided::Expr>,
+            Item as DiffNode<Item, super::ellided::Item>,
+            Stmt as DiffNode<Stmt, super::ellided::Stmt>,
+
+            proc_macro2::TokenStream as (),
+            proc_macro2::Literal as (),
+            proc_macro2::Span as (),
+            Reserved as (),
+        }
+
+        family_impl!(Merge<super::scoped, super::scoped, self> for SpineZipper);
+    }
 }
