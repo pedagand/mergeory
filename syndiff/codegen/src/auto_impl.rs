@@ -64,6 +64,7 @@ pub fn family_impl(tokens: TokenStream, attrs: &[Attribute], family: &Family) ->
     };
 
     let mut extra_calls = HashSet::new();
+    let mut omitted_types = HashSet::new();
     let attrs: Vec<TokenStream> = attrs
         .iter()
         .filter_map(|attr| {
@@ -77,6 +78,16 @@ pub fn family_impl(tokens: TokenStream, attrs: &[Attribute], family: &Family) ->
                     }
                     Err(err) => Some(err.to_compile_error()),
                 }
+            } else if attr.path.is_ident("omit") {
+                match attr.parse_args_with(Punctuated::<Ident, Token![,]>::parse_terminated) {
+                    Ok(typ_list) => {
+                        for typ in typ_list {
+                            omitted_types.insert(typ);
+                        }
+                        None
+                    }
+                    Err(err) => Some(err.to_compile_error()),
+                }
             } else {
                 Some(quote!(#attr))
             }
@@ -84,6 +95,9 @@ pub fn family_impl(tokens: TokenStream, attrs: &[Attribute], family: &Family) ->
         .collect();
 
     let impls = family.iter().map(|item| {
+        if omitted_types.contains(&item.ident) {
+            return quote!();
+        }
         let generated_impl = generate_impl(item, &input, family, &extra_calls);
         quote!(#(#attrs)* #generated_impl)
     });

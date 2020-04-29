@@ -45,3 +45,11 @@ impl<In, Out, Tok1, Tok2, T: Convert<In, Out>> Convert<(Tok1, In, Tok2), (Tok1, 
 impl<In, T> Convert<In, ()> for T {
     fn convert(&mut self, _: In) {}
 }
+
+// Rust will not let me write that because there is an overlapping implementation
+// for Convert<(), ()>. This needs the WIP specialization system to be expressed.
+/*impl<Out: Default, T> Convert<(), Out> for T {
+    fn convert(&mut self, _: ()) -> Out {
+        Out::default()
+    }
+}*/

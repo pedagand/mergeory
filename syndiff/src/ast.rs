@@ -30,6 +30,7 @@ syn_codegen! {
         use crate::visit::Visit;
         use crate::convert::Convert;
         use crate::ellided_tree::{Ellider, MaybeEllided, WantedEllisionFinder};
+        use crate::source_repr::ToSourceRepr;
 
         #[derive(Debug)]
         extend_family! {
@@ -45,6 +46,11 @@ syn_codegen! {
 
         family_impl!(Visit<super::hash> for WantedEllisionFinder<'_>);
         family_impl!(Convert<super::hash, self> for Ellider<'_>);
+
+        #[extra_call(proc_macro2::TokenStream, proc_macro2::Literal, proc_macro2::Span)]
+        #[extra_call(Reserved)]
+        #[omit(ExprReference)]
+        family_impl!(Convert<self, syn> for ToSourceRepr);
     }
 
     pub mod scoped {
@@ -68,8 +74,10 @@ syn_codegen! {
     }
 
     pub mod patch {
+        use crate::convert::Convert;
         use crate::merge::Merge;
         use crate::patch_tree::{DiffNode, SpineZipper};
+        use crate::source_repr::ToSourceRepr;
 
         #[derive(Debug)]
         extend_family! {
@@ -84,5 +92,10 @@ syn_codegen! {
         }
 
         family_impl!(Merge<super::scoped, super::scoped, self> for SpineZipper);
+
+        #[extra_call(proc_macro2::TokenStream, proc_macro2::Literal, proc_macro2::Span)]
+        #[extra_call(Reserved)]
+        #[omit(ExprReference)]
+        family_impl!(Convert<self, syn> for ToSourceRepr);
     }
 }

@@ -9,6 +9,7 @@ mod hash_tree;
 mod merge;
 mod patch_tree;
 mod scoped_tree;
+mod source_repr;
 mod visit;
 
 use convert::Convert;
@@ -16,7 +17,11 @@ use ellided_tree::{Ellider, WantedEllisionFinder};
 use hash_tree::{tables_intersection, HashTables};
 use merge::Merge;
 use patch_tree::SpineZipper;
+use quote::quote;
 use scoped_tree::ComputeScopes;
+use source_repr::ToSourceRepr;
+use std::io::Write;
+use std::process::{Command, Stdio};
 use visit::Visit;
 
 pub struct SourceCode {
@@ -53,8 +58,17 @@ fn main() {
     // a spine of unchanged structure.
     let diff_ast = zip_spine(file_change);
 
-    // TODO: Compute a good diff representation
-    println!("{:?}", diff_ast);
+    // Pretty print the result
+    let source_diff_ast: syn::File = ToSourceRepr.convert(diff_ast);
+    let mut rustfmt = Command::new("rustfmt")
+        .stdin(Stdio::piped())
+        .spawn()
+        .expect("Failed to start rustfmt");
+    let rustfmt_in = rustfmt
+        .stdin
+        .as_mut()
+        .expect("Failed to open rustfmt stdin");
+    write!(rustfmt_in, "{}", quote!(#source_diff_ast)).unwrap()
 }
 
 pub struct FileChange {
