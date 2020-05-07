@@ -6,17 +6,8 @@ use std::rc::Rc;
 /// Checks which ellisions would indeed be performed from the `possible_ellisions`
 /// list and add them to the `wanted_ellisions` list.
 pub struct WantedEllisionFinder<'a> {
-    pub possible_ellisions: &'a HashTables,
-    pub wanted_ellisions: HashTables,
-}
-
-impl WantedEllisionFinder<'_> {
-    pub fn new(possible_ellisions: &HashTables) -> WantedEllisionFinder {
-        WantedEllisionFinder {
-            possible_ellisions,
-            wanted_ellisions: HashTables::default(),
-        }
-    }
+    possible_ellisions: &'a HashTables,
+    wanted_ellisions: HashTables,
 }
 
 impl<'a, T: HasHashTable> Visit<HashTagged<T>> for WantedEllisionFinder<'a>
@@ -38,6 +29,18 @@ where
     }
 }
 
+pub fn find_wanted_ellisions<'a, T>(input: &T, possible_ellisions: &'a HashTables) -> HashTables
+where
+    WantedEllisionFinder<'a>: Visit<T>,
+{
+    let mut wanted_ellision_finder = WantedEllisionFinder {
+        possible_ellisions,
+        wanted_ellisions: HashTables::default(),
+    };
+    wanted_ellision_finder.visit(input);
+    wanted_ellision_finder.wanted_ellisions
+}
+
 #[derive(Debug)]
 pub enum MaybeEllided<T> {
     InPlace(T),
@@ -46,12 +49,6 @@ pub enum MaybeEllided<T> {
 
 pub struct Ellider<'a> {
     ellision_tables: &'a HashTables,
-}
-
-impl<'a> Ellider<'a> {
-    pub fn new(ellision_tables: &HashTables) -> Ellider {
-        Ellider { ellision_tables }
-    }
 }
 
 impl<'a, In: HasHashTable, Out> Convert<HashTagged<In>, MaybeEllided<Out>> for Ellider<'a>
@@ -69,4 +66,12 @@ where
             ))
         }
     }
+}
+
+pub fn ellide_tree_with<'a, In, Out>(input: In, ellision_tables: &'a HashTables) -> Out
+where
+    Ellider<'a>: Convert<In, Out>,
+{
+    let mut ellider = Ellider { ellision_tables };
+    ellider.convert(input)
 }

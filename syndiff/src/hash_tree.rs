@@ -88,17 +88,28 @@ impl<T> PartialEq for HashTagged<T> {
 }
 impl<T> Eq for HashTagged<T> {}
 
-impl<In, Out: HasHashTable> Convert<In, HashTagged<Out>> for HashTables
+pub struct TreeHasher(HashTables);
+
+impl<In, Out: HasHashTable> Convert<In, HashTagged<Out>> for TreeHasher
 where
-    HashTables: Convert<In, Out>,
+    TreeHasher: Convert<In, Out>,
 {
     fn convert(&mut self, input: In) -> HashTagged<Out> {
         let converted_input = self.convert(input);
         let hash_tagged = HashTagged::from(converted_input);
-        let existing_item = Out::get_table_mut(self)
+        let existing_item = Out::get_table_mut(&mut self.0)
             .entry(hash_tagged.hash)
             .or_insert_with(|| hash_tagged.data.clone());
         assert!(*existing_item == hash_tagged.data);
         hash_tagged
     }
+}
+
+pub fn hash_tree<In, Out>(input: In) -> (Out, HashTables)
+where
+    TreeHasher: Convert<In, Out>,
+{
+    let mut tree_hasher = TreeHasher(HashTables::default());
+    let hashed_tree = tree_hasher.convert(input);
+    (hashed_tree, tree_hasher.0)
 }

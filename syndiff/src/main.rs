@@ -8,21 +8,18 @@ mod ellided_tree;
 mod hash_tree;
 mod merge;
 mod patch_tree;
-mod scoped_tree;
 mod source_repr;
 mod visit;
+mod weighted_tree;
 
-use convert::Convert;
-use ellided_tree::{Ellider, WantedEllisionFinder};
-use hash_tree::{tables_intersection, HashTables};
-use merge::Merge;
-use patch_tree::SpineZipper;
+use crate::ellided_tree::{ellide_tree_with, find_wanted_ellisions};
+use crate::hash_tree::{hash_tree, tables_intersection, HashTables};
+use crate::patch_tree::zip_spine;
+use crate::source_repr::source_repr;
+use crate::weighted_tree::compute_weight;
 use quote::quote;
-use scoped_tree::ComputeScopes;
-use source_repr::ToSourceRepr;
 use std::io::Write;
 use std::process::{Command, Stdio};
-use visit::Visit;
 
 pub struct SourceCode {
     filename: String,
@@ -52,14 +49,17 @@ fn main() {
     let modified_src =
         SourceCode::from_file(modified_filename).expect("Unable to read modified file");
 
-    let file_change = compute_change(&origin_src, &modified_src);
+    let changes = compute_changes(&origin_src, &modified_src);
 
     // Merge the deletion and the insertion tree on their common part to create
     // a spine of unchanged structure.
-    let diff_ast = zip_spine(file_change);
+    let weighted_del: ast::weighted::File = compute_weight(changes.deletion_ast);
+    let weighted_ins: ast::weighted::File = compute_weight(changes.insertion_ast);
+    let diff_ast = zip_spine(weighted_del, weighted_ins);
 
     // Pretty print the result
-    let source_diff_ast: syn::File = ToSourceRepr.convert(diff_ast);
+    let source_diff_ast: Option<syn::File> = source_repr(diff_ast);
+    let source_diff_ast = source_diff_ast.expect("The two input files were not comparable");
     let mut rustfmt = Command::new("rustfmt")
         .stdin(Stdio::piped())
         .spawn()
@@ -76,7 +76,7 @@ pub struct FileChange {
     insertion_ast: ast::ellided::File,
 }
 
-pub fn compute_change(origin_src: &SourceCode, modified_src: &SourceCode) -> FileChange {
+pub fn compute_changes(origin_src: &SourceCode, modified_src: &SourceCode) -> FileChange {
     // Parse both input files and hash their AST
     let (origin_hash_ast, origin_hash_tables) = parse_and_hash_src(origin_src);
     let (modified_hash_ast, modified_hash_tables) = parse_and_hash_src(modified_src);
@@ -86,14 +86,9 @@ pub fn compute_change(origin_src: &SourceCode, modified_src: &SourceCode) -> Fil
 
     // Find which of the common subtrees will actually be ellided in both trees.
     // This avoids ellided part appearing only inside one of the subtrees.
-    let mut origin_ellision_finder = WantedEllisionFinder::new(&unified_hash_tables);
-    origin_ellision_finder.visit(&origin_hash_ast);
-    let mut modified_ellision_finder = WantedEllisionFinder::new(&unified_hash_tables);
-    modified_ellision_finder.visit(&modified_hash_ast);
-    let ellision_tables = tables_intersection(
-        origin_ellision_finder.wanted_ellisions,
-        modified_ellision_finder.wanted_ellisions,
-    );
+    let origin_wanted_ellisions = find_wanted_ellisions(&origin_hash_ast, &unified_hash_tables);
+    let modified_wanted_ellisions = find_wanted_ellisions(&modified_hash_ast, &unified_hash_tables);
+    let ellision_tables = tables_intersection(origin_wanted_ellisions, modified_wanted_ellisions);
 
     // Remove any reference to subtrees inside unified_hash_tables such that either:
     // * The subtree must be ellided
@@ -102,19 +97,13 @@ pub fn compute_change(origin_src: &SourceCode, modified_src: &SourceCode) -> Fil
 
     // Compute the difference as a deletion and an insertion tree by elliding
     // parts reused from original to modified
-    let deletion_ast = Ellider::new(&ellision_tables).convert(origin_hash_ast);
-    let insertion_ast = Ellider::new(&ellision_tables).convert(modified_hash_ast);
+    let deletion_ast = ellide_tree_with(origin_hash_ast, &ellision_tables);
+    let insertion_ast = ellide_tree_with(modified_hash_ast, &ellision_tables);
 
     FileChange {
         deletion_ast,
         insertion_ast,
     }
-}
-
-pub fn zip_spine(changes: FileChange) -> ast::patch::File {
-    let scoped_del = ComputeScopes::default().convert(changes.deletion_ast);
-    let scoped_ins = ComputeScopes::default().convert(changes.insertion_ast);
-    SpineZipper.merge(scoped_del, scoped_ins)
 }
 
 fn parse_and_hash_src(src: &SourceCode) -> (ast::hash::File, HashTables) {
@@ -135,7 +124,5 @@ fn parse_and_hash_src(src: &SourceCode) -> (ast::hash::File, HashTables) {
         process::exit(1)
     });
 
-    let mut hash_tables = HashTables::default();
-    let hash_ast: ast::hash::File = hash_tables.convert(ast);
-    (hash_ast, hash_tables)
+    hash_tree(ast)
 }

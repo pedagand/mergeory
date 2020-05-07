@@ -1,7 +1,7 @@
 use crate::ast;
 use crate::convert::Convert;
 use crate::ellided_tree::MaybeEllided;
-use crate::patch_tree::DiffNode;
+use crate::patch_tree::{Aligned, AlignedSeq, DiffNode};
 use proc_macro2::{Span, TokenStream};
 use quote::{quote, ToTokens};
 use syn::{LitInt, Token};
@@ -75,6 +75,31 @@ where
     }
 }
 
+impl<InSpine, InChange, Out: ToTokens + VerbatimMacro>
+    Convert<AlignedSeq<InSpine, InChange>, Vec<Out>> for ToSourceRepr
+where
+    ToSourceRepr: Convert<DiffNode<InSpine, InChange>, Out>,
+    ToSourceRepr: Convert<InChange, Out>,
+{
+    fn convert(&mut self, input: AlignedSeq<InSpine, InChange>) -> Vec<Out> {
+        input
+            .0
+            .into_iter()
+            .map(|elt| match elt {
+                Aligned::Zipped(spine) => self.convert(spine),
+                Aligned::Deleted(del) => {
+                    let del: Out = self.convert(del);
+                    Out::verbatim_macro(quote!(deleted![#del]))
+                }
+                Aligned::Inserted(ins) => {
+                    let ins: Out = self.convert(ins);
+                    Out::verbatim_macro(quote!(inserted![#ins]))
+                }
+            })
+            .collect()
+    }
+}
+
 impl Convert<(), TokenStream> for ToSourceRepr {
     fn convert(&mut self, _: ()) -> TokenStream {
         panic!("Found unparsed TokenStream")
@@ -110,3 +135,10 @@ macro_rules! convert_expr_reference {
     }
 }
 convert_expr_reference!(ast::ellided::ExprReference, ast::patch::ExprReference);
+
+pub fn source_repr<In, Out>(input: In) -> Out
+where
+    ToSourceRepr: Convert<In, Out>,
+{
+    ToSourceRepr.convert(input)
+}

@@ -3,7 +3,7 @@ use mrsop_codegen::syn_codegen;
 syn_codegen! {
     pub mod hash {
         use crate::convert::Convert;
-        use crate::hash_tree::{HashTables, HashTagged};
+        use crate::hash_tree::{HashTagged, TreeHasher};
 
         #[derive(Hash, PartialEq, Eq, Debug)]
         extend_family! {
@@ -23,7 +23,7 @@ syn_codegen! {
 
         #[extra_call(proc_macro2::TokenStream, proc_macro2::Literal, proc_macro2::Span)]
         #[extra_call(Reserved)]
-        family_impl!(Convert<syn, self> for HashTables);
+        family_impl!(Convert<syn, self> for TreeHasher);
     }
 
     pub mod ellided {
@@ -53,15 +53,16 @@ syn_codegen! {
         family_impl!(Convert<self, syn> for ToSourceRepr);
     }
 
-    pub mod scoped {
+    pub mod weighted {
         use crate::convert::Convert;
-        use crate::ellided_tree::MaybeEllided;
-        use crate::scoped_tree::{MetavarScope, ComputeScopes, ForgetScopes};
+        use crate::weighted_tree::{AlignableSeq, ComputeWeight, ForgetWeight, Weighted};
 
         extend_family! {
-            Expr as MaybeEllided<MetavarScope<Expr>>,
-            Item as MaybeEllided<MetavarScope<Item>>,
-            Stmt as MaybeEllided<MetavarScope<Stmt>>,
+            Expr as Weighted<Expr>,
+            Item as Weighted<Item>,
+            Stmt as Weighted<Stmt>,
+            Vec<Item> as AlignableSeq<Item>,
+            Vec<Stmt> as AlignableSeq<Stmt>,
 
             proc_macro2::TokenStream as (),
             proc_macro2::Literal as (),
@@ -69,14 +70,14 @@ syn_codegen! {
             Reserved as (),
         }
 
-        family_impl!(Convert<super::ellided, self> for ComputeScopes);
-        family_impl!(Convert<self, super::ellided> for ForgetScopes);
+        family_impl!(Convert<super::ellided, self> for ComputeWeight);
+        family_impl!(Convert<self, super::ellided> for ForgetWeight);
     }
 
     pub mod patch {
         use crate::convert::Convert;
         use crate::merge::Merge;
-        use crate::patch_tree::{DiffNode, SpineZipper};
+        use crate::patch_tree::{DiffNode, SpineZipper, AlignedSeq};
         use crate::source_repr::ToSourceRepr;
 
         #[derive(Debug)]
@@ -84,6 +85,8 @@ syn_codegen! {
             Expr as DiffNode<Expr, super::ellided::Expr>,
             Item as DiffNode<Item, super::ellided::Item>,
             Stmt as DiffNode<Stmt, super::ellided::Stmt>,
+            Vec<Item> as AlignedSeq<Item, super::ellided::Item>,
+            Vec<Stmt> as AlignedSeq<Stmt, super::ellided::Stmt>,
 
             proc_macro2::TokenStream as (),
             proc_macro2::Literal as (),
@@ -91,7 +94,7 @@ syn_codegen! {
             Reserved as (),
         }
 
-        family_impl!(Merge<super::scoped, super::scoped, self> for SpineZipper);
+        family_impl!(Merge<super::weighted, super::weighted, self> for SpineZipper);
 
         #[extra_call(proc_macro2::TokenStream, proc_macro2::Literal, proc_macro2::Span)]
         #[extra_call(Reserved)]
