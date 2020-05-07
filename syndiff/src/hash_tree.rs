@@ -52,8 +52,11 @@ macro_rules! make_tables {
 
 make_tables! {
     expr: ast::hash::Expr,
-    item: ast::hash::Item,
     stmt: ast::hash::Stmt,
+    item: ast::hash::Item,
+    trait_item: ast::hash::TraitItem,
+    impl_item: ast::hash::ImplItem,
+    foreign_item: ast::hash::ForeignItem,
 }
 
 #[derive(Debug)]

@@ -4,6 +4,7 @@ use crate::ellided_tree::MaybeEllided;
 use crate::patch_tree::{Aligned, AlignedSeq, DiffNode};
 use proc_macro2::{Span, TokenStream};
 use quote::{quote, ToTokens};
+use std::str::FromStr;
 use syn::{LitInt, Token};
 
 pub trait VerbatimMacro {
@@ -31,7 +32,7 @@ macro_rules! verbatim_macro_with_semi {
 }
 
 verbatim_macro_without_semi!(syn::Expr);
-verbatim_macro_with_semi!(syn::Item);
+verbatim_macro_with_semi!(syn::Item, syn::TraitItem, syn::ImplItem, syn::ForeignItem);
 
 impl VerbatimMacro for syn::Stmt {
     fn verbatim_macro(mac: TokenStream) -> syn::Stmt {
@@ -100,15 +101,18 @@ where
     }
 }
 
-impl Convert<(), TokenStream> for ToSourceRepr {
-    fn convert(&mut self, _: ()) -> TokenStream {
-        panic!("Found unparsed TokenStream")
+impl Convert<String, TokenStream> for ToSourceRepr {
+    fn convert(&mut self, input: String) -> TokenStream {
+        TokenStream::from_str(&input).unwrap()
     }
 }
 
-impl Convert<(), proc_macro2::Literal> for ToSourceRepr {
-    fn convert(&mut self, _: ()) -> proc_macro2::Literal {
-        panic!("Found unparsed Literal")
+impl Convert<String, proc_macro2::Literal> for ToSourceRepr {
+    fn convert(&mut self, input: String) -> proc_macro2::Literal {
+        match TokenStream::from_str(&input).unwrap().into_iter().next() {
+            Some(proc_macro2::TokenTree::Literal(lit)) => lit,
+            _ => panic!("Non literal token found at literal position"),
+        }
     }
 }
 

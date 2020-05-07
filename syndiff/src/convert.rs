@@ -53,3 +53,9 @@ impl<In, T> Convert<In, ()> for T {
         Out::default()
     }
 }*/
+
+impl<In: ToString, T> Convert<In, String> for T {
+    fn convert(&mut self, input: In) -> String {
+        input.to_string()
+    }
+}

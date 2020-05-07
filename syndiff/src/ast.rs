@@ -8,13 +8,18 @@ syn_codegen! {
         #[derive(Hash, PartialEq, Eq, Debug)]
         extend_family! {
             Expr as HashTagged<Expr>,
-            Item as HashTagged<Item>,
-            Stmt as HashTagged<Stmt>,
+            Vec<Stmt> as Vec<HashTagged<Stmt>>,
+            Vec<Item> as Vec<HashTagged<Item>>,
+            Vec<TraitItem> as Vec<HashTagged<TraitItem>>,
+            Vec<ImplItem> as Vec<HashTagged<ImplItem>>,
+            Vec<ForeignItem> as Vec<HashTagged<ForeignItem>>,
+
+            // TokenStream and Literal are non parsed part of the input
+            // We use their string representation for hashing
+            proc_macro2::TokenStream as String,
+            proc_macro2::Literal as String,
 
             // We need to remove these subtrees to be able to compare programs
-            // TokenStream and Literal are non parsed part of the input
-            proc_macro2::TokenStream as (),
-            proc_macro2::Literal as (),
             // Span represent input file positions
             proc_macro2::Span as (),
             // Reserved is a private type inside syn equivalent to ()
@@ -35,11 +40,14 @@ syn_codegen! {
         #[derive(Debug)]
         extend_family! {
             Expr as MaybeEllided<Expr>,
-            Item as MaybeEllided<Item>,
-            Stmt as MaybeEllided<Stmt>,
+            Vec<Stmt> as Vec<MaybeEllided<Stmt>>,
+            Vec<Item> as Vec<MaybeEllided<Item>>,
+            Vec<TraitItem> as Vec<MaybeEllided<TraitItem>>,
+            Vec<ImplItem> as Vec<MaybeEllided<ImplItem>>,
+            Vec<ForeignItem> as Vec<MaybeEllided<ForeignItem>>,
 
-            proc_macro2::TokenStream as (),
-            proc_macro2::Literal as (),
+            proc_macro2::TokenStream as String,
+            proc_macro2::Literal as String,
             proc_macro2::Span as (),
             Reserved as (),
         }
@@ -59,13 +67,14 @@ syn_codegen! {
 
         extend_family! {
             Expr as Weighted<Expr>,
-            Item as Weighted<Item>,
-            Stmt as Weighted<Stmt>,
-            Vec<Item> as AlignableSeq<Item>,
             Vec<Stmt> as AlignableSeq<Stmt>,
+            Vec<Item> as AlignableSeq<Item>,
+            Vec<TraitItem> as AlignableSeq<TraitItem>,
+            Vec<ImplItem> as AlignableSeq<ImplItem>,
+            Vec<ForeignItem> as AlignableSeq<ForeignItem>,
 
-            proc_macro2::TokenStream as (),
-            proc_macro2::Literal as (),
+            proc_macro2::TokenStream as String,
+            proc_macro2::Literal as String,
             proc_macro2::Span as (),
             Reserved as (),
         }
@@ -83,13 +92,14 @@ syn_codegen! {
         #[derive(Debug)]
         extend_family! {
             Expr as DiffNode<Expr, super::ellided::Expr>,
-            Item as DiffNode<Item, super::ellided::Item>,
-            Stmt as DiffNode<Stmt, super::ellided::Stmt>,
-            Vec<Item> as AlignedSeq<Item, super::ellided::Item>,
             Vec<Stmt> as AlignedSeq<Stmt, super::ellided::Stmt>,
+            Vec<Item> as AlignedSeq<Item, super::ellided::Item>,
+            Vec<TraitItem> as AlignedSeq<TraitItem, super::ellided::TraitItem>,
+            Vec<ImplItem> as AlignedSeq<ImplItem, super::ellided::ImplItem>,
+            Vec<ForeignItem> as AlignedSeq<ForeignItem, super::ellided::ForeignItem>,
 
-            proc_macro2::TokenStream as (),
-            proc_macro2::Literal as (),
+            proc_macro2::TokenStream as String,
+            proc_macro2::Literal as String,
             proc_macro2::Span as (),
             Reserved as (),
         }

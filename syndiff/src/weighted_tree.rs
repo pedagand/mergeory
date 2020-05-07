@@ -78,17 +78,13 @@ pub trait ForgettableWeight {
 }
 
 macro_rules! impl_forgettable_weight {
-    { $($weighted:ty => $nonweighted:ty,)* } => {
-        $(impl ForgettableWeight for $weighted {
-            type WithoutWeight = $nonweighted;
+    { $($ast_typ:ident),* } => {
+        $(impl ForgettableWeight for ast::weighted::$ast_typ {
+            type WithoutWeight = ast::ellided::$ast_typ;
         })*
     }
 }
-impl_forgettable_weight! {
-    ast::weighted::Expr => ast::ellided::Expr,
-    ast::weighted::Item => ast::ellided::Item,
-    ast::weighted::Stmt => ast::ellided::Stmt,
-}
+impl_forgettable_weight!(Expr, Stmt, Item, TraitItem, ImplItem, ForeignItem);
 
 pub fn compute_weight<In, Out>(input: In) -> Out
 where
