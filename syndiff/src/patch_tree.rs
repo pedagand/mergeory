@@ -1,5 +1,6 @@
 use crate::convert::Convert;
 use crate::ellided_tree::MaybeEllided;
+use crate::hash_tree::HashSum;
 use crate::merge::Merge;
 use crate::weighted_tree::{
     forget_weight, AlignableSeq, ForgetWeight, ForgettableWeight, Weighted,
@@ -10,7 +11,7 @@ use std::collections::VecDeque;
 pub enum DiffNode<Spine, Change> {
     Spine(Spine),
     Changed(MaybeEllided<Change>, MaybeEllided<Change>),
-    Unchanged,
+    Unchanged(HashSum),
 }
 
 enum NodeAlign {
@@ -83,7 +84,13 @@ where
                     panic!("Wrong node alignment applied by SpineZipper")
                 }
             }
-            NodeAlign::Copy => DiffNode::Unchanged,
+            NodeAlign::Copy => {
+                if let MaybeEllided::Ellided(h) = del.node {
+                    DiffNode::Unchanged(h)
+                } else {
+                    panic!("Wrong node alignment applied by SpineZipper")
+                }
+            }
             NodeAlign::Change => {
                 let del = forget_weight(del);
                 let ins = forget_weight(ins);

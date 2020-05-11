@@ -71,7 +71,10 @@ where
                 let ins: Out = self.convert(ins);
                 Out::verbatim_macro(quote!(changed![{#del}, {#ins}]))
             }
-            DiffNode::Unchanged => Out::verbatim_macro(quote!(unchanged![])),
+            DiffNode::Unchanged(hash) => {
+                let hash_lit = LitInt::new(&format!("{}", hash), Span::call_site());
+                Out::verbatim_macro(quote!(unchanged![#hash_lit]))
+            }
         }
     }
 }
