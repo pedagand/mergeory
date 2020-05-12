@@ -7,7 +7,6 @@ use crate::weighted_tree::{
 };
 use std::collections::VecDeque;
 
-#[derive(Debug)]
 pub enum DiffNode<Spine, Change> {
     Spine(Spine),
     Changed(MaybeEllided<Change>, MaybeEllided<Change>),
@@ -20,13 +19,11 @@ enum NodeAlign {
     Change,
 }
 
-#[derive(Debug)]
 pub enum Aligned<Spine, Change> {
     Zipped(DiffNode<Spine, Change>),
     Deleted(MaybeEllided<Change>),
     Inserted(MaybeEllided<Change>),
 }
-#[derive(Debug)]
 pub struct AlignedSeq<Spine, Change>(pub Vec<Aligned<Spine, Change>>);
 
 type SeqAlign = Vec<SeqAlignOp>;

@@ -41,7 +41,6 @@ where
     wanted_ellision_finder.wanted_ellisions
 }
 
-#[derive(Debug)]
 pub enum MaybeEllided<T> {
     InPlace(T),
     Ellided(HashSum),

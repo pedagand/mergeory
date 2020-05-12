@@ -7,12 +7,6 @@ use std::rc::Rc;
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]
 pub struct HashSum(u64);
 
-impl std::fmt::Display for HashSum {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{:#x}", self.0)
-    }
-}
-
 macro_rules! make_tables {
     { $($name:ident: $type:ty,)* } => {
         #[derive(Default)]
@@ -59,7 +53,6 @@ make_tables! {
     foreign_item: ast::hash::ForeignItem,
 }
 
-#[derive(Debug)]
 pub struct HashTagged<T> {
     pub data: Rc<T>,
     pub hash: HashSum,

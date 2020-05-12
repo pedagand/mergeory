@@ -1,7 +1,6 @@
 use crate::ast;
 use crate::convert::Convert;
-use crate::ellided_tree::MaybeEllided;
-use crate::patch_tree::{Aligned, AlignedSeq, DiffNode};
+use crate::diff_tree::{Aligned, AlignedSeq, DiffNode, MaybeEllided};
 use proc_macro2::{Span, TokenStream};
 use quote::{quote, ToTokens};
 use std::str::FromStr;
@@ -49,9 +48,9 @@ where
     fn convert(&mut self, input: MaybeEllided<In>) -> Out {
         match input {
             MaybeEllided::InPlace(node) => self.convert(node),
-            MaybeEllided::Ellided(hash) => {
-                let hash_lit = LitInt::new(&format!("{}", hash), Span::call_site());
-                Out::verbatim_macro(quote!(metavar![#hash_lit]))
+            MaybeEllided::Ellided(metavar) => {
+                let metavar_lit = LitInt::new(&format!("{}", metavar), Span::call_site());
+                Out::verbatim_macro(quote!(metavar![#metavar_lit]))
             }
         }
     }
@@ -71,9 +70,10 @@ where
                 let ins: Out = self.convert(ins);
                 Out::verbatim_macro(quote!(changed![{#del}, {#ins}]))
             }
-            DiffNode::Unchanged(hash) => {
-                let hash_lit = LitInt::new(&format!("{}", hash), Span::call_site());
-                Out::verbatim_macro(quote!(unchanged![#hash_lit]))
+            DiffNode::Unchanged(None) => Out::verbatim_macro(quote!(unchanged![])),
+            DiffNode::Unchanged(Some(metavar)) => {
+                let metavar_lit = LitInt::new(&format!("{}", metavar), Span::call_site());
+                Out::verbatim_macro(quote!(unchanged![#metavar_lit]))
             }
         }
     }
@@ -141,7 +141,7 @@ macro_rules! convert_expr_reference {
         })*
     }
 }
-convert_expr_reference!(ast::ellided::ExprReference, ast::patch::ExprReference);
+convert_expr_reference!(ast::change::ExprReference, ast::diff::ExprReference);
 
 pub fn source_repr<In, Out>(input: In) -> Out
 where
