@@ -2,24 +2,15 @@ use std::env;
 use std::fs;
 use std::process;
 
-mod ast;
-mod convert;
-mod ellided_tree;
-mod hash_tree;
-mod merge;
-mod patch_tree;
-mod source_repr;
-mod visit;
-mod weighted_tree;
-
-use crate::ellided_tree::{ellide_tree_with, find_wanted_ellisions};
-use crate::hash_tree::{hash_tree, tables_intersection, HashTables};
-use crate::patch_tree::zip_spine;
-use crate::source_repr::source_repr;
-use crate::weighted_tree::compute_weight;
 use quote::quote;
 use std::io::Write;
 use std::process::{Command, Stdio};
+use syndiff::ast;
+use syndiff::ellided_tree::{ellide_tree_with, find_wanted_ellisions};
+use syndiff::hash_tree::{hash_tree, tables_intersection, HashTables};
+use syndiff::patch_tree::zip_spine;
+use syndiff::source_repr::source_repr;
+use syndiff::weighted_tree::compute_weight;
 
 pub struct SourceCode {
     filename: String,
