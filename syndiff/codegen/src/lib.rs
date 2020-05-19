@@ -321,6 +321,16 @@ pub fn extend_family(_: TokenStream) -> TokenStream {
 /// }
 /// ```
 ///
+/// * `Split` trait that splits a single tree of a recursive family into two
+/// trees. This trait performs the inverse operation than Merge and cannot fail.
+/// When needed values outside the family are cloned. Therefore it cannot be
+/// used on trees without a Clone implementation on all leaves.
+/// ```
+/// trait Split<I, O1, O2> {
+///     fn split(&mut self, i: I) -> (O1, O2);
+/// }
+/// ```
+///
 /// Sadly, Rust doesn't allow to import a trait defined by a proc-macro crate,
 /// so users need to redefine Convert, Visit and VisitMut when they need to use
 /// them.
@@ -339,12 +349,13 @@ pub fn extend_family(_: TokenStream) -> TokenStream {
 /// an `#[extra_call(OtherType)]` attribute to force all occurences of
 /// `OtherType` to also be processed by a manually supplied implementation.
 ///
-/// Currently the syntax of `family_impl!` is one of the following (depending
-/// on the generated trait implementation):
+/// If you want to manually provide the implementation for some types of the family
+/// you can also exclude the generation of the impl for one of them with the
+/// `#[omit(Type)]` attribute on the `family_impl!` call.
+///
+/// The syntax of `family_impl!` looks like the following:
 ///
 /// * `family_impl!(Convert<input_mod, output_mod> for T)`
-/// * `family_impl!(Visit<visited_mod> for T)`
-/// * `family_impl!(VisitMut<visited_mod> for T)`
 ///
 /// where `*_mod` represent a path to the module containing the family variant
 /// (e.g. `self` for a mutually recursive family generated in the current module

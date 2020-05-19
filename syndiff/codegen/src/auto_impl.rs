@@ -18,6 +18,7 @@ enum FamilyImplPattern {
     Visit(Path),
     VisitMut(Path),
     Merge(Path, Path, Path),
+    Split(Path, Path, Path),
 }
 
 impl Parse for FamilyImplInput {
@@ -43,6 +44,13 @@ impl Parse for FamilyImplInput {
             let _ = input.parse::<Token![,]>()?;
             let out_mod = input.parse()?;
             pattern = FamilyImplPattern::Merge(in1_mod, in2_mod, out_mod);
+        } else if pattern_name == "Split" {
+            let in_mod = input.parse()?;
+            let _ = input.parse::<Token![,]>()?;
+            let out1_mod = input.parse()?;
+            let _ = input.parse::<Token![,]>()?;
+            let out2_mod = input.parse()?;
+            pattern = FamilyImplPattern::Split(in_mod, out1_mod, out2_mod);
         } else {
             return Err(Error::new(
                 pattern_name.span(),
@@ -131,6 +139,15 @@ fn generate_impl(
             &in1_mod,
             &in2_mod,
             &out_mod,
+            &req.self_typ,
+            family,
+            extra_calls,
+        ),
+        FamilyImplPattern::Split(in_mod, out1_mod, out2_mod) => generate_split_impl(
+            item,
+            &in_mod,
+            &out1_mod,
+            &out2_mod,
             &req.self_typ,
             family,
             extra_calls,
@@ -290,6 +307,52 @@ fn generate_merge_impl(
                 match (in1, in2) {
                     #merge_arms
                     _ => panic!("Incompatible arms when merging with {}", stringify!(#self_typ)),
+                }
+            }
+        }
+    }
+}
+
+fn generate_split_impl(
+    item: &DeriveInput,
+    in_mod: &Path,
+    out1_mod: &Path,
+    out2_mod: &Path,
+    self_typ: &Type,
+    family: &Family,
+    extra_calls: &HashSet<Type>,
+) -> TokenStream {
+    let item_name = &item.ident;
+    let mut s = Structure::new(item);
+    s.bind_with(|_| BindStyle::Move);
+
+    let mut split_arms = TokenStream::new();
+    for vi in s.variants() {
+        let pattern = vi.pat();
+        let split_let = vi.bindings().iter().map(|binding| {
+            let bind1 = format_ident!("{}_1", binding.binding);
+            let bind2 = format_ident!("{}_2", binding.binding);
+            let field = binding.ast();
+            if family.is_inside_type(&field.ty) || contains_type_inside(&field.ty, extra_calls) {
+                quote!(let (#bind1, #bind2) = self.split(#binding);)
+            } else {
+                quote!(let #bind1 = #binding.clone(); let #bind2 = #binding;)
+            }
+        });
+        let construct1 = vi.construct(|_, i| format_ident!("{}_1", &vi.bindings()[i].binding));
+        let construct2 = vi.construct(|_, i| format_ident!("{}_2", &vi.bindings()[i].binding));
+        split_arms.extend(quote!(#in_mod::#pattern => {
+            #(#split_let)*
+            (#out1_mod::#construct1, #out2_mod::#construct2)
+        }))
+    }
+
+    quote! {
+        impl Split<#in_mod::#item_name, #out1_mod::#item_name, #out2_mod::#item_name> for #self_typ {
+            fn split(&mut self, input: #in_mod::#item_name) -> (#out1_mod::#item_name, #out2_mod::#item_name) {
+                match input {
+                    #split_arms
+                    _ => panic!("Unhandled variant for type {}", stringify!(#item_name)),
                 }
             }
         }
