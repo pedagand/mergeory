@@ -16,7 +16,13 @@ impl<'a> Fold for ModuleTransformer<'a> {
                 if item.mac.path.is_ident("extend_family") {
                     Item::Verbatim(extend::extend_family(item.mac.tokens, &item.attrs, self.0))
                 } else if item.mac.path.is_ident("family_impl") {
-                    Item::Verbatim(auto_impl::family_impl(item.mac.tokens, &item.attrs, self.0))
+                    let span = item.span();
+                    Item::Verbatim(auto_impl::family_impl(
+                        item.mac.tokens,
+                        &item.attrs,
+                        span,
+                        self.0,
+                    ))
                 } else {
                     Item::Macro(item)
                 }

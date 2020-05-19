@@ -1,6 +1,6 @@
 use crate::family::Family;
-use proc_macro2::TokenStream;
-use quote::{format_ident, quote};
+use proc_macro2::{Span, TokenStream};
+use quote::{format_ident, quote, quote_spanned};
 use std::collections::HashSet;
 use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
@@ -65,7 +65,12 @@ impl Parse for FamilyImplInput {
     }
 }
 
-pub fn family_impl(tokens: TokenStream, attrs: &[Attribute], family: &Family) -> TokenStream {
+pub fn family_impl(
+    tokens: TokenStream,
+    attrs: &[Attribute],
+    span: Span,
+    family: &Family,
+) -> TokenStream {
     let input: FamilyImplInput = match syn::parse2(tokens) {
         Ok(tr) => tr,
         Err(err) => return err.to_compile_error(),
@@ -106,7 +111,7 @@ pub fn family_impl(tokens: TokenStream, attrs: &[Attribute], family: &Family) ->
         if omitted_types.contains(&item.ident) {
             return quote!();
         }
-        let generated_impl = generate_impl(item, &input, family, &extra_calls);
+        let generated_impl = generate_impl(item, &input, span, family, &extra_calls);
         quote!(#(#attrs)* #generated_impl)
     });
 
@@ -116,30 +121,45 @@ pub fn family_impl(tokens: TokenStream, attrs: &[Attribute], family: &Family) ->
 fn generate_impl(
     item: &DeriveInput,
     req: &FamilyImplInput,
+    span: Span,
     family: &Family,
     extra_calls: &HashSet<Type>,
 ) -> TokenStream {
     match &req.pattern {
-        FamilyImplPattern::Convert(in_mod, out_mod) => {
-            generate_convert_impl(item, &in_mod, &out_mod, &req.self_typ, family, extra_calls)
-        }
+        FamilyImplPattern::Convert(in_mod, out_mod) => generate_convert_impl(
+            item,
+            &in_mod,
+            &out_mod,
+            &req.self_typ,
+            span,
+            family,
+            extra_calls,
+        ),
         FamilyImplPattern::Visit(visited_mod) => generate_visit_impl(
             item,
             false,
             &visited_mod,
             &req.self_typ,
+            span,
             family,
             extra_calls,
         ),
-        FamilyImplPattern::VisitMut(visited_mod) => {
-            generate_visit_impl(item, true, &visited_mod, &req.self_typ, family, extra_calls)
-        }
+        FamilyImplPattern::VisitMut(visited_mod) => generate_visit_impl(
+            item,
+            true,
+            &visited_mod,
+            &req.self_typ,
+            span,
+            family,
+            extra_calls,
+        ),
         FamilyImplPattern::Merge(in1_mod, in2_mod, out_mod) => generate_merge_impl(
             item,
             &in1_mod,
             &in2_mod,
             &out_mod,
             &req.self_typ,
+            span,
             family,
             extra_calls,
         ),
@@ -149,6 +169,7 @@ fn generate_impl(
             &out1_mod,
             &out2_mod,
             &req.self_typ,
+            span,
             family,
             extra_calls,
         ),
@@ -160,6 +181,7 @@ fn generate_convert_impl(
     in_mod: &Path,
     out_mod: &Path,
     self_typ: &Type,
+    span: Span,
     family: &Family,
     extra_calls: &HashSet<Type>,
 ) -> TokenStream {
@@ -173,15 +195,15 @@ fn generate_convert_impl(
         let construct = vi.construct(|field, i| {
             let binding = &vi.bindings()[i].binding;
             if family.is_inside_type(&field.ty) || contains_type_inside(&field.ty, extra_calls) {
-                quote!(self.convert(#binding))
+                quote_spanned!(span=> self.convert(#binding))
             } else {
                 quote!(#binding)
             }
         });
-        convert_arms.extend(quote!(#in_mod::#pattern => #out_mod::#construct,))
+        convert_arms.extend(quote_spanned!(span=> #in_mod::#pattern => #out_mod::#construct,))
     }
 
-    quote! {
+    quote_spanned! { span=>
         impl Convert<#in_mod::#item_name, #out_mod::#item_name> for #self_typ {
             fn convert(&mut self, input: #in_mod::#item_name) -> #out_mod::#item_name {
                 match input {
@@ -198,6 +220,7 @@ fn generate_visit_impl(
     visit_mut: bool,
     visited_mod: &Path,
     self_typ: &Type,
+    span: Span,
     family: &Family,
     extra_calls: &HashSet<Type>,
 ) -> TokenStream {
@@ -209,14 +232,14 @@ fn generate_visit_impl(
     let trait_name;
     if visit_mut {
         s.bind_with(|_| BindStyle::RefMut);
-        mut_qualif = quote!(mut);
-        fn_name = quote!(visit_mut);
-        trait_name = quote!(VisitMut);
+        mut_qualif = quote_spanned!(span=> mut);
+        fn_name = quote_spanned!(span=> visit_mut);
+        trait_name = quote_spanned!(span=> VisitMut);
     } else {
         s.bind_with(|_| BindStyle::Ref);
         mut_qualif = quote!();
-        fn_name = quote!(visit);
-        trait_name = quote!(Visit);
+        fn_name = quote_spanned!(span=> visit);
+        trait_name = quote_spanned!(span=> Visit);
     }
 
     let mut visit_arms = TokenStream::new();
@@ -224,15 +247,15 @@ fn generate_visit_impl(
         let visit_arm = vi.each(|binding| {
             let field_typ = &binding.ast().ty;
             if family.is_inside_type(field_typ) || contains_type_inside(field_typ, extra_calls) {
-                quote!(self.#fn_name(#binding))
+                quote_spanned!(span=> self.#fn_name(#binding))
             } else {
                 quote!()
             }
         });
-        visit_arms.extend(quote!(#visited_mod::#visit_arm))
+        visit_arms.extend(quote_spanned!(span=> #visited_mod::#visit_arm))
     }
 
-    quote! {
+    quote_spanned! { span=>
         impl #trait_name<#visited_mod::#item_name> for #self_typ {
             fn #fn_name(&mut self, input: &#mut_qualif #visited_mod::#item_name) {
                 match input {
@@ -250,6 +273,7 @@ fn generate_merge_impl(
     in2_mod: &Path,
     out_mod: &Path,
     self_typ: &Type,
+    span: Span,
     family: &Family,
     extra_calls: &HashSet<Type>,
 ) -> TokenStream {
@@ -264,27 +288,28 @@ fn generate_merge_impl(
         let mut vi2 = vi.clone();
         vi2.binding_name(|_, n| format_ident!("__binding2_{}", n));
         let pattern2 = vi2.pat();
-        let pattern = quote!((#in1_mod::#pattern1, #in2_mod::#pattern2));
+        let pattern = quote_spanned!(span=> (#in1_mod::#pattern1, #in2_mod::#pattern2));
 
-        let mut can_merge_expr = quote!(true);
+        let mut can_merge_expr = quote_spanned!(span=> true);
 
         let construct = vi.construct(|field, i| {
             let binding1 = &vi.bindings()[i].binding;
             let binding2 = &vi2.bindings()[i].binding;
             if family.is_inside_type(&field.ty) || contains_type_inside(&field.ty, extra_calls) {
-                can_merge_expr.extend(quote!(&& self.can_merge(#binding1, #binding2)));
-                quote!(self.merge(#binding1, #binding2))
+                can_merge_expr
+                    .extend(quote_spanned!(span=> && self.can_merge(#binding1, #binding2)));
+                quote_spanned!(span=> self.merge(#binding1, #binding2))
             } else {
-                can_merge_expr.extend(quote!(&& #binding1 == #binding2));
+                can_merge_expr.extend(quote_spanned!(span=> && #binding1 == #binding2));
                 quote!(#binding1)
             }
         });
 
-        can_merge_arms.extend(quote!(#pattern => #can_merge_expr,));
-        merge_arms.extend(quote!(#pattern => #out_mod::#construct,));
+        can_merge_arms.extend(quote_spanned!(span=> #pattern => #can_merge_expr,));
+        merge_arms.extend(quote_spanned!(span=> #pattern => #out_mod::#construct,));
     }
 
-    quote! {
+    quote_spanned! { span=>
         impl Merge<#in1_mod::#item_name, #in2_mod::#item_name, #out_mod::#item_name>
             for #self_typ
         {
@@ -319,6 +344,7 @@ fn generate_split_impl(
     out1_mod: &Path,
     out2_mod: &Path,
     self_typ: &Type,
+    span: Span,
     family: &Family,
     extra_calls: &HashSet<Type>,
 ) -> TokenStream {
@@ -334,20 +360,20 @@ fn generate_split_impl(
             let bind2 = format_ident!("{}_2", binding.binding);
             let field = binding.ast();
             if family.is_inside_type(&field.ty) || contains_type_inside(&field.ty, extra_calls) {
-                quote!(let (#bind1, #bind2) = self.split(#binding);)
+                quote_spanned!(span=> let (#bind1, #bind2) = self.split(#binding);)
             } else {
-                quote!(let #bind1 = #binding.clone(); let #bind2 = #binding;)
+                quote_spanned!(span=> let #bind1 = #binding.clone(); let #bind2 = #binding;)
             }
         });
         let construct1 = vi.construct(|_, i| format_ident!("{}_1", &vi.bindings()[i].binding));
         let construct2 = vi.construct(|_, i| format_ident!("{}_2", &vi.bindings()[i].binding));
-        split_arms.extend(quote!(#in_mod::#pattern => {
+        split_arms.extend(quote_spanned!(span=> #in_mod::#pattern => {
             #(#split_let)*
             (#out1_mod::#construct1, #out2_mod::#construct2)
         }))
     }
 
-    quote! {
+    quote_spanned! { span=>
         impl Split<#in_mod::#item_name, #out1_mod::#item_name, #out2_mod::#item_name> for #self_typ {
             fn split(&mut self, input: #in_mod::#item_name) -> (#out1_mod::#item_name, #out2_mod::#item_name) {
                 match input {
