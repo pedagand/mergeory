@@ -3,6 +3,7 @@ use crate::family_traits::{Convert, Visit};
 use crate::hash_tree::HashSum;
 use crate::spine_tree::{Aligned as HAligned, AlignedSeq as HAlignedSeq, DiffNode as HDiffNode};
 use std::any::TypeId;
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
@@ -46,8 +47,8 @@ where
             MaybeEllided::InPlace(node) => self.visit(node),
             MaybeEllided::Ellided(hash) => {
                 let key = (TypeId::of::<T>(), *hash);
-                if !self.metavars.contains_key(&key) {
-                    self.metavars.insert(key, Metavariable(self.next_id));
+                if let Entry::Vacant(entry) = self.metavars.entry(key) {
+                    entry.insert(Metavariable(self.next_id));
                     self.next_id += 1;
                 }
             }

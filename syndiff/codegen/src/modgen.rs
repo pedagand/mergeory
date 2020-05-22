@@ -43,7 +43,7 @@ pub fn process_modules(modules: Vec<ItemMod>, family: &Family) -> TokenStream {
         };
         let mut module_transformer = ModuleTransformer(&family);
         let new_module = module_transformer.fold_item_mod(module);
-        quote!(#new_module)
+        quote!(#[allow(clippy::style, clippy::complexity)] #new_module)
     });
     quote!(#(#module_iter)*)
 }

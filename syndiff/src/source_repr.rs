@@ -133,14 +133,11 @@ macro_rules! convert_block {
                 let mut stmts: Vec<syn::Stmt> = self.convert(input.stmts);
                 let nb_nontrail_stmts = stmts.len().saturating_sub(1);
                 for stmt in &mut stmts[..nb_nontrail_stmts] {
-                    match stmt {
-                        syn::Stmt::Expr(syn::Expr::Verbatim(macro_call)) => {
-                            *stmt = syn::Stmt::Semi(
-                                syn::Expr::Verbatim(std::mem::take(macro_call)),
-                                <Token![;]>::default(),
-                            )
-                        }
-                        _ => (),
+                    if let syn::Stmt::Expr(syn::Expr::Verbatim(macro_call)) = stmt {
+                        *stmt = syn::Stmt::Semi(
+                            syn::Expr::Verbatim(std::mem::take(macro_call)),
+                            <Token![;]>::default(),
+                        )
                     }
                 }
                 syn::Block {
