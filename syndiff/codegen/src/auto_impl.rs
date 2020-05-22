@@ -23,40 +23,46 @@ enum FamilyImplPattern {
 
 impl Parse for FamilyImplInput {
     fn parse(input: ParseStream) -> Result<Self> {
-        let pattern;
         let pattern_name: Ident = input.parse()?;
         let _ = input.parse::<Token![<]>()?;
-        if pattern_name == "Convert" {
-            let in_mod = input.parse()?;
-            let _ = input.parse::<Token![,]>()?;
-            let out_mod = input.parse()?;
-            pattern = FamilyImplPattern::Convert(in_mod, out_mod);
-        } else if pattern_name == "Visit" {
-            let visited_mod = input.parse()?;
-            pattern = FamilyImplPattern::Visit(visited_mod);
-        } else if pattern_name == "VisitMut" {
-            let visited_mod = input.parse()?;
-            pattern = FamilyImplPattern::VisitMut(visited_mod);
-        } else if pattern_name == "Merge" {
-            let in1_mod = input.parse()?;
-            let _ = input.parse::<Token![,]>()?;
-            let in2_mod = input.parse()?;
-            let _ = input.parse::<Token![,]>()?;
-            let out_mod = input.parse()?;
-            pattern = FamilyImplPattern::Merge(in1_mod, in2_mod, out_mod);
-        } else if pattern_name == "Split" {
-            let in_mod = input.parse()?;
-            let _ = input.parse::<Token![,]>()?;
-            let out1_mod = input.parse()?;
-            let _ = input.parse::<Token![,]>()?;
-            let out2_mod = input.parse()?;
-            pattern = FamilyImplPattern::Split(in_mod, out1_mod, out2_mod);
-        } else {
-            return Err(Error::new(
-                pattern_name.span(),
-                "Unsupported family impl pattern",
-            ));
-        }
+        let pattern = match pattern_name.to_string().as_str() {
+            "Convert" => {
+                let in_mod = input.parse()?;
+                let _ = input.parse::<Token![,]>()?;
+                let out_mod = input.parse()?;
+                FamilyImplPattern::Convert(in_mod, out_mod)
+            }
+            "Visit" => {
+                let visited_mod = input.parse()?;
+                FamilyImplPattern::Visit(visited_mod)
+            }
+            "VisitMut" => {
+                let visited_mod = input.parse()?;
+                FamilyImplPattern::VisitMut(visited_mod)
+            }
+            "Merge" => {
+                let in1_mod = input.parse()?;
+                let _ = input.parse::<Token![,]>()?;
+                let in2_mod = input.parse()?;
+                let _ = input.parse::<Token![,]>()?;
+                let out_mod = input.parse()?;
+                FamilyImplPattern::Merge(in1_mod, in2_mod, out_mod)
+            }
+            "Split" => {
+                let in_mod = input.parse()?;
+                let _ = input.parse::<Token![,]>()?;
+                let out1_mod = input.parse()?;
+                let _ = input.parse::<Token![,]>()?;
+                let out2_mod = input.parse()?;
+                FamilyImplPattern::Split(in_mod, out1_mod, out2_mod)
+            }
+            _ => {
+                return Err(Error::new(
+                    pattern_name.span(),
+                    "Unsupported family impl pattern",
+                ))
+            }
+        };
         let _ = input.parse::<Token![>]>()?;
         let _ = input.parse::<Token![for]>()?;
 
@@ -208,6 +214,7 @@ fn generate_convert_impl(
             fn convert(&mut self, input: #in_mod::#item_name) -> #out_mod::#item_name {
                 match input {
                     #convert_arms
+                    #[allow(unreachable_patterns)]
                     _ => panic!("Unhandled variant for type {}", stringify!(#item_name)),
                 }
             }
@@ -260,6 +267,7 @@ fn generate_visit_impl(
             fn #fn_name(&mut self, input: &#mut_qualif #visited_mod::#item_name) {
                 match input {
                     #visit_arms
+                    #[allow(unreachable_patterns)]
                     _ => panic!("Unhandled variant for type {}", stringify!(#item_name)),
                 }
             }
@@ -320,6 +328,7 @@ fn generate_merge_impl(
             ) -> bool {
                 match (in1, in2) {
                     #can_merge_arms
+                    #[allow(unreachable_patterns)]
                     _ => false,
                 }
             }
@@ -331,6 +340,7 @@ fn generate_merge_impl(
             ) -> #out_mod::#item_name {
                 match (in1, in2) {
                     #merge_arms
+                    #[allow(unreachable_patterns)]
                     _ => panic!("Incompatible arms when merging with {}", stringify!(#self_typ)),
                 }
             }
@@ -378,6 +388,7 @@ fn generate_split_impl(
             fn split(&mut self, input: #in_mod::#item_name) -> (#out1_mod::#item_name, #out2_mod::#item_name) {
                 match input {
                     #split_arms
+                    #[allow(unreachable_patterns)]
                     _ => panic!("Unhandled variant for type {}", stringify!(#item_name)),
                 }
             }
