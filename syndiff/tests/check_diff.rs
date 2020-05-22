@@ -16,8 +16,8 @@ fn check_diff(test_name: &str) {
         .stdout(diff_file)
         .output()
         .expect("Failed to launch syndiff");
-    assert!(diff_out.status.success());
     eprint!("{}", String::from_utf8_lossy(&diff_out.stderr));
+    assert!(diff_out.status.success());
     assert!(diff_out.stderr.is_empty())
 }
 

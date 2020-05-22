@@ -125,6 +125,34 @@ impl Convert<(), Span> for ToSourceRepr {
     }
 }
 
+// We need to add semicolons to non-terminal Stmt's changed into macros
+macro_rules! convert_block {
+    { $($in_typ:ty),* } => {
+        $(impl Convert<$in_typ, syn::Block> for ToSourceRepr {
+            fn convert(&mut self, input: $in_typ) -> syn::Block {
+                let mut stmts: Vec<syn::Stmt> = self.convert(input.stmts);
+                let nb_nontrail_stmts = stmts.len().saturating_sub(1);
+                for stmt in &mut stmts[..nb_nontrail_stmts] {
+                    match stmt {
+                        syn::Stmt::Expr(syn::Expr::Verbatim(macro_call)) => {
+                            *stmt = syn::Stmt::Semi(
+                                syn::Expr::Verbatim(std::mem::take(macro_call)),
+                                <Token![;]>::default(),
+                            )
+                        }
+                        _ => (),
+                    }
+                }
+                syn::Block {
+                    brace_token: input.brace_token,
+                    stmts,
+                }
+            }
+        })*
+    }
+}
+convert_block!(ast::diff::change::Block, ast::diff::Block);
+
 // Workaround to be able to recreate the raw field of private type Reserved
 macro_rules! convert_expr_reference {
     { $($in_typ:ty),* } => {

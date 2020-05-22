@@ -139,12 +139,12 @@ syn_codegen! {
 
         #[extra_call(proc_macro2::TokenStream, proc_macro2::Literal, proc_macro2::Span)]
         #[extra_call(Reserved)]
-        #[omit(ExprReference)]
+        #[omit(Block, ExprReference)]
         family_impl!(Convert<change, syn> for ToSourceRepr);
 
         #[extra_call(proc_macro2::TokenStream, proc_macro2::Literal, proc_macro2::Span)]
         #[extra_call(Reserved)]
-        #[omit(ExprReference)]
+        #[omit(Block, ExprReference)]
         family_impl!(Convert<self, syn> for ToSourceRepr);
     }
 }
