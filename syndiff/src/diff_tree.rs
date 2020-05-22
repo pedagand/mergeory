@@ -1,13 +1,12 @@
-use crate::convert::Convert;
-use crate::ellided_tree::MaybeEllided as HMaybeEllided;
+use crate::ellided_tree::MaybeEllided;
+use crate::family_traits::{Convert, Visit};
 use crate::hash_tree::HashSum;
 use crate::spine_tree::{Aligned as HAligned, AlignedSeq as HAlignedSeq, DiffNode as HDiffNode};
-use crate::visit::Visit;
 use std::any::TypeId;
 use std::collections::HashMap;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Metavariable(usize);
+pub struct Metavariable(pub usize);
 
 impl std::fmt::Display for Metavariable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -15,21 +14,21 @@ impl std::fmt::Display for Metavariable {
     }
 }
 
-pub enum MaybeEllided<T> {
+pub enum ChangeNode<T> {
     InPlace(T),
     Ellided(Metavariable),
 }
 
 pub enum DiffNode<Spine, Change> {
     Spine(Spine),
-    Changed(MaybeEllided<Change>, MaybeEllided<Change>),
+    Changed(ChangeNode<Change>, ChangeNode<Change>),
     Unchanged(Option<Metavariable>),
 }
 
 pub enum Aligned<Spine, Change> {
     Zipped(DiffNode<Spine, Change>),
-    Deleted(MaybeEllided<Change>),
-    Inserted(MaybeEllided<Change>),
+    Deleted(ChangeNode<Change>),
+    Inserted(ChangeNode<Change>),
 }
 pub struct AlignedSeq<Spine, Change>(pub Vec<Aligned<Spine, Change>>);
 
@@ -38,14 +37,14 @@ pub struct MetavariableNamer {
     next_id: usize,
 }
 
-impl<T: 'static> Visit<HMaybeEllided<T>> for MetavariableNamer
+impl<T: 'static> Visit<MaybeEllided<T>> for MetavariableNamer
 where
     MetavariableNamer: Visit<T>,
 {
-    fn visit(&mut self, input: &HMaybeEllided<T>) {
+    fn visit(&mut self, input: &MaybeEllided<T>) {
         match input {
-            HMaybeEllided::InPlace(node) => self.visit(node),
-            HMaybeEllided::Ellided(hash) => {
+            MaybeEllided::InPlace(node) => self.visit(node),
+            MaybeEllided::Ellided(hash) => {
                 let key = (TypeId::of::<T>(), *hash);
                 if !self.metavars.contains_key(&key) {
                     self.metavars.insert(key, Metavariable(self.next_id));
@@ -89,15 +88,15 @@ where
     }
 }
 
-impl<In: 'static, Out> Convert<HMaybeEllided<In>, MaybeEllided<Out>> for MetavariableNamer
+impl<In: 'static, Out> Convert<MaybeEllided<In>, ChangeNode<Out>> for MetavariableNamer
 where
     MetavariableNamer: Convert<In, Out>,
 {
-    fn convert(&mut self, input: HMaybeEllided<In>) -> MaybeEllided<Out> {
+    fn convert(&mut self, input: MaybeEllided<In>) -> ChangeNode<Out> {
         match input {
-            HMaybeEllided::InPlace(node) => MaybeEllided::InPlace(self.convert(node)),
-            HMaybeEllided::Ellided(hash) => {
-                MaybeEllided::Ellided(self.metavars[&(TypeId::of::<In>(), hash)])
+            MaybeEllided::InPlace(node) => ChangeNode::InPlace(self.convert(node)),
+            MaybeEllided::Ellided(hash) => {
+                ChangeNode::Ellided(self.metavars[&(TypeId::of::<In>(), hash)])
             }
         }
     }

@@ -1,7 +1,6 @@
-use crate::convert::Convert;
 use crate::ellided_tree::MaybeEllided;
+use crate::family_traits::{Convert, Merge};
 use crate::hash_tree::HashSum;
-use crate::merge::Merge;
 use crate::weighted_tree::{
     forget_weight, AlignableSeq, ForgetWeight, ForgettableWeight, Weighted,
 };

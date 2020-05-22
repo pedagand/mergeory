@@ -1,6 +1,4 @@
-mod convert;
-mod merge;
-mod visit;
+mod family_traits;
 
 mod ellided_tree;
 mod hash_tree;

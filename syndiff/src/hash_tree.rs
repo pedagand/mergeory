@@ -1,5 +1,5 @@
 use crate::ast;
-use crate::convert::Convert;
+use crate::family_traits::Convert;
 use std::collections::hash_map::{DefaultHasher, HashMap};
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;

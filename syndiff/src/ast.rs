@@ -2,7 +2,7 @@ use mrsop_codegen::syn_codegen;
 
 syn_codegen! {
     pub(crate) mod hash {
-        use crate::convert::Convert;
+        use crate::family_traits::Convert;
         use crate::hash_tree::{HashTagged, TreeHasher};
 
         #[derive(Hash, PartialEq, Eq)]
@@ -32,8 +32,7 @@ syn_codegen! {
     }
 
     pub(crate) mod ellided {
-        use crate::visit::Visit;
-        use crate::convert::Convert;
+        use crate::family_traits::{Convert, Visit};
         use crate::ellided_tree::{Ellider, MaybeEllided, WantedEllisionFinder};
 
         extend_family! {
@@ -55,7 +54,7 @@ syn_codegen! {
     }
 
     pub(crate) mod weighted {
-        use crate::convert::Convert;
+        use crate::family_traits::Convert;
         use crate::weighted_tree::{AlignableSeq, ComputeWeight, ForgetWeight, Weighted};
 
         extend_family! {
@@ -77,7 +76,7 @@ syn_codegen! {
     }
 
     pub(crate) mod spine {
-        use crate::merge::Merge;
+        use crate::family_traits::Merge;
         use crate::spine_tree::{DiffNode, SpineZipper, AlignedSeq};
 
         extend_family! {
@@ -97,19 +96,35 @@ syn_codegen! {
         family_impl!(Merge<super::weighted, super::weighted, self> for SpineZipper);
     }
 
-    pub mod change {
-        use crate::visit::Visit;
-        use crate::convert::Convert;
-        use crate::diff_tree::{MaybeEllided, MetavariableNamer};
+    pub mod diff {
+        pub mod change {
+            use crate::diff_tree::ChangeNode;
+            extend_family! {
+                Expr as ChangeNode<Expr>,
+                Vec<Stmt> as Vec<ChangeNode<Stmt>>,
+                Vec<Item> as Vec<ChangeNode<Item>>,
+                Vec<TraitItem> as Vec<ChangeNode<TraitItem>>,
+                Vec<ImplItem> as Vec<ChangeNode<ImplItem>>,
+                Vec<ForeignItem> as Vec<ChangeNode<ForeignItem>>,
+
+                proc_macro2::TokenStream as String,
+                proc_macro2::Literal as String,
+                proc_macro2::Span as (),
+                Reserved as (),
+            }
+        }
+
+        use crate::family_traits::{Convert, Visit};
+        use crate::diff_tree::{AlignedSeq, DiffNode, MetavariableNamer};
         use crate::source_repr::ToSourceRepr;
 
         extend_family! {
-            Expr as MaybeEllided<Expr>,
-            Vec<Stmt> as Vec<MaybeEllided<Stmt>>,
-            Vec<Item> as Vec<MaybeEllided<Item>>,
-            Vec<TraitItem> as Vec<MaybeEllided<TraitItem>>,
-            Vec<ImplItem> as Vec<MaybeEllided<ImplItem>>,
-            Vec<ForeignItem> as Vec<MaybeEllided<ForeignItem>>,
+            Expr as DiffNode<Expr, change::Expr>,
+            Vec<Stmt> as AlignedSeq<Stmt, change::Stmt>,
+            Vec<Item> as AlignedSeq<Item, change::Item>,
+            Vec<TraitItem> as AlignedSeq<TraitItem, change::TraitItem>,
+            Vec<ImplItem> as AlignedSeq<ImplItem, change::ImplItem>,
+            Vec<ForeignItem> as AlignedSeq<ForeignItem, change::ForeignItem>,
 
             proc_macro2::TokenStream as String,
             proc_macro2::Literal as String,
@@ -118,36 +133,14 @@ syn_codegen! {
         }
 
         family_impl!(Visit<super::ellided> for MetavariableNamer);
-        family_impl!(Convert<super::ellided, self> for MetavariableNamer);
+        family_impl!(Convert<super::ellided, change> for MetavariableNamer);
+        family_impl!(Visit<super::spine> for MetavariableNamer);
+        family_impl!(Convert<super::spine, self> for MetavariableNamer);
 
         #[extra_call(proc_macro2::TokenStream, proc_macro2::Literal, proc_macro2::Span)]
         #[extra_call(Reserved)]
         #[omit(ExprReference)]
-        family_impl!(Convert<self, syn> for ToSourceRepr);
-    }
-
-    pub mod diff {
-        use crate::visit::Visit;
-        use crate::convert::Convert;
-        use crate::diff_tree::{DiffNode, AlignedSeq, MetavariableNamer};
-        use crate::source_repr::ToSourceRepr;
-
-        extend_family! {
-            Expr as DiffNode<Expr, super::change::Expr>,
-            Vec<Stmt> as AlignedSeq<Stmt, super::change::Stmt>,
-            Vec<Item> as AlignedSeq<Item, super::change::Item>,
-            Vec<TraitItem> as AlignedSeq<TraitItem, super::change::TraitItem>,
-            Vec<ImplItem> as AlignedSeq<ImplItem, super::change::ImplItem>,
-            Vec<ForeignItem> as AlignedSeq<ForeignItem, super::change::ForeignItem>,
-
-            proc_macro2::TokenStream as String,
-            proc_macro2::Literal as String,
-            proc_macro2::Span as (),
-            Reserved as (),
-        }
-
-        family_impl!(Visit<super::spine> for MetavariableNamer);
-        family_impl!(Convert<super::spine, self> for MetavariableNamer);
+        family_impl!(Convert<change, syn> for ToSourceRepr);
 
         #[extra_call(proc_macro2::TokenStream, proc_macro2::Literal, proc_macro2::Span)]
         #[extra_call(Reserved)]

@@ -1,6 +1,6 @@
 use crate::ast;
-use crate::convert::Convert;
 use crate::ellided_tree::MaybeEllided;
+use crate::family_traits::Convert;
 
 pub struct Weighted<T> {
     pub node: MaybeEllided<T>,

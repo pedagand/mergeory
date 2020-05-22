@@ -1,6 +1,5 @@
-use crate::convert::Convert;
+use crate::family_traits::{Convert, Visit};
 use crate::hash_tree::{HasHashTable, HashSum, HashTables, HashTagged};
-use crate::visit::Visit;
 use std::rc::Rc;
 
 /// Checks which ellisions would indeed be performed from the `possible_ellisions`

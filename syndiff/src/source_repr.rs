@@ -1,6 +1,6 @@
 use crate::ast;
-use crate::convert::Convert;
-use crate::diff_tree::{Aligned, AlignedSeq, DiffNode, MaybeEllided};
+use crate::diff_tree::{Aligned, AlignedSeq, ChangeNode, DiffNode};
+use crate::family_traits::Convert;
 use proc_macro2::{Span, TokenStream};
 use quote::{quote, ToTokens};
 use std::str::FromStr;
@@ -41,14 +41,14 @@ impl VerbatimMacro for syn::Stmt {
 
 pub struct ToSourceRepr;
 
-impl<In, Out: VerbatimMacro> Convert<MaybeEllided<In>, Out> for ToSourceRepr
+impl<In, Out: VerbatimMacro> Convert<ChangeNode<In>, Out> for ToSourceRepr
 where
     ToSourceRepr: Convert<In, Out>,
 {
-    fn convert(&mut self, input: MaybeEllided<In>) -> Out {
+    fn convert(&mut self, input: ChangeNode<In>) -> Out {
         match input {
-            MaybeEllided::InPlace(node) => self.convert(node),
-            MaybeEllided::Ellided(metavar) => {
+            ChangeNode::InPlace(node) => self.convert(node),
+            ChangeNode::Ellided(metavar) => {
                 let metavar_lit = LitInt::new(&format!("{}", metavar), Span::call_site());
                 Out::verbatim_macro(quote!(metavar![#metavar_lit]))
             }
@@ -141,7 +141,7 @@ macro_rules! convert_expr_reference {
         })*
     }
 }
-convert_expr_reference!(ast::change::ExprReference, ast::diff::ExprReference);
+convert_expr_reference!(ast::diff::change::ExprReference, ast::diff::ExprReference);
 
 pub fn source_repr<In, Out>(input: In) -> Out
 where
