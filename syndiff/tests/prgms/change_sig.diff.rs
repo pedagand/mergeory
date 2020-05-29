@@ -1,7 +1,7 @@
 changed![
     {
         fn f() -> i32 {
-            metavar![0]
+            mv![0]
         }
     },
     {
@@ -12,6 +12,6 @@ changed![
 ];
 fn g() -> i32 {
     unchanged![];
-    let x = changed![{ metavar![1]() }, { metavar![1](metavar![0]) }];
+    let x = changed![{ mv![1]() }, { mv![1](mv![0]) }];
     unchanged![];
 }

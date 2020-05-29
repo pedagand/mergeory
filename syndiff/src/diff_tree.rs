@@ -2,6 +2,7 @@ use crate::ellided_tree::MaybeEllided;
 use crate::family_traits::{Convert, Visit};
 use crate::hash_tree::HashSum;
 use crate::spine_tree::{Aligned as HAligned, AlignedSeq as HAlignedSeq, DiffNode as HDiffNode};
+use quote::TokenStreamExt;
 use std::any::TypeId;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
@@ -12,6 +13,13 @@ pub struct Metavariable(pub usize);
 impl std::fmt::Display for Metavariable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+impl quote::ToTokens for Metavariable {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        let metavar_lit = proc_macro2::Literal::usize_unsuffixed(self.0);
+        tokens.append(metavar_lit)
     }
 }
 

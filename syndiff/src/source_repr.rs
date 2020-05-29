@@ -4,20 +4,10 @@ use crate::family_traits::Convert;
 use proc_macro2::{Span, TokenStream};
 use quote::{quote, ToTokens};
 use std::str::FromStr;
-use syn::{LitInt, Token};
+use syn::Token;
 
 pub trait VerbatimMacro {
     fn verbatim_macro(mac: TokenStream) -> Self;
-}
-
-macro_rules! verbatim_macro_without_semi {
-    {$($typ:ty),*} => {
-        $(impl VerbatimMacro for $typ {
-            fn verbatim_macro(mac: TokenStream) -> $typ {
-                <$typ>::Verbatim(mac)
-            }
-        })*
-    }
 }
 
 macro_rules! verbatim_macro_with_semi {
@@ -29,9 +19,13 @@ macro_rules! verbatim_macro_with_semi {
         })*
     }
 }
-
-verbatim_macro_without_semi!(syn::Expr);
 verbatim_macro_with_semi!(syn::Item, syn::TraitItem, syn::ImplItem, syn::ForeignItem);
+
+impl VerbatimMacro for syn::Expr {
+    fn verbatim_macro(mac: TokenStream) -> syn::Expr {
+        syn::Expr::Verbatim(mac)
+    }
+}
 
 impl VerbatimMacro for syn::Stmt {
     fn verbatim_macro(mac: TokenStream) -> syn::Stmt {
@@ -48,10 +42,7 @@ where
     fn convert(&mut self, input: ChangeNode<In>) -> Out {
         match input {
             ChangeNode::InPlace(node) => self.convert(node),
-            ChangeNode::Ellided(metavar) => {
-                let metavar_lit = LitInt::new(&format!("{}", metavar), Span::call_site());
-                Out::verbatim_macro(quote!(metavar![#metavar_lit]))
-            }
+            ChangeNode::Ellided(metavar) => Out::verbatim_macro(quote!(mv![#metavar])),
         }
     }
 }
@@ -71,10 +62,7 @@ where
                 Out::verbatim_macro(quote!(changed![{#del}, {#ins}]))
             }
             DiffNode::Unchanged(None) => Out::verbatim_macro(quote!(unchanged![])),
-            DiffNode::Unchanged(Some(metavar)) => {
-                let metavar_lit = LitInt::new(&format!("{}", metavar), Span::call_site());
-                Out::verbatim_macro(quote!(unchanged![#metavar_lit]))
-            }
+            DiffNode::Unchanged(Some(metavar)) => Out::verbatim_macro(quote!(unchanged![#metavar])),
         }
     }
 }

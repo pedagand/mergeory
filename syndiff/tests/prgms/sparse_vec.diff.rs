@@ -23,14 +23,14 @@ impl<T> SparseVec<T> {
         changed![
             {
                 SparseVec {
-                    first_empty: metavar![0],
-                    array: metavar![1],
+                    first_empty: mv![0],
+                    array: mv![1],
                 }
             },
             {
                 SparseVec {
-                    first_empty: metavar![0],
-                    array: metavar![1],
+                    first_empty: mv![0],
+                    array: mv![1],
                     dummy: (),
                 }
             }
@@ -40,14 +40,14 @@ impl<T> SparseVec<T> {
         changed![
             {
                 SparseVec {
-                    first_empty: metavar![0],
-                    array: metavar![2],
+                    first_empty: mv![0],
+                    array: mv![2],
                 }
             },
             {
                 SparseVec {
-                    first_empty: metavar![0],
-                    array: metavar![2],
+                    first_empty: mv![0],
+                    array: mv![2],
                     dummy: (),
                 }
             }
@@ -63,8 +63,8 @@ impl<T> SparseVec<T> {
                 deleted![
                     use core::mem::replace;
                 ];
-                let old_entry = changed![{ replace(metavar![3], metavar![4]) }, { *metavar![3] }];
-                inserted ! [ * metavar ! [ 3 ] = metavar ! [ 4 ] ; ];
+                let old_entry = changed![{ replace(mv![3], mv![4]) }, { *mv![3] }];
+                inserted ! [ * mv ! [ 3 ] = mv ! [ 4 ] ; ];
                 unchanged![];
                 unchanged![];
             }

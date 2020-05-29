@@ -1,11 +1,11 @@
 fn f(c: bool) {
     changed![
         {
-            if metavar![0] {
+            if mv![0] {
             } else {
             }
         },
-        { if metavar![0] {} }
+        { if mv![0] {} }
     ];
     unchanged![];
 }
