@@ -1,6 +1,9 @@
 use crate::ast;
 use crate::diff_tree::{Aligned, AlignedSeq, ChangeNode, DiffNode};
 use crate::family_traits::Convert;
+use crate::multi_diff_tree::{
+    DelNode, InsNode, InsSeq, InsSeqNode, SpineNode, SpineSeq, SpineSeqNode,
+};
 use proc_macro2::{Span, TokenStream};
 use quote::{quote, ToTokens};
 use std::str::FromStr;
@@ -34,6 +37,8 @@ impl VerbatimMacro for syn::Stmt {
 }
 
 pub struct ToSourceRepr;
+
+// Implementations for converting diff_tree
 
 impl<In, Out: VerbatimMacro> Convert<ChangeNode<In>, Out> for ToSourceRepr
 where
@@ -92,6 +97,141 @@ where
     }
 }
 
+// Implementations to convert multi_diff_tree
+
+impl<D, I, O> Convert<DelNode<D, I>, O> for ToSourceRepr
+where
+    ToSourceRepr: Convert<D, O>,
+    ToSourceRepr: Convert<InsNode<I>, O>,
+    O: ToTokens + VerbatimMacro,
+{
+    fn convert(&mut self, input: DelNode<D, I>) -> O {
+        match input {
+            DelNode::InPlace(del) => self.convert(del),
+            DelNode::Ellided(mv) => O::verbatim_macro(quote!(mv![#mv])),
+            DelNode::MetavariableConflict(mv, del, ins) => {
+                let del = <ToSourceRepr as Convert<DelNode<D, I>, O>>::convert(self, *del);
+                let ins = self.convert(ins);
+                O::verbatim_macro(quote!(mv_conflict![#mv, {#del}, {#ins}]))
+            }
+        }
+    }
+}
+
+impl<I, O> Convert<InsNode<I>, O> for ToSourceRepr
+where
+    ToSourceRepr: Convert<I, O>,
+    O: ToTokens + VerbatimMacro,
+{
+    fn convert(&mut self, input: InsNode<I>) -> O {
+        match input {
+            InsNode::InPlace(ins) => self.convert(ins.node),
+            InsNode::Ellided(mv) => {
+                let mv = mv.node;
+                O::verbatim_macro(quote!(mv![#mv]))
+            }
+            InsNode::Conflict(conflict) => {
+                let ins_iter = conflict
+                    .into_iter()
+                    .map(|ins| <ToSourceRepr as Convert<InsNode<I>, O>>::convert(self, ins));
+                O::verbatim_macro(quote!(conflict![#({#ins_iter}),*]))
+            }
+        }
+    }
+}
+
+impl<I, O> Convert<InsSeq<I>, Vec<O>> for ToSourceRepr
+where
+    ToSourceRepr: Convert<InsNode<I>, O>,
+    O: ToTokens + VerbatimMacro,
+{
+    fn convert(&mut self, input: InsSeq<I>) -> Vec<O> {
+        input
+            .0
+            .into_iter()
+            .map(|node| match node {
+                InsSeqNode::Node(node) => self.convert(node),
+                InsSeqNode::DeleteConflict(ins) => {
+                    let ins = self.convert(ins);
+                    O::verbatim_macro(quote!(delete_conflict![#ins]))
+                }
+                InsSeqNode::InsertOrderConflict(ins_vec) => {
+                    let ins_seq_iter = ins_vec.into_iter().map(|ins_seq| {
+                        let ins_iter = ins_seq.node.into_iter().map(|ins| self.convert(ins));
+                        quote!(#(#ins_iter)*)
+                    });
+                    O::verbatim_macro(quote!(insert_order_conflict![#({#ins_seq_iter}),*]))
+                }
+            })
+            .collect()
+    }
+}
+
+impl<S, D, I, O> Convert<SpineNode<S, D, I>, O> for ToSourceRepr
+where
+    ToSourceRepr: Convert<S, O>,
+    ToSourceRepr: Convert<DelNode<D, I>, O>,
+    ToSourceRepr: Convert<InsNode<I>, O>,
+    O: ToTokens + VerbatimMacro,
+{
+    fn convert(&mut self, input: SpineNode<S, D, I>) -> O {
+        match input {
+            SpineNode::Spine(spine) => self.convert(spine),
+            SpineNode::Unchanged => O::verbatim_macro(quote!(unchanged![])),
+            SpineNode::Changed(DelNode::Ellided(del_mv), InsNode::Ellided(ins_mv))
+                if del_mv == ins_mv.node =>
+            {
+                O::verbatim_macro(quote!(unchanged![#del_mv]))
+            }
+            SpineNode::Changed(del, ins) => {
+                let del = self.convert(del);
+                let ins = self.convert(ins);
+                O::verbatim_macro(quote!(changed![{#del}, {#ins}]))
+            }
+        }
+    }
+}
+
+impl<S, D, I, O> Convert<SpineSeq<S, D, I>, Vec<O>> for ToSourceRepr
+where
+    ToSourceRepr: Convert<SpineNode<S, D, I>, O>,
+    ToSourceRepr: Convert<DelNode<D, I>, O>,
+    ToSourceRepr: Convert<InsNode<I>, O>,
+    O: ToTokens + VerbatimMacro,
+{
+    fn convert(&mut self, input: SpineSeq<S, D, I>) -> Vec<O> {
+        input
+            .0
+            .into_iter()
+            .map(|node| match node {
+                SpineSeqNode::Zipped(spine) => self.convert(spine),
+                SpineSeqNode::Deleted(del) => {
+                    let del = self.convert(del.node);
+                    O::verbatim_macro(quote!(deleted![#del]))
+                }
+                SpineSeqNode::DeleteConflict(del, ins) => {
+                    let del = self.convert(del.node);
+                    let ins = self.convert(ins);
+                    O::verbatim_macro(quote!(delete_conflict![{#del}, {#ins}]))
+                }
+                SpineSeqNode::Inserted(ins_seq) => {
+                    let ins_iter = ins_seq.node.into_iter().map(|ins| self.convert(ins));
+                    O::verbatim_macro(quote!(inserted![#(#ins_iter)*]))
+                }
+                SpineSeqNode::InsertOrderConflict(ins_vec) => {
+                    let ins_seq_iter = ins_vec.into_iter().map(|ins_seq| {
+                        let ins_iter = ins_seq.node.into_iter().map(|ins| self.convert(ins));
+                        quote!(#(#ins_iter)*)
+                    });
+                    O::verbatim_macro(quote!(insert_order_conflict![#({#ins_seq_iter}),*]))
+                }
+            })
+            .collect()
+    }
+}
+
+// Miscellaneous implementations to expand ignored stuff
+
 impl Convert<String, TokenStream> for ToSourceRepr {
     fn convert(&mut self, input: String) -> TokenStream {
         TokenStream::from_str(&input).unwrap()
@@ -115,7 +255,7 @@ impl Convert<(), Span> for ToSourceRepr {
 
 // We need to add semicolons to non-terminal Stmt's changed into macros
 macro_rules! convert_block {
-    { $($in_typ:ty),* } => {
+    { $($in_typ:ty,)* } => {
         $(impl Convert<$in_typ, syn::Block> for ToSourceRepr {
             fn convert(&mut self, input: $in_typ) -> syn::Block {
                 let mut stmts: Vec<syn::Stmt> = self.convert(input.stmts);
@@ -136,11 +276,17 @@ macro_rules! convert_block {
         })*
     }
 }
-convert_block!(ast::diff::change::Block, ast::diff::Block);
+convert_block!(
+    ast::diff::change::Block,
+    ast::diff::Block,
+    ast::multi_diff::del::Block,
+    ast::multi_diff::ins::Block,
+    ast::multi_diff::Block,
+);
 
 // Workaround to be able to recreate the raw field of private type Reserved
 macro_rules! convert_expr_reference {
-    { $($in_typ:ty),* } => {
+    { $($in_typ:ty,)* } => {
         $(impl Convert<$in_typ, syn::ExprReference> for ToSourceRepr {
             fn convert(&mut self, input: $in_typ) -> syn::ExprReference {
                 syn::ExprReference {
@@ -154,7 +300,13 @@ macro_rules! convert_expr_reference {
         })*
     }
 }
-convert_expr_reference!(ast::diff::change::ExprReference, ast::diff::ExprReference);
+convert_expr_reference!(
+    ast::diff::change::ExprReference,
+    ast::diff::ExprReference,
+    ast::multi_diff::del::ExprReference,
+    ast::multi_diff::ins::ExprReference,
+    ast::multi_diff::ExprReference,
+);
 
 pub fn source_repr<In, Out>(input: In) -> Out
 where

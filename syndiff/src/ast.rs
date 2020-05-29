@@ -1,3 +1,5 @@
+#![allow(clippy::large_enum_variant)]
+
 use mrsop_codegen::syn_codegen;
 
 syn_codegen! {
@@ -26,8 +28,7 @@ syn_codegen! {
             Reserved as (),
         }
 
-        #[extra_call(proc_macro2::TokenStream, proc_macro2::Literal, proc_macro2::Span)]
-        #[extra_call(Reserved)]
+        #[extra_call(proc_macro2::TokenStream, proc_macro2::Literal, proc_macro2::Span, Reserved)]
         family_impl!(Convert<syn, self> for TreeHasher);
     }
 
@@ -137,13 +138,143 @@ syn_codegen! {
         family_impl!(Visit<super::spine> for MetavariableNamer);
         family_impl!(Convert<super::spine, self> for MetavariableNamer);
 
-        #[extra_call(proc_macro2::TokenStream, proc_macro2::Literal, proc_macro2::Span)]
-        #[extra_call(Reserved)]
+        #[extra_call(proc_macro2::TokenStream, proc_macro2::Literal, proc_macro2::Span, Reserved)]
         #[omit(Block, ExprReference)]
         family_impl!(Convert<change, syn> for ToSourceRepr);
 
-        #[extra_call(proc_macro2::TokenStream, proc_macro2::Literal, proc_macro2::Span)]
-        #[extra_call(Reserved)]
+        #[extra_call(proc_macro2::TokenStream, proc_macro2::Literal, proc_macro2::Span, Reserved)]
+        #[omit(Block, ExprReference)]
+        family_impl!(Convert<self, syn> for ToSourceRepr);
+    }
+
+    pub mod multi_diff {
+        pub mod ins {
+            use crate::multi_diff_tree::{InsNode, InsSeq};
+            #[derive(Clone)]
+            extend_family! {
+                Expr as InsNode<Expr>,
+                Vec<Stmt> as InsSeq<Stmt>,
+                Vec<Item> as InsSeq<Item>,
+                Vec<TraitItem> as InsSeq<TraitItem>,
+                Vec<ImplItem> as InsSeq<ImplItem>,
+                Vec<ForeignItem> as InsSeq<ForeignItem>,
+
+                proc_macro2::TokenStream as String,
+                proc_macro2::Literal as String,
+                proc_macro2::Span as (),
+                Reserved as (),
+            }
+        }
+
+        pub mod del {
+            use crate::multi_diff_tree::DelNode;
+            #[derive(Clone)]
+            extend_family! {
+                Expr as DelNode<Expr, super::ins::Expr>,
+                Vec<Stmt> as Vec<DelNode<Stmt, super::ins::Stmt>>,
+                Vec<Item> as Vec<DelNode<Item, super::ins::Item>>,
+                Vec<TraitItem> as Vec<DelNode<TraitItem, super::ins::TraitItem>>,
+                Vec<ImplItem> as Vec<DelNode<ImplItem, super::ins::ImplItem>>,
+                Vec<ForeignItem> as Vec<DelNode<ForeignItem, super::ins::ForeignItem>>,
+
+                proc_macro2::TokenStream as String,
+                proc_macro2::Literal as String,
+                proc_macro2::Span as (),
+                Reserved as (),
+            }
+        }
+
+        pub(crate) mod merge_spine {
+            use crate::multi_diff_tree::align_spine::{MergeSpineNode, MergeSpineSeq};
+            extend_family! {
+                Expr as MergeSpineNode<Expr, super::del::Expr, super::ins::Expr>,
+                Vec<Stmt> as MergeSpineSeq<Stmt, super::del::Stmt, super::ins::Stmt>,
+                Vec<Item> as MergeSpineSeq<Item, super::del::Item, super::ins::Item>,
+                Vec<TraitItem> as MergeSpineSeq<TraitItem, super::del::TraitItem, super::ins::TraitItem>,
+                Vec<ImplItem> as MergeSpineSeq<ImplItem, super::del::ImplItem, super::ins::ImplItem>,
+                Vec<ForeignItem> as MergeSpineSeq<ForeignItem, super::del::ForeignItem, super::ins::ForeignItem>,
+
+                proc_macro2::TokenStream as String,
+                proc_macro2::Literal as String,
+                proc_macro2::Span as (),
+                Reserved as (),
+            }
+        }
+
+        pub(crate) mod ins_merged_spine {
+            use crate::multi_diff_tree::merge_ins::{ISpineNode, ISpineSeq};
+            extend_family! {
+                Expr as ISpineNode<Expr, super::del::Expr, super::ins::Expr>,
+                Vec<Stmt> as ISpineSeq<Stmt, super::del::Stmt, super::ins::Stmt>,
+                Vec<Item> as ISpineSeq<Item, super::del::Item, super::ins::Item>,
+                Vec<TraitItem> as ISpineSeq<TraitItem, super::del::TraitItem, super::ins::TraitItem>,
+                Vec<ImplItem> as ISpineSeq<ImplItem, super::del::ImplItem, super::ins::ImplItem>,
+                Vec<ForeignItem> as ISpineSeq<ForeignItem, super::del::ForeignItem, super::ins::ForeignItem>,
+
+                proc_macro2::TokenStream as String,
+                proc_macro2::Literal as String,
+                proc_macro2::Span as (),
+                Reserved as (),
+            }
+        }
+
+        use crate::multi_diff_tree::{SpineNode, SpineSeq};
+        extend_family! {
+            Expr as SpineNode<Expr, del::Expr, ins::Expr>,
+            Vec<Stmt> as SpineSeq<Stmt, del::Stmt, ins::Stmt>,
+            Vec<Item> as SpineSeq<Item, del::Item, ins::Item>,
+            Vec<TraitItem> as SpineSeq<TraitItem, del::TraitItem, ins::TraitItem>,
+            Vec<ImplItem> as SpineSeq<ImplItem, del::ImplItem, ins::ImplItem>,
+            Vec<ForeignItem> as SpineSeq<ForeignItem, del::ForeignItem, ins::ForeignItem>,
+
+            proc_macro2::TokenStream as String,
+            proc_macro2::Literal as String,
+            proc_macro2::Span as (),
+            Reserved as (),
+        }
+
+        use crate::family_traits::{Convert, Merge, Split, Visit, VisitMut};
+
+        use crate::multi_diff_tree::with_color::WithColor;
+        family_impl!(Convert<super::diff, self> for WithColor);
+        family_impl!(Convert<super::diff::change, del> for WithColor);
+        family_impl!(Convert<super::diff::change, ins> for WithColor);
+
+        use crate::multi_diff_tree::metavar_renamer::MetavarRenamer;
+        family_impl!(VisitMut<del> for MetavarRenamer<'_>);
+        family_impl!(VisitMut<ins> for MetavarRenamer<'_>);
+        family_impl!(VisitMut<self> for MetavarRenamer<'_>);
+
+        use crate::multi_diff_tree::align_spine::{SpineSplitter, SpineMerger, UnchangedMerger};
+        family_impl!(Split<self, del, ins> for SpineSplitter<'_>);
+        family_impl!(Merge<self, self, merge_spine> for SpineMerger);
+        family_impl!(Convert<self, merge_spine> for UnchangedMerger<'_>);
+
+        use crate::multi_diff_tree::merge_ins::{ColorMerger, InsMerger};
+        family_impl!(Merge<ins, ins, ins> for ColorMerger);
+        family_impl!(Merge<ins, ins, ins> for InsMerger);
+        family_impl!(Merge<del, ins, del> for InsMerger);
+        family_impl!(Visit<del> for InsMerger);
+        family_impl!(Convert<merge_spine, ins_merged_spine> for InsMerger);
+
+        use crate::multi_diff_tree::merge_del::DelMerger;
+        family_impl!(Merge<del, del, del> for DelMerger<'_>);
+        family_impl!(Convert<ins_merged_spine, self> for DelMerger<'_>);
+
+        use crate::multi_diff_tree::subst::{Substituter, InferInsFromDel};
+        family_impl!(VisitMut<del> for Substituter);
+        family_impl!(VisitMut<ins> for Substituter);
+        family_impl!(VisitMut<self> for Substituter);
+        family_impl!(Convert<del, ins> for InferInsFromDel);
+
+        use crate::source_repr::ToSourceRepr;
+        #[extra_call(proc_macro2::TokenStream, proc_macro2::Literal, proc_macro2::Span, Reserved)]
+        #[omit(Block, ExprReference)]
+        family_impl!(Convert<del, syn> for ToSourceRepr);
+        #[extra_call(proc_macro2::TokenStream, proc_macro2::Literal, proc_macro2::Span, Reserved)]
+        #[omit(Block, ExprReference)]
+        family_impl!(Convert<ins, syn> for ToSourceRepr);
+        #[extra_call(proc_macro2::TokenStream, proc_macro2::Literal, proc_macro2::Span, Reserved)]
         #[omit(Block, ExprReference)]
         family_impl!(Convert<self, syn> for ToSourceRepr);
     }

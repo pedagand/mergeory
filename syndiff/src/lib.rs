@@ -7,6 +7,7 @@ mod weighted_tree;
 
 pub mod ast;
 pub mod diff_tree;
+pub mod multi_diff_tree;
 pub mod source_repr;
 
 use crate::diff_tree::name_metavariables;
@@ -45,4 +46,18 @@ pub fn compute_diff(original: syn::File, modified: syn::File) -> ast::diff::File
     let weighted_ins: ast::weighted::File = compute_weight(insertion_ast);
     let spine_ast = zip_spine(weighted_del, weighted_ins).unwrap();
     name_metavariables(spine_ast)
+}
+
+use crate::multi_diff_tree::{merge_multi_diffs, with_color, Color};
+use std::convert::TryInto;
+
+pub fn merge_diffs(diffs: Vec<ast::diff::File>) -> Option<ast::multi_diff::File> {
+    let mut diff_iter = diffs.into_iter().enumerate();
+    let first_multi_diff = with_color(diff_iter.next()?.1, Color(0));
+    diff_iter.try_fold(first_multi_diff, |diff_acc, (i, next_diff)| {
+        merge_multi_diffs(
+            diff_acc,
+            with_color(next_diff, Color(i.try_into().unwrap())),
+        )
+    })
 }

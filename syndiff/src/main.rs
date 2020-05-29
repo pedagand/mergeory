@@ -5,26 +5,36 @@ use std::process;
 use quote::quote;
 use std::io::Write;
 use std::process::{Command, Stdio};
-use syndiff::compute_diff;
 use syndiff::source_repr::source_repr;
+use syndiff::{compute_diff, merge_diffs};
 
 fn main() {
     let mut args = env::args().skip(1);
-    let (origin_filename, modified_filename) = match (args.next(), args.next(), args.next()) {
-        (Some(filename1), Some(filename2), None) => (filename1, filename2),
-        _ => {
-            eprintln!("Usage: syndiff <original_file> <new_file>");
-            process::exit(1);
-        }
+    let origin_filename = args.next().unwrap_or_else(|| {
+        eprintln!("Usage: syndiff <original_file> <modified_files>*");
+        process::exit(1);
+    });
+
+    let mut diff_trees = Vec::new();
+    for modified_filename in args {
+        let origin_src = parse_src(&origin_filename);
+        let modified_src = parse_src(&modified_filename);
+
+        diff_trees.push(compute_diff(origin_src, modified_src))
+    }
+
+    if diff_trees.is_empty() {
+        eprintln!("Usage: syndiff <original_file> <modified_files>*");
+        process::exit(1);
+    }
+
+    let result_tree: syn::File = if diff_trees.len() == 1 {
+        source_repr(diff_trees.pop().unwrap())
+    } else {
+        source_repr(merge_diffs(diff_trees).unwrap())
     };
 
-    let origin_src = parse_src(&origin_filename);
-    let modified_src = parse_src(&modified_filename);
-
-    let diff_tree = compute_diff(origin_src, modified_src);
-
     // Pretty print the result
-    let source_diff_tree: syn::File = source_repr(diff_tree);
     let mut rustfmt = Command::new("rustfmt")
         .stdin(Stdio::piped())
         .spawn()
@@ -33,7 +43,7 @@ fn main() {
         .stdin
         .as_mut()
         .expect("Failed to open rustfmt stdin");
-    write!(rustfmt_in, "{}", quote!(#source_diff_tree)).unwrap()
+    write!(rustfmt_in, "{}", quote!(#result_tree)).unwrap()
 }
 
 fn parse_src(src_filename: &str) -> syn::File {
