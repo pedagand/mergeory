@@ -1,16 +1,16 @@
 use super::{
-    Color, Colored, DelNode, InsNode, InsSeq, InsSeqNode, SpineNode, SpineSeq, SpineSeqNode,
+    ColorSet, Colored, DelNode, InsNode, InsSeq, InsSeqNode, SpineNode, SpineSeq, SpineSeqNode,
 };
 use crate::diff_tree::{Aligned, AlignedSeq, ChangeNode, DiffNode};
 use crate::family_traits::Convert;
 
-pub struct WithColor(Color);
+pub struct WithColor(usize);
 
 impl WithColor {
     fn color<T>(&self, node: T) -> Colored<T> {
         Colored {
             node,
-            colors: vec![self.0],
+            colors: ColorSet::from_color(self.0),
         }
     }
 }
@@ -109,7 +109,7 @@ where
     }
 }
 
-pub fn with_color<I, O>(input: I, color: Color) -> O
+pub fn with_color<I, O>(input: I, color: usize) -> O
 where
     WithColor: Convert<I, O>,
 {

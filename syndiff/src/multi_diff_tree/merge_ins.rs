@@ -1,5 +1,5 @@
 use super::align_spine::{MergeSpineNode, MergeSpineSeq, MergeSpineSeqNode};
-use super::{Colored, DelNode, InsNode, InsSeq, InsSeqNode};
+use super::{ColorSet, Colored, DelNode, InsNode, InsSeq, InsSeqNode};
 use crate::family_traits::{Convert, Merge, Visit};
 use std::any::Any;
 
@@ -39,14 +39,10 @@ where
             (InsNode::InPlace(left), InsNode::InPlace(right)) => {
                 InsNode::InPlace(self.merge(left, right))
             }
-            (InsNode::Ellided(left), InsNode::Ellided(right)) => {
-                let mut colors = left.colors;
-                colors.extend(right.colors);
-                InsNode::Ellided(Colored {
-                    node: left.node,
-                    colors,
-                })
-            }
+            (InsNode::Ellided(left), InsNode::Ellided(right)) => InsNode::Ellided(Colored {
+                node: left.node,
+                colors: left.colors | right.colors,
+            }),
             (InsNode::Conflict(left), InsNode::Conflict(right)) => InsNode::Conflict(
                 <ColorMerger as Merge<Vec<InsNode<I>>, _, _>>::merge(self, left, right),
             ),
@@ -197,7 +193,7 @@ where
             (DelNode::Ellided(_), _) => true,
             (DelNode::MetavariableConflict(_, _, _), _) => true,
             (DelNode::InPlace(del_subtree), InsNode::InPlace(ins_subtree)) => {
-                if ins_subtree.colors.is_empty() {
+                if ins_subtree.colors == ColorSet::white() {
                     self.can_merge(del_subtree, &ins_subtree.node)
                 } else {
                     // I don't really see how this branch can be triggered on real examples,

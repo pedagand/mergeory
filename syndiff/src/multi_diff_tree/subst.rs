@@ -1,6 +1,6 @@
 use super::merge_ins::MetavarStatus;
 use super::{
-    Color, Colored, DelNode, InsNode, InsSeq, InsSeqNode, SpineNode, SpineSeq, SpineSeqNode,
+    ColorSet, Colored, DelNode, InsNode, InsSeq, InsSeqNode, SpineNode, SpineSeq, SpineSeqNode,
 };
 use crate::ast;
 use crate::diff_tree::Metavariable;
@@ -53,7 +53,7 @@ impl Substituter {
         repl
     }
 
-    fn ins_subst<I: InsFromDel>(&mut self, mv: &mut Colored<Metavariable>) -> InsNode<I>
+    fn ins_subst<I: InsFromDel>(&mut self, mv: Colored<Metavariable>) -> InsNode<I>
     where
         Substituter: VisitMut<InsNode<I>>,
         Substituter: VisitMut<DelNode<I::Del, I>>,
@@ -73,7 +73,7 @@ impl Substituter {
                 self.ins_subst[mv_id] = ComputedValue::Unprocessed(MetavarStatus::Keep);
                 // Build the insertion substitution from the deletion substitution
                 let del_subst = self.del_subst(mv.node);
-                InferInsFromDel(std::mem::take(&mut mv.colors)).convert(del_subst)
+                InferInsFromDel(mv.colors).convert(del_subst)
             }
             ComputedValue::Unprocessed(MetavarStatus::Replace(repl_ins)) => {
                 let mut repl_ins = *repl_ins.downcast::<InsNode<I>>().unwrap();
@@ -84,11 +84,7 @@ impl Substituter {
             ComputedValue::Unprocessed(MetavarStatus::Conflict) => {
                 // Keep unprocessed here to allow different color sets
                 self.ins_subst[mv_id] = ComputedValue::Unprocessed(MetavarStatus::Conflict);
-                // We can take the colors out of mv here as it will be overwritten soon anyway
-                InsNode::Ellided(Colored {
-                    node: Metavariable(mv_id),
-                    colors: std::mem::take(&mut mv.colors),
-                })
+                InsNode::Ellided(mv)
             }
             ComputedValue::Processing => panic!("Cycle in metavariable substitutions"),
         }
@@ -124,7 +120,7 @@ where
     fn visit_mut(&mut self, node: &mut InsNode<I>) {
         match node {
             InsNode::InPlace(ins) => self.visit_mut(&mut ins.node),
-            InsNode::Ellided(mv) => *node = self.ins_subst(mv),
+            InsNode::Ellided(mv) => *node = self.ins_subst(*mv),
             InsNode::Conflict(ins_list) => {
                 for ins in ins_list {
                     <Substituter as VisitMut<InsNode<I>>>::visit_mut(self, ins)
@@ -201,7 +197,7 @@ where
     }
 }
 
-pub struct InferInsFromDel(Vec<Color>);
+pub struct InferInsFromDel(ColorSet);
 
 impl<D, I> Convert<DelNode<D, I>, InsNode<I>> for InferInsFromDel
 where
@@ -211,12 +207,12 @@ where
         match del {
             DelNode::InPlace(del) => InsNode::InPlace(Colored {
                 node: self.convert(del),
-                colors: self.0.clone(),
+                colors: self.0,
             }),
             DelNode::Ellided(mv) | DelNode::MetavariableConflict(mv, _, _) => {
                 InsNode::Ellided(Colored {
                     node: mv,
-                    colors: self.0.clone(),
+                    colors: self.0,
                 })
             }
         }

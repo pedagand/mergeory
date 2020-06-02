@@ -10,20 +10,41 @@ pub(crate) mod with_color;
 
 pub use with_color::with_color;
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Color(pub u8);
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct ColorSet(u64);
 
-#[derive(Clone)]
+impl ColorSet {
+    pub fn white() -> ColorSet {
+        ColorSet(0)
+    }
+
+    pub fn from_color(color: usize) -> ColorSet {
+        ColorSet(1 << color)
+    }
+
+    pub fn contains(&self, color: usize) -> bool {
+        self.0 & (1 << color) != 0
+    }
+}
+
+impl std::ops::BitOr for ColorSet {
+    type Output = ColorSet;
+    fn bitor(self, rhs: ColorSet) -> ColorSet {
+        ColorSet(self.0 | rhs.0)
+    }
+}
+
+#[derive(Clone, Copy)]
 pub struct Colored<T> {
     pub node: T,
-    pub colors: Vec<Color>,
+    pub colors: ColorSet,
 }
 
 impl<T> Colored<T> {
     pub fn new_white(node: T) -> Colored<T> {
         Colored {
             node,
-            colors: vec![],
+            colors: ColorSet::white(),
         }
     }
 }
@@ -38,11 +59,9 @@ where
     }
 
     fn merge(&mut self, left: Colored<I1>, right: Colored<I2>) -> Colored<O> {
-        let mut colors = left.colors;
-        colors.extend(right.colors);
         Colored {
             node: self.merge(left.node, right.node),
-            colors,
+            colors: left.colors | right.colors,
         }
     }
 }
