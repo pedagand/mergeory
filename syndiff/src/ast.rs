@@ -233,7 +233,7 @@ syn_codegen! {
             Reserved as (),
         }
 
-        use crate::family_traits::{Convert, Merge, Split, Visit, VisitMut};
+        use crate::family_traits::{Convert, Merge, Split, VisitMut};
 
         use crate::multi_diff_tree::with_color::WithColor;
         family_impl!(Convert<super::diff, self> for WithColor);
@@ -254,7 +254,7 @@ syn_codegen! {
         family_impl!(Merge<ins, ins, ins> for ColorMerger);
         family_impl!(Merge<ins, ins, ins> for InsMerger);
         family_impl!(Merge<del, ins, del> for InsMerger);
-        family_impl!(Visit<del> for InsMerger);
+        family_impl!(VisitMut<del> for InsMerger);
         family_impl!(Convert<merge_spine, ins_merged_spine> for InsMerger);
 
         use crate::multi_diff_tree::merge_del::DelMerger;

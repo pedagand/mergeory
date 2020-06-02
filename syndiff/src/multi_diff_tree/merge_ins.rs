@@ -1,6 +1,6 @@
 use super::align_spine::{MergeSpineNode, MergeSpineSeq, MergeSpineSeqNode};
 use super::{ColorSet, Colored, DelNode, InsNode, InsSeq, InsSeqNode};
-use crate::family_traits::{Convert, Merge, Visit};
+use crate::family_traits::{Convert, Merge, VisitMut};
 use std::any::Any;
 
 pub enum ISpineNode<S, D, I> {
@@ -270,24 +270,29 @@ where
     }
 }
 
-impl<D, I> Visit<DelNode<D, I>> for InsMerger
+impl<D, I> VisitMut<DelNode<D, I>> for InsMerger
 where
-    InsMerger: Visit<D>,
+    InsMerger: VisitMut<D>,
 {
-    fn visit(&mut self, del: &DelNode<D, I>) {
+    fn visit_mut(&mut self, del: &mut DelNode<D, I>) {
         match del {
-            DelNode::InPlace(del_subtree) => self.visit(del_subtree),
+            DelNode::InPlace(del_subtree) => self.visit_mut(del_subtree),
             DelNode::Ellided(mv) => {
                 self.metavars_status[mv.0] = Some(match &self.metavars_status[mv.0] {
                     None | Some(MetavarStatus::Keep) => MetavarStatus::Keep,
                     Some(MetavarStatus::Replace(_)) | Some(MetavarStatus::Conflict) => {
                         MetavarStatus::Conflict
                     }
-                })
+                });
+                *del = DelNode::MetavariableConflict(
+                    *mv,
+                    Box::new(DelNode::Ellided(*mv)),
+                    InsNode::Ellided(Colored::new_white(*mv)),
+                )
             }
             DelNode::MetavariableConflict(mv, del, _) => {
                 self.metavars_status[mv.0] = Some(MetavarStatus::Conflict);
-                <InsMerger as Visit<DelNode<D, I>>>::visit(self, del)
+                <InsMerger as VisitMut<DelNode<D, I>>>::visit_mut(self, del)
             }
         }
     }
@@ -298,24 +303,24 @@ where
     InsMerger: Convert<MS, IS>,
     InsMerger: Merge<DelNode<D, I>, InsNode<I>, DelNode<D, I>>,
     InsMerger: Merge<InsNode<I>, InsNode<I>, InsNode<I>>,
-    InsMerger: Visit<DelNode<D, I>>,
+    InsMerger: VisitMut<DelNode<D, I>>,
 {
     fn convert(&mut self, node: MergeSpineNode<MS, D, I>) -> ISpineNode<IS, D, I> {
         match node {
             MergeSpineNode::Spine(spine) => ISpineNode::Spine(self.convert(spine)),
             MergeSpineNode::Unchanged => ISpineNode::Unchanged,
-            MergeSpineNode::OneChange(del, ins) => {
-                self.visit(&del);
+            MergeSpineNode::OneChange(mut del, ins) => {
+                self.visit_mut(&mut del);
                 ISpineNode::OneChange(del, ins)
             }
-            MergeSpineNode::BothChanged(left_del, left_ins, right_del, right_ins) => {
+            MergeSpineNode::BothChanged(mut left_del, left_ins, mut right_del, right_ins) => {
                 match (
                     self.can_merge(&right_del, &left_ins),
                     self.can_merge(&left_del, &right_ins),
                 ) {
                     (true, true) | (false, false) => {
-                        self.visit(&left_del);
-                        self.visit(&right_del);
+                        self.visit_mut(&mut left_del);
+                        self.visit_mut(&mut right_del);
                         ISpineNode::BothChanged(
                             left_del,
                             right_del,
@@ -324,12 +329,12 @@ where
                     }
                     (true, false) => {
                         let right_del = self.merge(right_del, left_ins);
-                        self.visit(&left_del);
+                        self.visit_mut(&mut left_del);
                         ISpineNode::BothChanged(right_del, left_del, right_ins)
                     }
                     (false, true) => {
                         let left_del = self.merge(left_del, right_ins);
-                        self.visit(&right_del);
+                        self.visit_mut(&mut right_del);
                         ISpineNode::BothChanged(left_del, right_del, left_ins)
                     }
                 }
@@ -343,7 +348,7 @@ where
     InsMerger: Convert<MergeSpineNode<MS, D, I>, ISpineNode<IS, D, I>>,
     InsMerger: Merge<DelNode<D, I>, InsNode<I>, DelNode<D, I>>,
     InsMerger: Merge<InsNode<I>, InsNode<I>, InsNode<I>>,
-    InsMerger: Visit<DelNode<D, I>>,
+    InsMerger: VisitMut<DelNode<D, I>>,
 {
     fn convert(&mut self, seq: MergeSpineSeq<MS, D, I>) -> ISpineSeq<IS, D, I> {
         ISpineSeq(
@@ -351,29 +356,33 @@ where
                 .into_iter()
                 .map(|node| match node {
                     MergeSpineSeqNode::Zipped(node) => ISpineSeqNode::Zipped(self.convert(node)),
-                    MergeSpineSeqNode::BothDeleted(left_del, right_del) => {
-                        self.visit(&left_del.node);
-                        self.visit(&right_del.node);
+                    MergeSpineSeqNode::BothDeleted(mut left_del, mut right_del) => {
+                        self.visit_mut(&mut left_del.node);
+                        self.visit_mut(&mut right_del.node);
                         ISpineSeqNode::BothDeleted(left_del, right_del)
                     }
-                    MergeSpineSeqNode::OneDeleteConflict(del, conflict_del, conflict_ins) => {
+                    MergeSpineSeqNode::OneDeleteConflict(
+                        mut del,
+                        mut conflict_del,
+                        conflict_ins,
+                    ) => {
                         if self.can_merge(&del.node, &conflict_ins) {
                             let del = Colored {
                                 node: self.merge(del.node, conflict_ins),
                                 colors: del.colors,
                             };
-                            self.visit(&conflict_del.node);
+                            self.visit_mut(&mut conflict_del.node);
                             ISpineSeqNode::BothDeleted(del, conflict_del)
                         } else {
-                            self.visit(&del.node);
-                            self.visit(&conflict_del.node);
+                            self.visit_mut(&mut del.node);
+                            self.visit_mut(&mut conflict_del.node);
                             ISpineSeqNode::DeleteConflict(del, conflict_del, conflict_ins)
                         }
                     }
                     MergeSpineSeqNode::BothDeleteConflict(
-                        left_del,
+                        mut left_del,
                         left_ins,
-                        right_del,
+                        mut right_del,
                         right_ins,
                     ) => {
                         match (
@@ -381,8 +390,8 @@ where
                             self.can_merge(&left_del.node, &right_ins),
                         ) {
                             (false, false) => {
-                                self.visit(&left_del.node);
-                                self.visit(&right_del.node);
+                                self.visit_mut(&mut left_del.node);
+                                self.visit_mut(&mut right_del.node);
                                 ISpineSeqNode::DeleteConflict(
                                     left_del,
                                     right_del,
@@ -394,7 +403,7 @@ where
                                     node: self.merge(right_del.node, left_ins),
                                     colors: right_del.colors,
                                 };
-                                self.visit(&left_del.node);
+                                self.visit_mut(&mut left_del.node);
                                 ISpineSeqNode::DeleteConflict(right_del, left_del, right_ins)
                             }
                             (false, true) => {
@@ -402,7 +411,7 @@ where
                                     node: self.merge(left_del.node, right_ins),
                                     colors: left_del.colors,
                                 };
-                                self.visit(&right_del.node);
+                                self.visit_mut(&mut right_del.node);
                                 ISpineSeqNode::DeleteConflict(left_del, right_del, left_ins)
                             }
                             (true, true) => {

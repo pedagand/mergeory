@@ -1,5 +1,5 @@
 use super::merge_ins::{ISpineNode, ISpineSeq, ISpineSeqNode, MetavarStatus};
-use super::{Colored, DelNode, InsNode, SpineNode, SpineSeq, SpineSeqNode};
+use super::{Colored, DelNode, SpineNode, SpineSeq, SpineSeqNode};
 use crate::family_traits::{Convert, Merge};
 use std::any::Any;
 
@@ -37,20 +37,10 @@ where
             | (other, DelNode::MetavariableConflict(mv, del, ins)) => {
                 let new_del = <DelMerger as Merge<DelNode<D, I>, _, _>>::merge(self, *del, other);
                 match self.metavars_status[mv.0] {
-                    MetavarStatus::Keep => panic!("Metavar cannot be kept and appear in conflict"),
-                    MetavarStatus::Replace(_) => new_del, // Remove the conflict as it is globally resolved
+                    // Remove the conflict if it is globally resolved
+                    MetavarStatus::Keep | MetavarStatus::Replace(_) => new_del,
                     MetavarStatus::Conflict => {
-                        match new_del {
-                            DelNode::MetavariableConflict(
-                                in_mv,
-                                in_del,
-                                InsNode::Ellided(in_ins_mv),
-                            ) if mv == in_mv && mv == in_ins_mv.node => {
-                                // Prevent double conflict signaling
-                                DelNode::MetavariableConflict(mv, in_del, ins)
-                            }
-                            new_del => DelNode::MetavariableConflict(mv, Box::new(new_del), ins),
-                        }
+                        DelNode::MetavariableConflict(mv, Box::new(new_del), ins)
                     }
                 }
             }
@@ -77,14 +67,7 @@ where
                     None => self.metavars_del[mv.0] = Some(Box::new(other)),
                 }
 
-                match self.metavars_status[mv.0] {
-                    MetavarStatus::Keep | MetavarStatus::Replace(_) => DelNode::Ellided(mv),
-                    MetavarStatus::Conflict => DelNode::MetavariableConflict(
-                        mv,
-                        Box::new(DelNode::Ellided(mv)),
-                        InsNode::Ellided(Colored::new_white(mv)),
-                    ),
-                }
+                DelNode::Ellided(mv)
             }
         }
     }
