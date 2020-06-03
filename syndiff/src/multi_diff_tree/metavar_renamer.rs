@@ -2,14 +2,14 @@ use super::{Colored, DelNode, InsNode, InsSeq, InsSeqNode, SpineNode, SpineSeq, 
 use crate::diff_tree::Metavariable;
 use crate::family_traits::VisitMut;
 
-pub struct MetavarRenamer<'a> {
-    pub new_metavars: &'a mut Vec<Option<Metavariable>>,
-    pub next_metavar: &'a mut usize,
+pub struct MetavarRenamer {
+    new_metavars: Vec<Option<Metavariable>>,
+    next_metavar: usize,
 }
 
-impl<'a> VisitMut<Metavariable> for MetavarRenamer<'a> {
+impl VisitMut<Metavariable> for MetavarRenamer {
     fn visit_mut(&mut self, metavar: &mut Metavariable) {
-        let next_metavar = &mut *self.next_metavar;
+        let next_metavar = &mut self.next_metavar;
         if self.new_metavars.len() <= metavar.0 {
             self.new_metavars
                 .resize_with(metavar.0 + 1, Default::default)
@@ -23,19 +23,19 @@ impl<'a> VisitMut<Metavariable> for MetavarRenamer<'a> {
     }
 }
 
-impl<'a, T> VisitMut<Colored<T>> for MetavarRenamer<'a>
+impl<T> VisitMut<Colored<T>> for MetavarRenamer
 where
-    MetavarRenamer<'a>: VisitMut<T>,
+    MetavarRenamer: VisitMut<T>,
 {
     fn visit_mut(&mut self, node: &mut Colored<T>) {
         self.visit_mut(&mut node.node)
     }
 }
 
-impl<'a, D, I> VisitMut<DelNode<D, I>> for MetavarRenamer<'a>
+impl<D, I> VisitMut<DelNode<D, I>> for MetavarRenamer
 where
-    MetavarRenamer<'a>: VisitMut<D>,
-    MetavarRenamer<'a>: VisitMut<InsNode<I>>,
+    MetavarRenamer: VisitMut<D>,
+    MetavarRenamer: VisitMut<InsNode<I>>,
 {
     fn visit_mut(&mut self, node: &mut DelNode<D, I>) {
         match node {
@@ -50,27 +50,28 @@ where
     }
 }
 
-impl<'a, I> VisitMut<InsNode<I>> for MetavarRenamer<'a>
+impl<I> VisitMut<InsNode<I>> for MetavarRenamer
 where
-    MetavarRenamer<'a>: VisitMut<I>,
-    MetavarRenamer<'a>: VisitMut<Metavariable>,
+    MetavarRenamer: VisitMut<Colored<I>>,
 {
     fn visit_mut(&mut self, node: &mut InsNode<I>) {
         match node {
             InsNode::InPlace(subnode) => self.visit_mut(subnode),
-            InsNode::Ellided(metavar) => self.visit_mut(metavar),
+            InsNode::Ellided(metavar) => {
+                <MetavarRenamer as VisitMut<Colored<Metavariable>>>::visit_mut(self, metavar)
+            }
             InsNode::Conflict(subnodes) => {
                 for subnode in subnodes {
-                    self.visit_mut(subnode)
+                    <MetavarRenamer as VisitMut<InsNode<I>>>::visit_mut(self, subnode)
                 }
             }
         }
     }
 }
 
-impl<'a, I> VisitMut<InsSeqNode<I>> for MetavarRenamer<'a>
+impl<I> VisitMut<InsSeqNode<I>> for MetavarRenamer
 where
-    MetavarRenamer<'a>: VisitMut<InsNode<I>>,
+    MetavarRenamer: VisitMut<InsNode<I>>,
 {
     fn visit_mut(&mut self, node: &mut InsSeqNode<I>) {
         match node {
@@ -87,20 +88,20 @@ where
     }
 }
 
-impl<'a, I> VisitMut<InsSeq<I>> for MetavarRenamer<'a>
+impl<I> VisitMut<InsSeq<I>> for MetavarRenamer
 where
-    MetavarRenamer<'a>: VisitMut<Vec<InsSeqNode<I>>>,
+    MetavarRenamer: VisitMut<Vec<InsSeqNode<I>>>,
 {
     fn visit_mut(&mut self, node: &mut InsSeq<I>) {
         self.visit_mut(&mut node.0)
     }
 }
 
-impl<'a, S, D, I> VisitMut<SpineNode<S, D, I>> for MetavarRenamer<'a>
+impl<S, D, I> VisitMut<SpineNode<S, D, I>> for MetavarRenamer
 where
-    MetavarRenamer<'a>: VisitMut<S>,
-    MetavarRenamer<'a>: VisitMut<DelNode<D, I>>,
-    MetavarRenamer<'a>: VisitMut<InsNode<I>>,
+    MetavarRenamer: VisitMut<S>,
+    MetavarRenamer: VisitMut<DelNode<D, I>>,
+    MetavarRenamer: VisitMut<InsNode<I>>,
 {
     fn visit_mut(&mut self, node: &mut SpineNode<S, D, I>) {
         match node {
@@ -114,11 +115,11 @@ where
     }
 }
 
-impl<'a, S, D, I> VisitMut<SpineSeq<S, D, I>> for MetavarRenamer<'a>
+impl<S, D, I> VisitMut<SpineSeq<S, D, I>> for MetavarRenamer
 where
-    MetavarRenamer<'a>: VisitMut<SpineNode<S, D, I>>,
-    MetavarRenamer<'a>: VisitMut<DelNode<D, I>>,
-    MetavarRenamer<'a>: VisitMut<InsNode<I>>,
+    MetavarRenamer: VisitMut<SpineNode<S, D, I>>,
+    MetavarRenamer: VisitMut<DelNode<D, I>>,
+    MetavarRenamer: VisitMut<InsNode<I>>,
 {
     fn visit_mut(&mut self, seq: &mut SpineSeq<S, D, I>) {
         for node in &mut seq.0 {
@@ -140,4 +141,23 @@ where
             }
         }
     }
+}
+
+pub fn rename_metavars<I>(input: &mut I, first_metavar: usize) -> usize
+where
+    MetavarRenamer: VisitMut<I>,
+{
+    let mut renamer = MetavarRenamer {
+        new_metavars: Vec::new(),
+        next_metavar: first_metavar,
+    };
+    renamer.visit_mut(input);
+    renamer.next_metavar
+}
+
+pub fn canonicalize_metavars<I>(input: &mut I)
+where
+    MetavarRenamer: VisitMut<I>,
+{
+    rename_metavars(input, 0);
 }

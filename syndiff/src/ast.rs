@@ -241,14 +241,14 @@ syn_codegen! {
         family_impl!(Convert<super::diff::change, ins> for WithColor);
 
         use crate::multi_diff_tree::metavar_renamer::MetavarRenamer;
-        family_impl!(VisitMut<del> for MetavarRenamer<'_>);
-        family_impl!(VisitMut<ins> for MetavarRenamer<'_>);
-        family_impl!(VisitMut<self> for MetavarRenamer<'_>);
+        family_impl!(VisitMut<del> for MetavarRenamer);
+        family_impl!(VisitMut<ins> for MetavarRenamer);
+        family_impl!(VisitMut<self> for MetavarRenamer);
 
-        use crate::multi_diff_tree::align_spine::{SpineSplitter, SpineMerger, UnchangedMerger};
-        family_impl!(Split<self, del, ins> for SpineSplitter<'_>);
-        family_impl!(Merge<self, self, merge_spine> for SpineMerger);
-        family_impl!(Convert<self, merge_spine> for UnchangedMerger<'_>);
+        use crate::multi_diff_tree::align_spine::SpineAligner;
+        family_impl!(Split<self, del, ins> for SpineAligner);
+        family_impl!(Merge<self, self, merge_spine> for SpineAligner);
+        family_impl!(Convert<self, merge_spine> for SpineAligner);
 
         use crate::multi_diff_tree::merge_ins::{ColorMerger, InsMerger};
         family_impl!(Merge<ins, ins, ins> for ColorMerger);

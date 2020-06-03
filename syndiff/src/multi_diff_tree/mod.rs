@@ -8,6 +8,7 @@ pub(crate) mod metavar_renamer;
 pub(crate) mod subst;
 pub(crate) mod with_color;
 
+pub use metavar_renamer::canonicalize_metavars;
 pub use with_color::with_color;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -106,26 +107,22 @@ use crate::ast;
 use align_spine::align_spine;
 use merge_del::merge_del;
 use merge_ins::merge_ins;
-use metavar_renamer::MetavarRenamer;
+use metavar_renamer::rename_metavars;
 use subst::Substituter;
 
 pub fn merge_multi_diffs(
-    left: ast::multi_diff::File,
-    right: ast::multi_diff::File,
+    mut left: ast::multi_diff::File,
+    mut right: ast::multi_diff::File,
 ) -> Option<ast::multi_diff::File> {
-    let (aligned, nb_metavars) = align_spine(left, right)?;
+    let left_end_mv = rename_metavars(&mut left, 0);
+    let right_end_mv = rename_metavars(&mut right, left_end_mv);
+    let (aligned, nb_metavars) = align_spine(left, right, right_end_mv)?;
+
     let (ins_merged, ins_subst) = merge_ins(aligned, nb_metavars);
     let (mut merged, del_subst) = merge_del(ins_merged, &ins_subst)?;
 
     let mut subst = Substituter::new(del_subst, ins_subst);
     subst.visit_mut(&mut merged);
-
-    let mut final_names = Vec::with_capacity(nb_metavars);
-    let mut renamer = MetavarRenamer {
-        new_metavars: &mut final_names,
-        next_metavar: &mut 0,
-    };
-    renamer.visit_mut(&mut merged);
 
     Some(merged)
 }
