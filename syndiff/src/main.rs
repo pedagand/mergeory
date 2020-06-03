@@ -43,7 +43,8 @@ fn main() {
         .stdin
         .as_mut()
         .expect("Failed to open rustfmt stdin");
-    write!(rustfmt_in, "{}", quote!(#result_tree)).unwrap()
+    write!(rustfmt_in, "{}", quote!(#result_tree)).unwrap();
+    rustfmt.wait().unwrap();
 }
 
 fn parse_src(src_filename: &str) -> syn::File {
