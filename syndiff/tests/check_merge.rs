@@ -1,18 +1,15 @@
 use goldenfile::Mint;
 use std::process::Command;
 
-fn check_diff(test_name: &str, i: usize) {
-    let origin_filename = format!("tests/prgms/{}.orig.rs", test_name);
-    let edited_filename = format!("tests/prgms/{}.edit{}.rs", test_name, i);
-
+fn check_merge(test_name: &str, nb: usize) {
     let mut mint = Mint::new("tests/prgms");
     let diff_file = mint
-        .new_goldenfile(format!("{}.diff{}.rs", test_name, i))
+        .new_goldenfile(format!("{}.mdiff.rs", test_name))
         .unwrap();
 
     let diff_out = Command::new(env!("CARGO_BIN_EXE_syndiff"))
-        .arg(origin_filename)
-        .arg(edited_filename)
+        .arg(format!("tests/prgms/{}.orig.rs", test_name))
+        .args((0..nb).map(|i| format!("tests/prgms/{}.edit{}.rs", test_name, i)))
         .stdout(diff_file)
         .output()
         .expect("Failed to launch syndiff");
@@ -21,24 +18,17 @@ fn check_diff(test_name: &str, i: usize) {
     assert!(diff_out.stderr.is_empty())
 }
 
-macro_rules! check_diff_tests {
+macro_rules! check_merge_tests {
     { $($test_name:ident ($nb:expr),)* } => {
         $(#[test]
         fn $test_name() {
-            for i in 0..$nb {
-                check_diff(stringify!($test_name), i)
-            }
+            check_merge(stringify!($test_name), $nb);
         })*
     }
 }
 
-check_diff_tests! {
-    from_empty(1),
+check_merge_tests! {
     common_trailing(2),
-    remove_else(1),
-    change_sig(1),
-    trait_change(1),
-    sparse_vec(1),
     factorize(2),
     cross_del(2),
     cross_change(2),
