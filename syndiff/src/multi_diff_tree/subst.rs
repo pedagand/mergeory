@@ -168,9 +168,26 @@ where
         match node {
             InsNode::InPlace(ins) => self.visit_mut(&mut ins.node),
             InsNode::Ellided(mv) => *node = self.ins_subst(*mv),
-            InsNode::Conflict(ins_list) => {
-                for ins in ins_list {
+            InsNode::Conflict(conflict_list) => {
+                for ins in &mut *conflict_list {
                     <Substituter as VisitMut<InsNode<I>>>::visit_mut(self, ins)
+                }
+
+                // Try to solve the insertion conflict after substitution
+                let mut conflict_list_iter = std::mem::take(conflict_list).into_iter();
+                let mut cur_ins = conflict_list_iter.next().unwrap();
+                for ins in conflict_list_iter {
+                    if ColorMerger.can_merge(&cur_ins, &ins) {
+                        cur_ins = ColorMerger.merge(cur_ins, ins)
+                    } else {
+                        conflict_list.push(cur_ins);
+                        cur_ins = ins
+                    }
+                }
+                if conflict_list.is_empty() {
+                    *node = cur_ins
+                } else {
+                    conflict_list.push(cur_ins);
                 }
             }
         }
@@ -186,8 +203,8 @@ where
             match node {
                 InsSeqNode::Node(node) => self.visit_mut(node),
                 InsSeqNode::DeleteConflict(node) => self.visit_mut(node),
-                InsSeqNode::InsertOrderConflict(ins_vec) => {
-                    for ins_seq in ins_vec {
+                InsSeqNode::InsertOrderConflict(conflict_list) => {
+                    for ins_seq in conflict_list {
                         for ins in &mut ins_seq.node {
                             self.visit_mut(ins)
                         }
@@ -221,6 +238,8 @@ where
     Substituter: VisitMut<SpineNode<S, D, I>>,
     Substituter: VisitMut<DelNode<D, I>>,
     Substituter: VisitMut<InsNode<I>>,
+    ColorMerger:
+        Merge<Colored<Vec<InsNode<I>>>, Colored<Vec<InsNode<I>>>, Colored<Vec<InsNode<I>>>>,
 {
     fn visit_mut(&mut self, seq: &mut SpineSeq<S, D, I>) {
         for node in &mut seq.0 {
@@ -231,12 +250,29 @@ where
                     self.visit_mut(&mut del.node);
                     self.visit_mut(ins);
                 }
-                SpineSeqNode::Inserted(ins) => self.visit_mut(&mut ins.node),
-                SpineSeqNode::InsertOrderConflict(ins_vec) => {
-                    for ins_seq in ins_vec {
+                SpineSeqNode::Inserted(ins_seq) => self.visit_mut(&mut ins_seq.node),
+                SpineSeqNode::InsertOrderConflict(conflict_list) => {
+                    for ins_seq in &mut *conflict_list {
                         for ins in &mut ins_seq.node {
                             self.visit_mut(ins)
                         }
+                    }
+
+                    // Try to solve the insert order conflict after substitutions
+                    let mut conflict_list_iter = std::mem::take(conflict_list).into_iter();
+                    let mut cur_ins_seq = conflict_list_iter.next().unwrap();
+                    for ins_seq in conflict_list_iter {
+                        if ColorMerger.can_merge(&cur_ins_seq, &ins_seq) {
+                            cur_ins_seq = ColorMerger.merge(cur_ins_seq, ins_seq)
+                        } else {
+                            conflict_list.push(cur_ins_seq);
+                            cur_ins_seq = ins_seq
+                        }
+                    }
+                    if conflict_list.is_empty() {
+                        *node = SpineSeqNode::Inserted(cur_ins_seq);
+                    } else {
+                        conflict_list.push(cur_ins_seq);
                     }
                 }
             }
