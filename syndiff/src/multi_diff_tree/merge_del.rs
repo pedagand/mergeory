@@ -1,17 +1,16 @@
-use super::merge_ins::{ISpineNode, ISpineSeq, ISpineSeqNode, MetavarStatus};
+use super::merge_ins::{ISpineNode, ISpineSeq, ISpineSeqNode};
 use super::{Colored, DelNode, SpineNode, SpineSeq, SpineSeqNode};
 use crate::family_traits::{Convert, Merge};
 use std::any::Any;
 
-pub struct DelMerger<'a> {
+pub struct DelMerger {
     metavars_del: Vec<Option<Box<dyn Any>>>,
-    metavars_status: &'a [MetavarStatus],
     mergeable: bool,
 }
 
-impl<'a, D, I> Merge<DelNode<D, I>, DelNode<D, I>, DelNode<D, I>> for DelMerger<'a>
+impl<D, I> Merge<DelNode<D, I>, DelNode<D, I>, DelNode<D, I>> for DelMerger
 where
-    DelMerger<'a>: Merge<D, D, D>,
+    DelMerger: Merge<D, D, D>,
     DelNode<D, I>: Clone + 'static,
 {
     fn can_merge(&mut self, left: &DelNode<D, I>, right: &DelNode<D, I>) -> bool {
@@ -36,13 +35,7 @@ where
             (DelNode::MetavariableConflict(mv, del, ins), other)
             | (other, DelNode::MetavariableConflict(mv, del, ins)) => {
                 let new_del = <DelMerger as Merge<DelNode<D, I>, _, _>>::merge(self, *del, other);
-                match self.metavars_status[mv.0] {
-                    // Remove the conflict if it is globally resolved
-                    MetavarStatus::Keep | MetavarStatus::Replace(_) => new_del,
-                    MetavarStatus::Conflict => {
-                        DelNode::MetavariableConflict(mv, Box::new(new_del), ins)
-                    }
-                }
+                DelNode::MetavariableConflict(mv, Box::new(new_del), ins)
             }
             (DelNode::Ellided(mv), DelNode::Ellided(other_mv)) if mv == other_mv => {
                 DelNode::Ellided(mv)
@@ -73,10 +66,10 @@ where
     }
 }
 
-impl<'a, IS, S, D, I> Convert<ISpineNode<IS, D, I>, SpineNode<S, D, I>> for DelMerger<'a>
+impl<IS, S, D, I> Convert<ISpineNode<IS, D, I>, SpineNode<S, D, I>> for DelMerger
 where
-    DelMerger<'a>: Convert<IS, S>,
-    DelMerger<'a>: Merge<DelNode<D, I>, DelNode<D, I>, DelNode<D, I>>,
+    DelMerger: Convert<IS, S>,
+    DelMerger: Merge<DelNode<D, I>, DelNode<D, I>, DelNode<D, I>>,
 {
     fn convert(&mut self, input: ISpineNode<IS, D, I>) -> SpineNode<S, D, I> {
         match input {
@@ -95,10 +88,10 @@ where
     }
 }
 
-impl<'a, IS, S, D, I> Convert<ISpineSeq<IS, D, I>, SpineSeq<S, D, I>> for DelMerger<'a>
+impl<IS, S, D, I> Convert<ISpineSeq<IS, D, I>, SpineSeq<S, D, I>> for DelMerger
 where
-    DelMerger<'a>: Convert<ISpineNode<IS, D, I>, SpineNode<S, D, I>>,
-    DelMerger<'a>: Merge<Colored<DelNode<D, I>>, Colored<DelNode<D, I>>, Colored<DelNode<D, I>>>,
+    DelMerger: Convert<ISpineNode<IS, D, I>, SpineNode<S, D, I>>,
+    DelMerger: Merge<Colored<DelNode<D, I>>, Colored<DelNode<D, I>>, Colored<DelNode<D, I>>>,
 {
     fn convert(&mut self, input: ISpineSeq<IS, D, I>) -> SpineSeq<S, D, I> {
         SpineSeq(
@@ -136,21 +129,15 @@ where
     }
 }
 
-pub fn merge_del<'a, I, O>(
-    input: I,
-    metavars_status: &'a [MetavarStatus],
-) -> Option<(O, Vec<Option<Box<dyn Any>>>)>
+pub fn merge_del<I, O>(input: I, nb_metavars: usize) -> Option<(O, Vec<Option<Box<dyn Any>>>)>
 where
-    DelMerger<'a>: Convert<I, O>,
+    DelMerger: Convert<I, O>,
 {
     let mut merger = DelMerger {
         metavars_del: Vec::new(),
-        metavars_status,
         mergeable: true,
     };
-    merger
-        .metavars_del
-        .resize_with(metavars_status.len(), || None);
+    merger.metavars_del.resize_with(nb_metavars, || None);
     let output = merger.convert(input);
     if merger.mergeable {
         Some((output, merger.metavars_del))

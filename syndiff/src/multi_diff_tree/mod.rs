@@ -2,6 +2,7 @@ use crate::diff_tree::Metavariable;
 use crate::family_traits::{Merge, VisitMut};
 
 pub(crate) mod align_spine;
+pub(crate) mod color_merger;
 pub(crate) mod merge_del;
 pub(crate) mod merge_ins;
 pub(crate) mod metavar_renamer;
@@ -108,7 +109,7 @@ use align_spine::align_spine;
 use merge_del::merge_del;
 use merge_ins::merge_ins;
 use metavar_renamer::rename_metavars;
-use subst::Substituter;
+use subst::{SolvedConflictsRemover, Substituter};
 
 pub fn merge_multi_diffs(
     mut left: ast::multi_diff::File,
@@ -119,10 +120,12 @@ pub fn merge_multi_diffs(
     let (aligned, nb_metavars) = align_spine(left, right, right_end_mv)?;
 
     let (ins_merged, ins_subst) = merge_ins(aligned, nb_metavars);
-    let (mut merged, del_subst) = merge_del(ins_merged, &ins_subst)?;
+    let (mut merged, del_subst) = merge_del(ins_merged, nb_metavars)?;
 
     let mut subst = Substituter::new(del_subst, ins_subst);
     subst.visit_mut(&mut merged);
+    let mut conflict_remover = SolvedConflictsRemover(subst);
+    conflict_remover.visit_mut(&mut merged);
 
     Some(merged)
 }

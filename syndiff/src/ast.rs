@@ -250,22 +250,26 @@ syn_codegen! {
         family_impl!(Merge<self, self, merge_spine> for SpineAligner);
         family_impl!(Convert<self, merge_spine> for SpineAligner);
 
-        use crate::multi_diff_tree::merge_ins::{ColorMerger, InsMerger};
-        family_impl!(Merge<ins, ins, ins> for ColorMerger);
+        use crate::multi_diff_tree::merge_ins::InsMerger;
         family_impl!(Merge<ins, ins, ins> for InsMerger);
         family_impl!(Merge<del, ins, del> for InsMerger);
         family_impl!(VisitMut<del> for InsMerger);
         family_impl!(Convert<merge_spine, ins_merged_spine> for InsMerger);
 
         use crate::multi_diff_tree::merge_del::DelMerger;
-        family_impl!(Merge<del, del, del> for DelMerger<'_>);
-        family_impl!(Convert<ins_merged_spine, self> for DelMerger<'_>);
+        family_impl!(Merge<del, del, del> for DelMerger);
+        family_impl!(Convert<ins_merged_spine, self> for DelMerger);
 
-        use crate::multi_diff_tree::subst::{Substituter, InferInsFromDel};
+        use crate::multi_diff_tree::color_merger::ColorMerger;
+        family_impl!(Merge<ins, ins, ins> for ColorMerger);
+
+        use crate::multi_diff_tree::subst::{Substituter, InferInsFromDel, SolvedConflictsRemover};
         family_impl!(VisitMut<del> for Substituter);
         family_impl!(VisitMut<ins> for Substituter);
         family_impl!(VisitMut<self> for Substituter);
         family_impl!(Convert<del, ins> for InferInsFromDel);
+        family_impl!(VisitMut<del> for SolvedConflictsRemover);
+        family_impl!(VisitMut<self> for SolvedConflictsRemover);
 
         use crate::source_repr::ToSourceRepr;
         #[extra_call(proc_macro2::TokenStream, proc_macro2::Literal, proc_macro2::Span, Reserved)]

@@ -2,11 +2,11 @@ fn f(c: bool) -> i32 {
     unchanged![];
     if unchanged![] {
         unchanged![];
-        deleted ! [ mv_conflict ! [ 0 , { mv ! [ 1 ] = mv ! [ 1 ] * mv ! [ 2 ] ; } , { mv ! [ 1 ] = g ( mv ! [ 1 ] ) * mv ! [ 2 ] ; } ] ; ];
+        deleted ! [ mv ! [ 0 ] = mv ! [ 0 ] * mv ! [ 1 ] ; ];
     } else {
         unchanged![];
-        deleted ! [ mv_conflict ! [ 0 , { mv ! [ 1 ] = mv ! [ 1 ] * mv ! [ 2 ] ; } , { mv ! [ 1 ] = g ( mv ! [ 1 ] ) * mv ! [ 2 ] ; } ] ; ];
+        deleted ! [ mv ! [ 0 ] = mv ! [ 0 ] * mv ! [ 1 ] ; ];
     }
-    inserted ! [ mv ! [ 0 ] ; ];
+    inserted ! [ mv ! [ 0 ] = g ( mv ! [ 0 ] ) * mv ! [ 1 ] ; ];
     unchanged![];
 }

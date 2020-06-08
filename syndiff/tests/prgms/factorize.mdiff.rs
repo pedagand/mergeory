@@ -3,7 +3,7 @@ fn f() {
     deleted ! [ let b = 40 ; ];
     delete_conflict![
         {
-            let x = mv_conflict![0, { mv![0] }, { mv![0] }];
+            let x = mv![0];
         },
         {
             let x = mv![0];
