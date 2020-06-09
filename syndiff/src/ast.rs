@@ -260,8 +260,9 @@ syn_codegen! {
         family_impl!(Merge<del, del, del> for DelMerger);
         family_impl!(Convert<ins_merged_spine, self> for DelMerger);
 
-        use crate::multi_diff_tree::color_merger::ColorMerger;
-        family_impl!(Merge<ins, ins, ins> for ColorMerger);
+        use crate::multi_diff_tree::id_merger::IdMerger;
+        family_impl!(Merge<ins, ins, ins> for IdMerger);
+        family_impl!(Merge<del, ins, del> for IdMerger);
 
         use crate::multi_diff_tree::subst::{Substituter, InferInsFromDel, SolvedConflictsRemover};
         family_impl!(VisitMut<del> for Substituter);

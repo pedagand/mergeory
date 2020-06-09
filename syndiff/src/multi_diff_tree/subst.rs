@@ -1,4 +1,4 @@
-use super::color_merger::ColorMerger;
+use super::id_merger::IdMerger;
 use super::merge_ins::MetavarStatus;
 use super::{
     ColorSet, Colored, DelNode, InsNode, InsSeq, InsSeqNode, SpineNode, SpineSeq, SpineSeqNode,
@@ -62,7 +62,7 @@ impl Substituter {
     where
         Substituter: VisitMut<InsNode<I>>,
         Substituter: VisitMut<DelNode<I::Del, I>>,
-        ColorMerger: Merge<InsNode<I>, InsNode<I>, InsNode<I>>,
+        IdMerger: Merge<InsNode<I>, InsNode<I>, InsNode<I>>,
         InferInsFromDel: Convert<DelNode<I::Del, I>, InsNode<I>>,
         InsNode<I>: Clone + 'static,
         DelNode<I::Del, I>: Clone + 'static,
@@ -94,8 +94,8 @@ impl Substituter {
                     // No cycle during computation on potential replacements, try to fuse them
                     let last_ins = repl_ins.pop().unwrap();
                     let merged_ins = repl_ins.into_iter().try_fold(last_ins, |acc, ins| {
-                        if ColorMerger.can_merge(&acc, &ins) {
-                            Some(ColorMerger.merge(acc, ins))
+                        if IdMerger.can_merge(&acc, &ins) {
+                            Some(IdMerger.merge(acc, ins))
                         } else {
                             None
                         }
@@ -159,7 +159,7 @@ impl<I: InsFromDel> VisitMut<InsNode<I>> for Substituter
 where
     Substituter: VisitMut<I>,
     Substituter: VisitMut<I::Del>,
-    ColorMerger: Merge<InsNode<I>, InsNode<I>, InsNode<I>>,
+    IdMerger: Merge<InsNode<I>, InsNode<I>, InsNode<I>>,
     InferInsFromDel: Convert<I::Del, I>,
     InsNode<I>: Clone + 'static,
     DelNode<I::Del, I>: Clone + 'static,
@@ -177,8 +177,8 @@ where
                 let mut conflict_list_iter = std::mem::take(conflict_list).into_iter();
                 let mut cur_ins = conflict_list_iter.next().unwrap();
                 for ins in conflict_list_iter {
-                    if ColorMerger.can_merge(&cur_ins, &ins) {
-                        cur_ins = ColorMerger.merge(cur_ins, ins)
+                    if IdMerger.can_merge(&cur_ins, &ins) {
+                        cur_ins = IdMerger.merge(cur_ins, ins)
                     } else {
                         conflict_list.push(cur_ins);
                         cur_ins = ins
@@ -238,8 +238,8 @@ where
     Substituter: VisitMut<SpineNode<S, D, I>>,
     Substituter: VisitMut<DelNode<D, I>>,
     Substituter: VisitMut<InsNode<I>>,
-    ColorMerger:
-        Merge<Colored<Vec<InsNode<I>>>, Colored<Vec<InsNode<I>>>, Colored<Vec<InsNode<I>>>>,
+    IdMerger: Merge<Colored<Vec<InsNode<I>>>, Colored<Vec<InsNode<I>>>, Colored<Vec<InsNode<I>>>>,
+    IdMerger: Merge<DelNode<D, I>, InsNode<I>, DelNode<D, I>>,
 {
     fn visit_mut(&mut self, seq: &mut SpineSeq<S, D, I>) {
         for node in &mut seq.0 {
@@ -249,6 +249,15 @@ where
                 SpineSeqNode::DeleteConflict(del, ins) => {
                     self.visit_mut(&mut del.node);
                     self.visit_mut(ins);
+
+                    // Solve the delete conflict if del and ins are identical after substitution
+                    // ARGH! I don't understand why I need manual type annotation here...
+                    if Merge::<DelNode<D, I>, _, _>::can_merge(&mut IdMerger, &del.node, ins) {
+                        *node = SpineSeqNode::Deleted(std::mem::replace(
+                            del,
+                            Colored::new_white(DelNode::Ellided(Metavariable(usize::MAX))),
+                        ))
+                    }
                 }
                 SpineSeqNode::Inserted(ins_seq) => self.visit_mut(&mut ins_seq.node),
                 SpineSeqNode::InsertOrderConflict(conflict_list) => {
@@ -262,8 +271,8 @@ where
                     let mut conflict_list_iter = std::mem::take(conflict_list).into_iter();
                     let mut cur_ins_seq = conflict_list_iter.next().unwrap();
                     for ins_seq in conflict_list_iter {
-                        if ColorMerger.can_merge(&cur_ins_seq, &ins_seq) {
-                            cur_ins_seq = ColorMerger.merge(cur_ins_seq, ins_seq)
+                        if IdMerger.can_merge(&cur_ins_seq, &ins_seq) {
+                            cur_ins_seq = IdMerger.merge(cur_ins_seq, ins_seq)
                         } else {
                             conflict_list.push(cur_ins_seq);
                             cur_ins_seq = ins_seq

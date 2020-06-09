@@ -1,18 +1,19 @@
-use super::{Colored, InsNode, InsSeq, InsSeqNode};
+use super::{Colored, DelNode, InsNode, InsSeq, InsSeqNode};
 use crate::family_traits::Merge;
 
-pub struct ColorMerger;
+/// Merge insertion & deletion trees if they are identical modulo colors
+pub struct IdMerger;
 
-impl<I> Merge<InsNode<I>, InsNode<I>, InsNode<I>> for ColorMerger
+impl<I> Merge<InsNode<I>, InsNode<I>, InsNode<I>> for IdMerger
 where
-    ColorMerger: Merge<Colored<I>, Colored<I>, Colored<I>>,
+    IdMerger: Merge<Colored<I>, Colored<I>, Colored<I>>,
 {
     fn can_merge(&mut self, left: &InsNode<I>, right: &InsNode<I>) -> bool {
         match (left, right) {
             (InsNode::InPlace(left), InsNode::InPlace(right)) => self.can_merge(left, right),
             (InsNode::Ellided(left), InsNode::Ellided(right)) => left.node == right.node,
             (InsNode::Conflict(left), InsNode::Conflict(right)) => {
-                <ColorMerger as Merge<Vec<InsNode<I>>, _, _>>::can_merge(self, left, right)
+                <IdMerger as Merge<Vec<InsNode<I>>, _, _>>::can_merge(self, left, right)
             }
             _ => false,
         }
@@ -28,17 +29,17 @@ where
                 colors: left.colors | right.colors,
             }),
             (InsNode::Conflict(left), InsNode::Conflict(right)) => InsNode::Conflict(
-                <ColorMerger as Merge<Vec<InsNode<I>>, _, _>>::merge(self, left, right),
+                <IdMerger as Merge<Vec<InsNode<I>>, _, _>>::merge(self, left, right),
             ),
-            _ => panic!("ColorMerger called on conflicting insertions"),
+            _ => panic!("IdMerger called on conflicting insertions"),
         }
     }
 }
 
-impl<I> Merge<InsSeq<I>, InsSeq<I>, InsSeq<I>> for ColorMerger
+impl<I> Merge<InsSeq<I>, InsSeq<I>, InsSeq<I>> for IdMerger
 where
-    ColorMerger: Merge<InsNode<I>, InsNode<I>, InsNode<I>>,
-    ColorMerger: Merge<
+    IdMerger: Merge<InsNode<I>, InsNode<I>, InsNode<I>>,
+    IdMerger: Merge<
         Vec<Colored<Vec<InsNode<I>>>>,
         Vec<Colored<Vec<InsNode<I>>>>,
         Vec<Colored<Vec<InsNode<I>>>>,
@@ -76,9 +77,48 @@ where
                         InsSeqNode::InsertOrderConflict(left),
                         InsSeqNode::InsertOrderConflict(right),
                     ) => InsSeqNode::InsertOrderConflict(self.merge(left, right)),
-                    _ => panic!("ColorMerger called on conflicting insertions"),
+                    _ => panic!("IdMerger called on conflicting insertions"),
                 })
                 .collect(),
         )
+    }
+}
+
+impl<D, I> Merge<DelNode<D, I>, InsNode<I>, DelNode<D, I>> for IdMerger
+where
+    IdMerger: Merge<D, I, D>,
+{
+    fn can_merge(&mut self, del: &DelNode<D, I>, ins: &InsNode<I>) -> bool {
+        match (del, ins) {
+            (DelNode::InPlace(del), InsNode::InPlace(ins)) => self.can_merge(del, &ins.node),
+            (DelNode::Ellided(del_mv), InsNode::Ellided(ins_mv)) => *del_mv == ins_mv.node,
+            (DelNode::MetavariableConflict(_, del, _), ins) => {
+                <IdMerger as Merge<DelNode<D, I>, _, _>>::can_merge(self, del, ins)
+            }
+            _ => false,
+        }
+    }
+
+    fn merge(&mut self, del: DelNode<D, I>, _: InsNode<I>) -> DelNode<D, I> {
+        del
+    }
+}
+
+impl<D, I> Merge<Vec<DelNode<D, I>>, InsSeq<I>, Vec<DelNode<D, I>>> for IdMerger
+where
+    IdMerger: Merge<DelNode<D, I>, InsNode<I>, DelNode<D, I>>,
+{
+    fn can_merge(&mut self, del_seq: &Vec<DelNode<D, I>>, ins_seq: &InsSeq<I>) -> bool {
+        if del_seq.len() != ins_seq.0.len() {
+            return false;
+        }
+        del_seq.iter().zip(&ins_seq.0).all(|(del, ins)| match ins {
+            InsSeqNode::Node(ins) => self.can_merge(del, ins),
+            _ => false,
+        })
+    }
+
+    fn merge(&mut self, del: Vec<DelNode<D, I>>, _: InsSeq<I>) -> Vec<DelNode<D, I>> {
+        del
     }
 }

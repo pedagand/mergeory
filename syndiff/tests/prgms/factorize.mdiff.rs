@@ -1,14 +1,7 @@
 fn f() {
     deleted ! [ let a = 2 ; ];
     deleted ! [ let b = 40 ; ];
-    delete_conflict![
-        {
-            let x = mv![0];
-        },
-        {
-            let x = mv![0];
-        }
-    ];
+    deleted ! [ let x = mv ! [ 0 ] ; ];
     let y = changed![{ x }, { answer() }] * changed![{ 2 }, { 5 }];
     unchanged![];
 }

@@ -2,7 +2,7 @@ use crate::diff_tree::Metavariable;
 use crate::family_traits::{Merge, VisitMut};
 
 pub(crate) mod align_spine;
-pub(crate) mod color_merger;
+pub(crate) mod id_merger;
 pub(crate) mod merge_del;
 pub(crate) mod merge_ins;
 pub(crate) mod metavar_renamer;
