@@ -204,7 +204,7 @@ where
             }
             DelNode::MetavariableConflict(mv, del, _) => {
                 self.metavars_status[mv.0] = Some(MetavarStatus::Conflict);
-                <InsMerger as VisitMut<DelNode<D, I>>>::visit_mut(self, del)
+                VisitMut::<DelNode<D, I>>::visit_mut(self, del)
             }
         }
     }

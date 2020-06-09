@@ -13,7 +13,7 @@ where
             (InsNode::InPlace(left), InsNode::InPlace(right)) => self.can_merge(left, right),
             (InsNode::Ellided(left), InsNode::Ellided(right)) => left.node == right.node,
             (InsNode::Conflict(left), InsNode::Conflict(right)) => {
-                <IdMerger as Merge<Vec<InsNode<I>>, _, _>>::can_merge(self, left, right)
+                Merge::<Vec<InsNode<I>>, _, _>::can_merge(self, left, right)
             }
             _ => false,
         }
@@ -28,9 +28,9 @@ where
                 node: left.node,
                 colors: left.colors | right.colors,
             }),
-            (InsNode::Conflict(left), InsNode::Conflict(right)) => InsNode::Conflict(
-                <IdMerger as Merge<Vec<InsNode<I>>, _, _>>::merge(self, left, right),
-            ),
+            (InsNode::Conflict(left), InsNode::Conflict(right)) => {
+                InsNode::Conflict(Merge::<Vec<InsNode<I>>, _, _>::merge(self, left, right))
+            }
             _ => panic!("IdMerger called on conflicting insertions"),
         }
     }
@@ -93,7 +93,7 @@ where
             (DelNode::InPlace(del), InsNode::InPlace(ins)) => self.can_merge(del, &ins.node),
             (DelNode::Ellided(del_mv), InsNode::Ellided(ins_mv)) => *del_mv == ins_mv.node,
             (DelNode::MetavariableConflict(_, del, _), ins) => {
-                <IdMerger as Merge<DelNode<D, I>, _, _>>::can_merge(self, del, ins)
+                Merge::<DelNode<D, I>, _, _>::can_merge(self, del, ins)
             }
             _ => false,
         }

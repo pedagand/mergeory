@@ -43,7 +43,7 @@ where
             DelNode::Ellided(metavar) => self.visit_mut(metavar),
             DelNode::MetavariableConflict(metavar, del, ins) => {
                 self.visit_mut(metavar);
-                <MetavarRenamer as VisitMut<DelNode<D, I>>>::visit_mut(self, del);
+                VisitMut::<DelNode<D, I>>::visit_mut(self, del);
                 self.visit_mut(ins);
             }
         }
@@ -58,11 +58,11 @@ where
         match node {
             InsNode::InPlace(subnode) => self.visit_mut(subnode),
             InsNode::Ellided(metavar) => {
-                <MetavarRenamer as VisitMut<Colored<Metavariable>>>::visit_mut(self, metavar)
+                VisitMut::<Colored<Metavariable>>::visit_mut(self, metavar)
             }
             InsNode::Conflict(subnodes) => {
                 for subnode in subnodes {
-                    <MetavarRenamer as VisitMut<InsNode<I>>>::visit_mut(self, subnode)
+                    VisitMut::<InsNode<I>>::visit_mut(self, subnode)
                 }
             }
         }

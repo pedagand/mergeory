@@ -110,7 +110,7 @@ where
             DelNode::InPlace(del) => self.convert(del),
             DelNode::Ellided(mv) => O::verbatim_macro(quote!(mv![#mv])),
             DelNode::MetavariableConflict(mv, del, ins) => {
-                let del = <ToSourceRepr as Convert<DelNode<D, I>, O>>::convert(self, *del);
+                let del = Convert::<DelNode<D, I>, O>::convert(self, *del);
                 let ins = self.convert(ins);
                 O::verbatim_macro(quote!(mv_conflict![#mv, {#del}, {#ins}]))
             }
@@ -133,7 +133,7 @@ where
             InsNode::Conflict(conflict) => {
                 let ins_iter = conflict
                     .into_iter()
-                    .map(|ins| <ToSourceRepr as Convert<InsNode<I>, O>>::convert(self, ins));
+                    .map(|ins| Convert::<InsNode<I>, O>::convert(self, ins));
                 O::verbatim_macro(quote!(conflict![#({#ins_iter}),*]))
             }
         }

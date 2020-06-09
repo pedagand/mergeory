@@ -306,7 +306,7 @@ where
                 colors: self.0,
             }),
             DelNode::MetavariableConflict(_, del, _) => {
-                <InferInsFromDel as Convert<DelNode<D, I>, _>>::convert(self, *del)
+                Convert::<DelNode<D, I>, _>::convert(self, *del)
             }
         }
     }
@@ -351,7 +351,7 @@ where
             DelNode::InPlace(del) => self.visit_mut(del),
             DelNode::Ellided(_) => (),
             DelNode::MetavariableConflict(mv, del, ins) => {
-                <SolvedConflictsRemover as VisitMut<DelNode<D, I>>>::visit_mut(self, del);
+                VisitMut::<DelNode<D, I>>::visit_mut(self, del);
                 match &self.0.ins_subst[mv.0] {
                     ComputableSubst::Computed(_)
                     | ComputableSubst::Pending(MetavarStatus::Keep) => {

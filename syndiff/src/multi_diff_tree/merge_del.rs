@@ -21,7 +21,7 @@ where
             }
             (DelNode::MetavariableConflict(_, del, _), other)
             | (other, DelNode::MetavariableConflict(_, del, _)) => {
-                <DelMerger as Merge<DelNode<D, I>, _, _>>::can_merge(self, del, other)
+                Merge::<DelNode<D, I>, _, _>::can_merge(self, del, other)
             }
             (DelNode::Ellided(_), _) | (_, DelNode::Ellided(_)) => true,
         }
@@ -34,7 +34,7 @@ where
             }
             (DelNode::MetavariableConflict(mv, del, ins), other)
             | (other, DelNode::MetavariableConflict(mv, del, ins)) => {
-                let new_del = <DelMerger as Merge<DelNode<D, I>, _, _>>::merge(self, *del, other);
+                let new_del = Merge::<DelNode<D, I>, _, _>::merge(self, *del, other);
                 DelNode::MetavariableConflict(mv, Box::new(new_del), ins)
             }
             (DelNode::Ellided(mv), DelNode::Ellided(other_mv)) if mv == other_mv => {
@@ -44,12 +44,9 @@ where
                 match self.metavars_del[mv.0].take() {
                     Some(repl_tree) => {
                         let repl_tree = *repl_tree.downcast::<DelNode<D, I>>().unwrap();
-                        if <DelMerger as Merge<DelNode<D, I>, _, _>>::can_merge(
-                            self, &repl_tree, &other,
-                        ) {
-                            let new_repl_tree = <DelMerger as Merge<DelNode<D, I>, _, _>>::merge(
-                                self, repl_tree, other,
-                            );
+                        if Merge::<DelNode<D, I>, _, _>::can_merge(self, &repl_tree, &other) {
+                            let new_repl_tree =
+                                Merge::<DelNode<D, I>, _, _>::merge(self, repl_tree, other);
                             assert!(self.metavars_del[mv.0].is_none()); // Unification cycle
                             self.metavars_del[mv.0] = Some(Box::new(new_repl_tree))
                         } else {
