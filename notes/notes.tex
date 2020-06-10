@@ -26,6 +26,10 @@
 \tikzstyle{colorC} = [fill=olive!30]
 \tikzstyle{colorD} = [fill=teal!30]
 
+\usepackage{bussproofs}
+\usepackage{amsmath}
+\newcommand{\typsep}{\ |\ }
+
 \usepackage{hyperref}
 \hypersetup{hidelinks}
 
@@ -37,7 +41,8 @@
 
 How can we compose simulataneous changes?
 
-\section{A key principle: mandatory disambiguation}
+\section{Definitions}
+
 \paragraph{Commits \& modifications}
 In this section, I will have a very generic notion of commits. A commit is a set of modifications of the semantic of a program. A single modification
 can have an impact on several program states and several program variables.
@@ -67,6 +72,333 @@ if (c) {
 let y = x + 1; // touched but unambiguous
 \end{lstlisting}
 
+\section{Syntactic merge}
+If we want to merge concurrent commits into a single one, we need to be able to define a good merged commit. This should yield an executable merged program with provenance annotations that enable to retrieve the origin of a given expression.
+
+Standard tools (like diff or git) are using a line based merge. But in most languages, a line do not have any defined semantic. Therefore, I have taken the approach that concurrent commits should be merged in a syntax driven way.
+
+The high level approach to this syntactic merge is to first compute individual differences from the common ancestor to each commit, and then merge the differences trees into a singe one. Finally, we can apply the merged difference tree to the common ancestor and obtain a syntactically valid merge candidate (but maybe not semantically interesting, and not even necessarily free from compile-time errors).
+
+\subsection{Syntax tree difference}
+We want a rather rich way of describing differences to prevent as much as possible useless syntactic conflicts.
+Therefore our syntax tree difference structure will encode local tree modification, list insertion and deletion and a notion of typed multi-source, multi-target code move.
+
+\subsubsection{Type for syntax tree differences}
+We encode program differences as a new kind of syntax tree that follows the constructors from the target language and add new ones.
+
+Basically, a difference can be viewed as two syntax trees, a deleted one, and an inserted one. Therefore the simplest valid difference from code $d$ to code $i$ is simply the pair $(d, i)$.
+
+However, to ease fusion, produce better output and remove redundancy we change two things.
+First, we ellide identical subtrees that are present in both $d$ and $i$.
+Secondly, we merge together identical constructions between the deletion and insertion tree starting from the root.
+
+The ellisions can be seen as code moved from a location in $d$ into another location in $i$, but the actual content is temporarily forgotten inside what we call a metavariable. In this paper, we will denote these ellisions by $\alpha, \beta, \gamma,$ and so on.
+
+Trying to merge together two nodes in the AST is easy, we simply need to check if they use the same root constructor, recursively merge if it is the case, and fail otherwise. However, this approach is really bad with sequences (eg. sequences of functions or sequences of statements). We do not want to fully split a list if only one element has been inserted, removed or changed. Therefore, we use list edit scripts instead as the output of a merge operation on two sequences. We call the merged part of the difference tree its spine.
+
+We denote by $S(\overrightarrow{t}, \overrightarrow{s})$ a constructor from the target language AST, with an arbitrary but fixed arity of trees ($t$) and sequences ($s$).
+
+This gives the following types for difference trees:
+\begin{align*}
+c &::= S(\overrightarrow{c}, \overrightarrow{c}) \typsep \alpha\\
+t &::= S(\overrightarrow{t}, \overrightarrow{s}) \typsep id \typsep (c, c)\\
+s &::= Zip(t) \typsep Del(c) \typsep Ins(c)\\
+\end{align*}
+
+\subsubsection{Computing a syntactic difference}
+To compute a syntactic difference, we take ASTs of both the original and the modified program and we run the following algorithm:
+\begin{itemize}
+  \item Compute a hash for each node of each AST.
+  \item Take the subset of hashes occuring both in original and modified AST.
+  \item Ellide the nodes with a hash in the subset to remember just their hash.
+  \item If an ellided node do not match an ellision with the same hash in the other tree, replace it by the original subtree.
+  \item Merge both AST into a common spine where possible, else keep changes as two separate ellided trees. Always try to align sequences using recursively a dynamic algorithm minimizing the number of nodes of the resulting tree.
+  \item Optionally, replace each hash by a metavariable index for readability and simplicity.
+\end{itemize}
+
+This algorithm is in $O(n*m)$ where $n$ (resp. $m$) is the number of node of the original (resp. modified) tree. The most computationally expansive part of the algorithm is computing sequence alignments, all the rest is linear.
+
+\subsection{Merging differences}
+Now that we have difference trees for each individual concurrent change, we can try to merge them in a way that keeps track of the origin of each piece of code.
+
+However, as with line based merge, this merging operation can and will regularly fail if someone wants to merge syntactically incompatible changes.
+
+We therefore break the symmetry between deletion and insertion trees as there will be only one deletion and multiple insertions, and we need to extend our difference types to accumulate potential conflicts.
+
+\begin{align*}
+d &::= S(\overrightarrow{d}, \overrightarrow{d}) \typsep \alpha \typsep MvConflict(\alpha, d, i) \\
+i &::= S(\overrightarrow{i}, \overrightarrow{j}) \typsep \alpha \typsep Conflict(\overrightarrow{i})\\
+j &::= Node(i) \typsep DelConflict(i) \typsep OrdConflict(\overrightarrow{i})\\
+t &::= S(\overrightarrow{t}, \overrightarrow{s}) \typsep id \typsep (d, i)\\
+s &::= Zip(t) \typsep Del(d) \typsep DelConflict(d, i) \typsep Ins(i) \typsep OrdConflict(\overrightarrow{\overrightarrow{i}})\\
+\end{align*}
+
+\subsection{Specification of the difference merging algorithm}
+The difference merging algorithm is defined modulo two replacement functions $\Gamma$ and $\Delta$ from metavariable to respectively insertion and deletion trees, that are heavily constrained and in practice inferred during the merge.
+
+\begin{prooftree}
+ \AxiomC{$\Gamma, \Delta \vdash t_r \circ t_l = t$}
+ \UnaryInfC{$\Gamma, \Delta \vdash t_l \circ t_r = t$}
+\end{prooftree}
+
+\subsubsection{Merge spine nodes}
+\begin{prooftree}
+ \AxiomC{}
+ \UnaryInfC{$\Gamma, \Delta \vdash t \circ id = \Delta(\Gamma(t))$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\overrightarrow{\Gamma, \Delta \vdash t_l \circ t_r = t}$}
+ \UnaryInfC{$\Gamma, \Delta \vdash S(\overrightarrow{t_l}) \circ S(\overrightarrow{t_r}) = S(\overrightarrow{t})$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma \vdash i_l \not\subset d_r$}
+ \AxiomC{$\Gamma \vdash i_r \not\subset d_l$}
+ \AxiomC{$\Gamma \vdash d_l$}
+ \AxiomC{$\Gamma \vdash d_r$}
+ \QuaternaryInfC{$\Gamma, \Delta \vdash (d_l, i_l) \circ (d_r, i_r) = (d_l \wedge d_r, i_l \vee i_r)$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma \vdash i_l \subset d_r = d'$}
+ \AxiomC{$\Gamma \vdash i_r \not\subset d_l$}
+ \AxiomC{$\Gamma \vdash d_l$}
+ \TrinaryInfC{$\Gamma, \Delta \vdash (d_l, i_l) \circ (d_r, i_r) = (d' \wedge d_l, \Gamma(i_r))$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma \vdash i_l \subset d_r$}
+ \AxiomC{$\Gamma \vdash i_r \subset d_l$}
+ \AxiomC{$\Gamma \vdash d_l$}
+ \AxiomC{$\Gamma \vdash d_r$}
+ \QuaternaryInfC{$\Gamma, \Delta \vdash (d_l, i_l) \circ (d_r, i_r) = (d_l \wedge d_r, i_l \vee i_r)$}
+\end{prooftree}
+
+\subsubsection{Merge sequence edit scripts (except insertions)}
+\begin{prooftree}
+ \AxiomC{$\Gamma, \Delta \vdash t_l \circ t_r = t$}
+ \AxiomC{$\Gamma, \Delta \vdash r_l \circ r_r = r$}
+ \BinaryInfC{$\Gamma, \Delta \vdash (Zip(t_l) :: r_l) \circ (Zip(t_r) :: r_r) = Zip(t) :: r$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma \vdash d_l$}
+ \AxiomC{$\Gamma \vdash d_r$}
+ \AxiomC{$\Gamma, \Delta \vdash r_l \circ r_r = r$}
+ \TrinaryInfC{$\Gamma, \Delta \vdash (Del(d_l) :: r_l) \circ (Del(d_r) :: r_r) = Del(d_l \wedge d_r) :: r$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$t_r = (d_r, i_r)$}
+ \AxiomC{$\Gamma \vdash i_r \subset d_l$}
+ \AxiomC{$\Gamma \vdash d_r$}
+ \AxiomC{$\Gamma, \Delta \vdash r_l \circ r_r = r$}
+ \QuaternaryInfC{$\Gamma, \Delta \vdash (Del(d_l) :: r_l) \circ (Zip(t_r) :: r_r) = Del(d_l \wedge d_r) :: r$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$t_r = (d_r, i_r)$}
+ \AxiomC{$\Gamma \vdash i_r \not\subset d_l$}
+ \AxiomC{$\Gamma \vdash d_l$}
+ \AxiomC{$\Gamma \vdash d_r$}
+ \AxiomC{$\Gamma, \Delta \vdash r_l \circ r_r = r$}
+ \QuinaryInfC{$\Gamma, \Delta \vdash (Del(d_l) :: r_l) \circ (Zip(t_r) :: r_r) = DelConflict(d_l \wedge d_r, \Gamma(i_r)) :: r$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma \vdash i_l \not\subset d_r$}
+ \AxiomC{$\Gamma \vdash i_r \not\subset d_l$}
+ \AxiomC{$\Gamma \vdash d_l$}
+ \AxiomC{$\Gamma \vdash d_r$}
+ \AxiomC{$\Gamma, \Delta \vdash r_l \circ r_r = r$}
+ \QuinaryInfC{$\Gamma, \Delta \vdash (DelConflict(d_l, i_l) :: r_l) \circ (DelConflict(d_r, i_r) :: r_r) = DelConflict(d_l \wedge d_r, i_l \vee i_r) :: r$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma \vdash i_l \subset d_r = d'_r$}
+ \AxiomC{$\Gamma \vdash i_r \not\subset d_l$}
+ \AxiomC{$\Gamma \vdash d_l$}
+ \AxiomC{$\Gamma, \Delta \vdash r_l \circ r_r = r$}
+ \QuaternaryInfC{$\Gamma, \Delta \vdash (DelConflict(d_l, i_l) :: r_l) \circ (DelConflict(d_r, i_r) :: r_r) = DelConflict(d_l \wedge d'_r, \Gamma(i_r)) :: r$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma \vdash i_l \subset d_r = d'_r$}
+ \AxiomC{$\Gamma \vdash i_r \subset d_l = d'_l$}
+ \AxiomC{$\Gamma, \Delta \vdash r_l \circ r_r = r$}
+ \TrinaryInfC{$\Gamma, \Delta \vdash (DelConflict(d_l, i_l) :: r_l) \circ (DelConflict(d_r, i_r) :: r_r) = Del(d'_l \wedge d'_r) :: r$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$t_r = (d_r, i_r)$}
+ \AxiomC{$\Gamma, \Delta \vdash (DelConflict(d_l, i_l) :: r_l) \circ (DelConflict(d_r, i_r) :: r_r) = r$}
+ \BinaryInfC{$\Gamma, \Delta \vdash (DelConflict(d_l, i_l) :: r_l) \circ (Zip(t_r) :: r_r) = r$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma \vdash i_l \not\subset d_r$}
+ \AxiomC{$\Gamma \vdash d_r$}
+ \AxiomC{$\Gamma \vdash d_l$}
+ \AxiomC{$\Gamma, \Delta \vdash r_l \circ r_r = r$}
+ \QuaternaryInfC{$\Gamma, \Delta \vdash (DelConflict(d_l, i_l) :: r_l) \circ (Del(d_r) :: r_r) = DelConflict(d_l \wedge d_r, \Gamma(i_l)) :: r$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma \vdash i_l \subset d_r = d'_r$}
+ \AxiomC{$\Gamma \vdash d_l$}
+ \AxiomC{$\Gamma, \Delta \vdash r_l \circ r_r = r$}
+ \TrinaryInfC{$\Gamma, \Delta \vdash (DelConflict(d_l, i_l) :: r_l) \circ (Del(d_r) :: r_r) = Del(d_l \wedge d'_r) :: r$}
+\end{prooftree}
+
+\subsubsection{Merge insertions in sequence edit scripts}
+
+\begin{prooftree}
+ \AxiomC{$s_r \neq Ins(\_)$}
+ \AxiomC{$s_r \neq OrdConflict(\_)$}
+ \AxiomC{$\Gamma, \Delta \vdash r_l \circ (s_r :: r_r) = r$}
+ \TrinaryInfC{$\Gamma, \Delta \vdash (Ins(i_l) :: r_l) \circ (s_r :: r_r) = Ins(\Gamma(i_l)) :: r$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma(i_l) = \Gamma(i_r) = i$}
+ \AxiomC{$\Gamma, \Delta \vdash r_l \circ r_r = r$}
+ \BinaryInfC{$\Gamma, \Delta \vdash (Ins(i_l) :: r_l) \circ (Ins(i_r) :: r_r) = Ins(i) :: r$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma, \Delta \vdash r_l \circ r_r = r$}
+ \UnaryInfC{$\Gamma, \Delta \vdash (Ins(i_l) :: r_l) \circ (Ins(i_r) :: r_r) = OrdConflict([\Gamma(i_l), \Gamma(i_r)]) :: r$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$s_r \neq Ins(\_)$}
+ \AxiomC{$s_r \neq OrdConflict(\_)$}
+ \AxiomC{$\Gamma, \Delta \vdash r_l \circ (s_r :: r_r) = r$}
+ \TrinaryInfC{$\Gamma, \Delta \vdash (OrdConflict(i_l) :: r_l) \circ (s_r :: r_r) = OrdConflict(\Gamma(i_l)) :: r$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma, \Delta \vdash r_l \circ r_r = r$}
+ \UnaryInfC{$\Gamma, \Delta \vdash (Ins(i_l) :: r_l) \circ (OrdConflict(i_r) :: r_r) = OrdConflict(\Gamma(i_l) :: \Gamma(i_r)) :: r$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma, \Delta \vdash r_l \circ r_r = r$}
+ \UnaryInfC{$\Gamma, \Delta \vdash (OrdConflict(i_l) :: r_l) \circ (OrdConflict(i_r) :: r_r) = OrdConflict(\Gamma(i_l) @ \Gamma(i_r)) :: r$}
+\end{prooftree}
+
+\subsubsection{Inclusion of insertion inside a deletion}
+
+\begin{prooftree}
+ \AxiomC{$\overrightarrow{\Gamma \vdash i \subset d = d'}$}
+ \UnaryInfC{$\Gamma \vdash S(\overrightarrow{i}) \subset S(\overrightarrow{d}) = S(\overrightarrow{d'})$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma(\alpha) = \Gamma(i)$}
+ \UnaryInfC{$\Gamma \vdash i \subset \alpha = \alpha$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma(\alpha) = \top$}
+ \UnaryInfC{$\Gamma \vdash i \subset \alpha = MvConflict(\alpha, \alpha, i)$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma(\alpha) = \top$}
+ \UnaryInfC{$\Gamma \vdash i \subset MvConflict(\alpha, d, i') = MvConflict(\alpha, d, i \vee i')$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$d \neq \alpha$}
+ \AxiomC{$d \neq S(\_)$}
+ \BinaryInfC{$\Gamma \vdash S(\_) \not\subset d$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$d \neq \alpha$}
+ \AxiomC{$i \neq S(\_)$}
+ \BinaryInfC{$\Gamma \vdash i \not\subset d$}
+\end{prooftree}
+
+\subsubsection{Coherence with $\Gamma$ of kept deletion trees}
+
+\begin{prooftree}
+ \AxiomC{$\overrightarrow{\Gamma \vdash d}$}
+ \UnaryInfC{$\Gamma \vdash S(\overrightarrow{d})$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma(\alpha) \in \{ \oplus(\Delta(\alpha)), \top \}$}
+ \UnaryInfC{$\Gamma \vdash \alpha$}
+\end{prooftree}
+
+Where $\oplus$ is a function transposing a deletion tree to an insertion tree by passing through each $MvConflict$ constructor so that $\oplus(MvConflict(\alpha, d, i)) = \oplus(d)$.
+
+\begin{prooftree}
+ \AxiomC{$\Gamma(\alpha) = \top$}
+ \AxiomC{$\Gamma \vdash d$}
+ \BinaryInfC{$\Gamma \vdash MvConflict(\alpha, d, i)$}
+\end{prooftree}
+
+\subsubsection{Deletion intersection}
+\begin{prooftree}
+ \AxiomC{$\overrightarrow{\Delta \vdash d_l \wedge d_r = d}$}
+ \UnaryInfC{$\Delta \vdash S(\overrightarrow{d_l}) \wedge S(\overrightarrow{d_r}) = S(\overrightarrow{d})$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{}
+ \UnaryInfC{$\Delta \vdash \alpha \wedge \alpha = \Delta(\alpha)$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Delta \vdash \Delta(\alpha) \wedge d_r = \Delta(\alpha)$}
+ \UnaryInfC{$\Delta \vdash \alpha \wedge d_r = \Delta(\alpha)$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Delta \vdash \Delta(\alpha) \wedge d_l = \Delta(\alpha)$}
+ \UnaryInfC{$\Delta \vdash d_l \wedge \alpha = \Delta(\alpha)$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Delta \vdash d_l \wedge d_r = d$}
+ \UnaryInfC{$\Delta \vdash d_l \wedge MvConflict(\alpha, d_r, i) = MvConflict(\alpha, d, \Gamma(i))$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Delta \vdash d_l \wedge d_r = d$}
+ \UnaryInfC{$\Delta \vdash MvConflict(\alpha, d_l, i) \wedge d_r = MvConflict(\alpha, d, \Gamma(i))$}
+\end{prooftree}
+
+\subsubsection{Simplification of insertion union}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma(i_l) = \Gamma(i_r) = i$}
+ \UnaryInfC{$\Gamma \vdash i_l \vee i_r = i$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\overrightarrow{\Gamma \vdash i_l \vee i_r = i}$}
+ \UnaryInfC{$\Gamma \vdash S(\overrightarrow{i_l}) \vee S(\overrightarrow{i_r}) = S(\overrightarrow{i})$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{}
+ \UnaryInfC{$\Gamma \vdash i_l \vee i_r = Conflict(\Gamma(i_l), \Gamma(i_r))$}
+\end{prooftree}
+
+\section{Semantic merge}
+\paragraph{TODO} Update this section!
+
+Having two commits syntactically merged do not mean that the result is a valid
+semantic combination that respect the intention of all original commits.
+That's why after this first syntax step, we must also check the semantic of the
+fusion.
+
+\subsection{A key principle: mandatory disambiguation}
 \paragraph{A generic definition of a valid merge} A merge is valid if for any state of the program, there is a single unambiguous trace after applying all the modifications of the concurrent commits. There should be no automatic choice in favor of any of the commits. This means that if two commits touched the same state of the program or the same expression at the same time, the merge will be considered not valid. We call a point in a trace where the semantic is ambiguous a collision.
 Note that I consider that this includes a case where commit $A$ modifies a variable $x$ and then commit $B$ changes the value of $y$ to the new value of $x$.
 
@@ -267,7 +599,7 @@ let d = c + b;
 overriden marking that $b$ has a preserved semantic. Therefore, line 5 is not showing a conflict anymore.}
 \end{figure}
 
-\section{From trace to program point origin graphs}
+\subsection{From trace to program point origin graphs}
 \paragraph{Graph coloring to check conflicts} For being able to quickly check that an assignment does not introduce a conflict, we can simply keep a coloring of the graph, that links each variable to the single unambiguous commit that modifies its semantic.
 Therefore a well-formed graph without conflicts only have incoming edges from nodes without coloring or with the same color as itself.
 Overriden variables will never be colored as they are considered to never collide with any of the concurrent commits.
@@ -485,7 +817,7 @@ let r = f(b, true);
 \label{fig:closure}
 \end{figure}
 
-\section{Oracles for structure preserving modifications}
+\subsection{Oracles for structure preserving modifications}
 
 \paragraph{Modification of expressions only} This idea works very well for commits that only consist of modifications of expressions and preserve the whole program structure (but maybe not the control flow).
 
@@ -510,7 +842,7 @@ If a given program crashes because of a runtime exception, we have to continue e
 
 TODO: finish that
 
-\section{Checking imperative programs}
+\subsection{Checking imperative programs}
 
 \paragraph{Origin graph and mutable variables} In presence of mutable variables we should track not variables but assignment expressions inside the origin graph, and separately keep a link from variables to their definition at the current program point.
 
