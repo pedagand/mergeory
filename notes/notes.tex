@@ -116,7 +116,57 @@ To compute a syntactic difference, we take ASTs of both the original and the mod
   \item Optionally, replace each hash by a metavariable index for readability and simplicity.
 \end{itemize}
 
-This algorithm is in $O(n*m)$ where $n$ (resp. $m$) is the number of node of the original (resp. modified) tree. The most computationally expansive part of the algorithm is computing sequence alignments, all the rest is linear.
+This algorithm is in $O(nm)$ where $n$ (resp. $m$) is the number of node of the original (resp. modified) tree. The most computationally expansive part of the algorithm is computing sequence alignments, all the rest is linear.
+
+\subsubsection{Semantics of syntactic differences}
+We can see syntactic differences as partial functions turning a syntax tree into another syntax tree.
+The difference between $d$ and $i$ is therefore a function that is at least mapping $d$ into $i$, but it is also defined on some other trees sharing all the relevant structure with $d$.
+
+The implied function of a difference tree is defined as follows: let's suppose that we have $\Gamma$ a function from metavariable inside the difference tree, to syntax trees, given by an oracle. In practice, $\Gamma$ is constrained enough to be inferred.
+
+\begin{prooftree}
+ \AxiomC{}
+ \UnaryInfC{$\Gamma \vdash id(t) = t$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma \vdash d(t)$}
+ \UnaryInfC{$\Gamma \vdash (d,i)(t) = \Gamma(i)$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\overrightarrow{\Gamma \vdash t(d_t) = i_t}$}
+ \AxiomC{$\overrightarrow{\Gamma \vdash s(d_s) = i_s}$}
+ \BinaryInfC{$\Gamma \vdash S(\overrightarrow{t},\overrightarrow{s})(S(\overrightarrow{d_t},\overrightarrow{d_s})) = S(\overrightarrow{i_t}, \overrightarrow{i_s})$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma \vdash t(d) = i$}
+ \AxiomC{$\Gamma \vdash r(d_r) = i_r$}
+ \BinaryInfC{$\Gamma \vdash (Zip(t)::r)(d::d_r) = i::i_r$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma \vdash c(d)$}
+ \AxiomC{$\Gamma \vdash r(d_r) = i_r$}
+ \BinaryInfC{$\Gamma \vdash (Del(c)::r)(d::d_r) = i_r$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma \vdash r(d_r) = i_r$}
+ \UnaryInfC{$\Gamma \vdash (Ins(c)::r)(d_r) = \Gamma(c) :: i_r$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma(\alpha) = d$}
+ \UnaryInfC{$\Gamma \vdash \alpha(d)$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\overrightarrow{\Gamma \vdash c_t(d_t)}$}
+ \AxiomC{$\overrightarrow{\Gamma \vdash c_s(d_s)}$}
+ \BinaryInfC{$\Gamma \vdash S(c_t, c_s)(S(d_t, d_s))$}
+\end{prooftree}
 
 \subsection{Merging differences}
 Now that we have difference trees for each individual concurrent change, we can try to merge them in a way that keeps track of the origin of each piece of code.
@@ -128,12 +178,28 @@ We therefore break the symmetry between deletion and insertion trees as there wi
 \begin{align*}
 d &::= S(\overrightarrow{d}, \overrightarrow{d}) \typsep \alpha \typsep MvConflict(\alpha, d, i) \\
 i &::= S(\overrightarrow{i}, \overrightarrow{j}) \typsep \alpha \typsep Conflict(\overrightarrow{i})\\
-j &::= Node(i) \typsep DelConflict(i) \typsep OrdConflict(\overrightarrow{i})\\
+j &::= i \typsep DelConflict(i) \typsep OrdConflict(\overrightarrow{i})\\
 t &::= S(\overrightarrow{t}, \overrightarrow{s}) \typsep id \typsep (d, i)\\
 s &::= Zip(t) \typsep Del(d) \typsep DelConflict(d, i) \typsep Ins(i) \typsep OrdConflict(\overrightarrow{\overrightarrow{i}})\\
 \end{align*}
 
-\subsection{Specification of the difference merging algorithm}
+In the merging algorithm we use the interpretation of metavariables as multi-source multi-target move, and try to push changes toward the destination of the code deplacements.
+This is done in a two-phase way. First, if we have two changes, facing each other we try to inline one of them inside the deletion tree of the other, by allowing differences wherever we have a metavariable. To avoid making any arbitrary choice, this is ignored if both changes could be inlined in the other. Then, we check that these inlined changes are consistant for each metavariable, and if they are, we replace all occurences of the metavariable by the obtained insertion.
+
+In absence of conflicts, merged differences have the same semantics as simple difference trees.
+
+Conflict represent parts that couldn't be merged and therefore prevent application of the difference on any tree. They can come from four different sources:
+\begin{itemize}
+  \item $Conflict$ simply represent two different insertions that were in the same place.
+  \item $DelConflict$ appears where one difference deletes a node while the other one had changes in it.
+  \item $OrdConflict$ is caused by two insertions taking place at the same location. As the merge operation is never performing any choice, it cannot arbitrarily order them.
+  \item $MvConflict$ is triggered when a metavariable appears more than once in deletion tree, and the inlined insertions in each occurences differ, therefore not giving a consistant replacement.
+\end{itemize}
+
+The application domain of the merged difference $t_1 \circ t_2$ is the insersection of the domains of $t_1$ and $t_2$ in absence of conflicts.
+Also we ensure that $t \circ t = t$.
+
+\subsubsection{Specification of the difference merging algorithm}
 The difference merging algorithm is defined modulo two replacement functions $\Gamma$ and $\Delta$ from metavariable to respectively insertion and deletion trees, that are heavily constrained and in practice inferred during the merge.
 
 \begin{prooftree}
@@ -141,7 +207,7 @@ The difference merging algorithm is defined modulo two replacement functions $\G
  \UnaryInfC{$\Gamma, \Delta \vdash t_l \circ t_r = t$}
 \end{prooftree}
 
-\subsubsection{Merge spine nodes}
+\paragraph{Merge spine nodes}
 \begin{prooftree}
  \AxiomC{}
  \UnaryInfC{$\Gamma, \Delta \vdash t \circ id = \Delta(\Gamma(t))$}
@@ -175,7 +241,7 @@ The difference merging algorithm is defined modulo two replacement functions $\G
  \QuaternaryInfC{$\Gamma, \Delta \vdash (d_l, i_l) \circ (d_r, i_r) = (d_l \wedge d_r, i_l \vee i_r)$}
 \end{prooftree}
 
-\subsubsection{Merge sequence edit scripts (except insertions)}
+\paragraph{Merge sequence edit scripts (except insertions)}
 \begin{prooftree}
  \AxiomC{$\Gamma, \Delta \vdash t_l \circ t_r = t$}
  \AxiomC{$\Gamma, \Delta \vdash r_l \circ r_r = r$}
@@ -251,7 +317,7 @@ The difference merging algorithm is defined modulo two replacement functions $\G
  \TrinaryInfC{$\Gamma, \Delta \vdash (DelConflict(d_l, i_l) :: r_l) \circ (Del(d_r) :: r_r) = Del(d_l \wedge d'_r) :: r$}
 \end{prooftree}
 
-\subsubsection{Merge insertions in sequence edit scripts}
+\paragraph{Merge insertions in sequence edit scripts}
 
 \begin{prooftree}
  \AxiomC{$s_r \neq Ins(\_)$}
@@ -288,7 +354,7 @@ The difference merging algorithm is defined modulo two replacement functions $\G
  \UnaryInfC{$\Gamma, \Delta \vdash (OrdConflict(i_l) :: r_l) \circ (OrdConflict(i_r) :: r_r) = OrdConflict(\Gamma(i_l) @ \Gamma(i_r)) :: r$}
 \end{prooftree}
 
-\subsubsection{Inclusion of insertion inside a deletion}
+\paragraph{Inclusion of insertion inside a deletion}
 
 \begin{prooftree}
  \AxiomC{$\overrightarrow{\Gamma \vdash i \subset d = d'}$}
@@ -322,7 +388,7 @@ The difference merging algorithm is defined modulo two replacement functions $\G
  \BinaryInfC{$\Gamma \vdash i \not\subset d$}
 \end{prooftree}
 
-\subsubsection{Coherence with $\Gamma$ of kept deletion trees}
+\paragraph{Coherence with $\Gamma$ of kept deletion trees}
 
 \begin{prooftree}
  \AxiomC{$\overrightarrow{\Gamma \vdash d}$}
@@ -342,7 +408,7 @@ Where $\oplus$ is a function transposing a deletion tree to an insertion tree by
  \BinaryInfC{$\Gamma \vdash MvConflict(\alpha, d, i)$}
 \end{prooftree}
 
-\subsubsection{Deletion intersection}
+\paragraph{Deletion intersection}
 \begin{prooftree}
  \AxiomC{$\overrightarrow{\Delta \vdash d_l \wedge d_r = d}$}
  \UnaryInfC{$\Delta \vdash S(\overrightarrow{d_l}) \wedge S(\overrightarrow{d_r}) = S(\overrightarrow{d})$}
@@ -373,7 +439,7 @@ Where $\oplus$ is a function transposing a deletion tree to an insertion tree by
  \UnaryInfC{$\Delta \vdash MvConflict(\alpha, d_l, i) \wedge d_r = MvConflict(\alpha, d, \Gamma(i))$}
 \end{prooftree}
 
-\subsubsection{Simplification of insertion union}
+\paragraph{Simplification of insertion union}
 
 \begin{prooftree}
  \AxiomC{$\Gamma(i_l) = \Gamma(i_r) = i$}
