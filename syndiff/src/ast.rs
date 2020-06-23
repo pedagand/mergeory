@@ -272,6 +272,21 @@ syn_codegen! {
         family_impl!(VisitMut<del> for SolvedConflictsRemover);
         family_impl!(VisitMut<self> for SolvedConflictsRemover);
 
+        use crate::multi_diff_tree::metavar_remover::{MetavarRemover, InferFromSyn, InferFromSynColored};
+        #[extra_call(proc_macro2::TokenStream, proc_macro2::Literal, proc_macro2::Span, Reserved)]
+        family_impl!(Merge<self, syn, self> for MetavarRemover);
+        #[extra_call(proc_macro2::TokenStream, proc_macro2::Literal, proc_macro2::Span, Reserved)]
+        family_impl!(Merge<del, syn, del> for MetavarRemover);
+        family_impl!(VisitMut<ins> for MetavarRemover);
+        family_impl!(VisitMut<del> for MetavarRemover);
+        family_impl!(VisitMut<self> for MetavarRemover);
+        #[extra_call(proc_macro2::TokenStream, proc_macro2::Literal, proc_macro2::Span, Reserved)]
+        family_impl!(Convert<syn, ins> for InferFromSynColored);
+        #[extra_call(proc_macro2::TokenStream, proc_macro2::Literal, proc_macro2::Span, Reserved)]
+        family_impl!(Convert<syn, del> for InferFromSyn);
+        #[extra_call(proc_macro2::TokenStream, proc_macro2::Literal, proc_macro2::Span, Reserved)]
+        family_impl!(Convert<syn, self> for InferFromSyn);
+
         use crate::source_repr::ToSourceRepr;
         #[extra_call(proc_macro2::TokenStream, proc_macro2::Literal, proc_macro2::Span, Reserved)]
         #[omit(Block, ExprReference)]

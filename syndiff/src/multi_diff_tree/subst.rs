@@ -58,7 +58,7 @@ impl Substituter {
         repl
     }
 
-    fn ins_subst<I: InsFromDel>(&mut self, mv: Colored<Metavariable>) -> InsNode<I>
+    fn ins_subst<I: DelEquivType>(&mut self, mv: Colored<Metavariable>) -> InsNode<I>
     where
         Substituter: VisitMut<InsNode<I>>,
         Substituter: VisitMut<DelNode<I::Del, I>>,
@@ -155,7 +155,7 @@ where
     }
 }
 
-impl<I: InsFromDel> VisitMut<InsNode<I>> for Substituter
+impl<I: DelEquivType> VisitMut<InsNode<I>> for Substituter
 where
     Substituter: VisitMut<I>,
     Substituter: VisitMut<I::Del>,
@@ -326,18 +326,18 @@ where
     }
 }
 
-pub trait InsFromDel {
+pub trait DelEquivType {
     type Del;
 }
 
-macro_rules! impl_ins_from_del {
+macro_rules! impl_del_equiv_type_for_ins {
     { $($ast_typ:ident),* } => {
-        $(impl InsFromDel for ast::multi_diff::ins::$ast_typ {
+        $(impl DelEquivType for ast::multi_diff::ins::$ast_typ {
             type Del = ast::multi_diff::del::$ast_typ;
         })*
     }
 }
-impl_ins_from_del!(Expr, Stmt, Item, TraitItem, ImplItem, ForeignItem);
+impl_del_equiv_type_for_ins!(Expr, Stmt, Item, TraitItem, ImplItem, ForeignItem);
 
 pub struct SolvedConflictsRemover(pub Substituter);
 

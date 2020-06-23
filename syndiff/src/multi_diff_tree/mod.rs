@@ -5,10 +5,12 @@ pub(crate) mod align_spine;
 pub(crate) mod id_merger;
 pub(crate) mod merge_del;
 pub(crate) mod merge_ins;
+pub(crate) mod metavar_remover;
 pub(crate) mod metavar_renamer;
 pub(crate) mod subst;
 pub(crate) mod with_color;
 
+pub use metavar_remover::remove_metavars;
 pub use metavar_renamer::canonicalize_metavars;
 pub use with_color::with_color;
 
