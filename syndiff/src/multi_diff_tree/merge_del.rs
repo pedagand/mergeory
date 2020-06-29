@@ -1,6 +1,6 @@
 use super::merge_ins::{ISpineNode, ISpineSeq, ISpineSeqNode};
-use super::{Colored, DelNode, SpineNode, SpineSeq, SpineSeqNode};
-use crate::family_traits::{Convert, Merge};
+use super::{ColorSet, Colored, DelNode, SpineNode, SpineSeq, SpineSeqNode};
+use crate::family_traits::{Convert, Merge, VisitMut};
 use std::any::Any;
 
 pub struct DelMerger {
@@ -10,8 +10,9 @@ pub struct DelMerger {
 
 impl<D, I> Merge<DelNode<D, I>, DelNode<D, I>, DelNode<D, I>> for DelMerger
 where
-    DelMerger: Merge<D, D, D>,
+    DelMerger: Merge<Colored<D>, Colored<D>, Colored<D>>,
     DelNode<D, I>: Clone + 'static,
+    ColorAdder: VisitMut<DelNode<D, I>>,
 {
     fn can_merge(&mut self, left: &DelNode<D, I>, right: &DelNode<D, I>) -> bool {
         // Here just compare the in place nodes, without caring about unification problems
@@ -37,27 +38,33 @@ where
                 let new_del = Merge::<DelNode<D, I>, _, _>::merge(self, *del, other);
                 DelNode::MetavariableConflict(mv, Box::new(new_del), ins)
             }
-            (DelNode::Ellided(mv), DelNode::Ellided(other_mv)) if mv == other_mv => {
-                DelNode::Ellided(mv)
+            (DelNode::Ellided(mv), DelNode::Ellided(other_mv)) if mv.node == other_mv.node => {
+                DelNode::Ellided(Colored {
+                    node: mv.node,
+                    colors: mv.colors | other_mv.colors,
+                })
             }
-            (DelNode::Ellided(mv), other) | (other, DelNode::Ellided(mv)) => {
-                match self.metavars_del[mv.0].take() {
+            (DelNode::Ellided(mv), mut other) | (mut other, DelNode::Ellided(mv)) => {
+                let mv_id = mv.node.0;
+                match self.metavars_del[mv_id].take() {
                     Some(repl_tree) => {
                         let repl_tree = *repl_tree.downcast::<DelNode<D, I>>().unwrap();
                         if Merge::<DelNode<D, I>, _, _>::can_merge(self, &repl_tree, &other) {
                             let new_repl_tree =
-                                Merge::<DelNode<D, I>, _, _>::merge(self, repl_tree, other);
-                            assert!(self.metavars_del[mv.0].is_none()); // Unification cycle
-                            self.metavars_del[mv.0] = Some(Box::new(new_repl_tree))
+                                Merge::<DelNode<D, I>, _, _>::merge(self, repl_tree, other.clone());
+                            assert!(self.metavars_del[mv_id].is_none()); // Unification cycle
+                            self.metavars_del[mv_id] = Some(Box::new(new_repl_tree))
                         } else {
                             // Unification failure
                             self.mergeable = false
                         }
                     }
-                    None => self.metavars_del[mv.0] = Some(Box::new(other)),
+                    None => self.metavars_del[mv_id] = Some(Box::new(other.clone())),
                 }
 
-                DelNode::Ellided(mv)
+                // Keep other in tree to retain its colors
+                ColorAdder(mv.colors).visit_mut(&mut other);
+                other
             }
         }
     }
@@ -88,7 +95,7 @@ where
 impl<IS, S, D, I> Convert<ISpineSeq<IS, D, I>, SpineSeq<S, D, I>> for DelMerger
 where
     DelMerger: Convert<ISpineNode<IS, D, I>, SpineNode<S, D, I>>,
-    DelMerger: Merge<Colored<DelNode<D, I>>, Colored<DelNode<D, I>>, Colored<DelNode<D, I>>>,
+    DelMerger: Merge<DelNode<D, I>, DelNode<D, I>, DelNode<D, I>>,
 {
     fn convert(&mut self, input: ISpineSeq<IS, D, I>) -> SpineSeq<S, D, I> {
         SpineSeq(
@@ -123,6 +130,26 @@ where
                 })
                 .collect(),
         )
+    }
+}
+
+pub struct ColorAdder(ColorSet);
+
+impl<D, I> VisitMut<DelNode<D, I>> for ColorAdder
+where
+    ColorAdder: VisitMut<D>,
+{
+    fn visit_mut(&mut self, node: &mut DelNode<D, I>) {
+        match node {
+            DelNode::InPlace(del) => {
+                self.visit_mut(&mut del.node);
+                del.colors |= self.0
+            }
+            DelNode::Ellided(mv) => mv.colors |= self.0,
+            DelNode::MetavariableConflict(_, del, _) => {
+                VisitMut::<DelNode<D, I>>::visit_mut(self, del)
+            }
+        }
     }
 }
 

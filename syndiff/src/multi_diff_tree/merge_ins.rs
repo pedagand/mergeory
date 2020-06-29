@@ -11,8 +11,8 @@ pub enum ISpineNode<S, D, I> {
 }
 pub enum ISpineSeqNode<S, D, I> {
     Zipped(ISpineNode<S, D, I>),
-    BothDeleted(Colored<DelNode<D, I>>, Colored<DelNode<D, I>>),
-    DeleteConflict(Colored<DelNode<D, I>>, Colored<DelNode<D, I>>, InsNode<I>),
+    BothDeleted(DelNode<D, I>, DelNode<D, I>),
+    DeleteConflict(DelNode<D, I>, DelNode<D, I>, InsNode<I>),
     Insert(Vec<Colored<Vec<InsNode<I>>>>),
 }
 pub struct ISpineSeq<S, D, I>(pub Vec<ISpineSeqNode<S, D, I>>);
@@ -111,7 +111,7 @@ where
             (DelNode::MetavariableConflict(_, _, _), _) => true,
             (DelNode::InPlace(del_subtree), InsNode::InPlace(ins_subtree)) => {
                 if ins_subtree.colors == ColorSet::white() {
-                    self.can_merge(del_subtree, &ins_subtree.node)
+                    self.can_merge(&del_subtree.node, &ins_subtree.node)
                 } else {
                     // I don't really see how this branch can be triggered on real examples,
                     // but refuse to merge for color preservation
@@ -126,8 +126,9 @@ where
         match (del, ins) {
             (DelNode::Ellided(mv), ins) => {
                 // Here we may have to clone the insert tree once to check for potential conflicts
-                let cur_status = std::mem::take(&mut self.metavars_status[mv.0]);
-                self.metavars_status[mv.0] = Some(match cur_status {
+                let mv_id = mv.node.0;
+                let cur_status = std::mem::take(&mut self.metavars_status[mv_id]);
+                self.metavars_status[mv_id] = Some(match cur_status {
                     None => MetavarStatus::Replace(Box::new(vec![ins.clone()])),
                     Some(MetavarStatus::Replace(mut repl_ins)) => {
                         let repl_ins_list: &mut Vec<_> = repl_ins.downcast_mut().unwrap();
@@ -138,14 +139,17 @@ where
                         MetavarStatus::Conflict
                     }
                 });
-                DelNode::MetavariableConflict(mv, Box::new(DelNode::Ellided(mv)), ins)
+                DelNode::MetavariableConflict(mv.node, Box::new(DelNode::Ellided(mv)), ins)
             }
             (DelNode::MetavariableConflict(mv, del, conflict_ins), ins) => {
                 self.metavars_status[mv.0] = Some(MetavarStatus::Conflict);
                 DelNode::MetavariableConflict(mv, del, self.merge(conflict_ins, ins))
             }
             (DelNode::InPlace(del_subtree), InsNode::InPlace(ins_subtree)) => {
-                DelNode::InPlace(self.merge(del_subtree, ins_subtree.node))
+                DelNode::InPlace(Colored {
+                    node: self.merge(del_subtree.node, ins_subtree.node),
+                    colors: del_subtree.colors,
+                })
             }
             _ => panic!("<Merge<del, ins, del>>::merge() called with incompatible data"),
         }
@@ -188,18 +192,19 @@ where
 {
     fn visit_mut(&mut self, del: &mut DelNode<D, I>) {
         match del {
-            DelNode::InPlace(del_subtree) => self.visit_mut(del_subtree),
+            DelNode::InPlace(del_subtree) => self.visit_mut(&mut del_subtree.node),
             DelNode::Ellided(mv) => {
-                self.metavars_status[mv.0] = Some(match &self.metavars_status[mv.0] {
+                let mv_id = mv.node.0;
+                self.metavars_status[mv_id] = Some(match &self.metavars_status[mv_id] {
                     None | Some(MetavarStatus::Keep) => MetavarStatus::Keep,
                     Some(MetavarStatus::Replace(_)) | Some(MetavarStatus::Conflict) => {
                         MetavarStatus::Conflict
                     }
                 });
                 *del = DelNode::MetavariableConflict(
-                    *mv,
+                    mv.node,
                     Box::new(DelNode::Ellided(*mv)),
-                    InsNode::Ellided(Colored::new_white(*mv)),
+                    InsNode::Ellided(Colored::new_white(mv.node)),
                 )
             }
             DelNode::MetavariableConflict(mv, del, _) => {
@@ -269,8 +274,8 @@ where
                 .map(|node| match node {
                     MergeSpineSeqNode::Zipped(node) => ISpineSeqNode::Zipped(self.convert(node)),
                     MergeSpineSeqNode::BothDeleted(mut left_del, mut right_del) => {
-                        self.visit_mut(&mut left_del.node);
-                        self.visit_mut(&mut right_del.node);
+                        self.visit_mut(&mut left_del);
+                        self.visit_mut(&mut right_del);
                         ISpineSeqNode::BothDeleted(left_del, right_del)
                     }
                     MergeSpineSeqNode::OneDeleteConflict(
@@ -278,16 +283,12 @@ where
                         mut conflict_del,
                         conflict_ins,
                     ) => {
-                        if self.can_merge(&del.node, &conflict_ins) {
-                            let del = Colored {
-                                node: self.merge(del.node, conflict_ins),
-                                colors: del.colors,
-                            };
-                            self.visit_mut(&mut conflict_del.node);
-                            ISpineSeqNode::BothDeleted(del, conflict_del)
+                        if self.can_merge(&del, &conflict_ins) {
+                            self.visit_mut(&mut conflict_del);
+                            ISpineSeqNode::BothDeleted(self.merge(del, conflict_ins), conflict_del)
                         } else {
-                            self.visit_mut(&mut del.node);
-                            self.visit_mut(&mut conflict_del.node);
+                            self.visit_mut(&mut del);
+                            self.visit_mut(&mut conflict_del);
                             ISpineSeqNode::DeleteConflict(del, conflict_del, conflict_ins)
                         }
                     }
@@ -298,12 +299,12 @@ where
                         right_ins,
                     ) => {
                         match (
-                            self.can_merge(&right_del.node, &left_ins),
-                            self.can_merge(&left_del.node, &right_ins),
+                            self.can_merge(&right_del, &left_ins),
+                            self.can_merge(&left_del, &right_ins),
                         ) {
                             (false, false) => {
-                                self.visit_mut(&mut left_del.node);
-                                self.visit_mut(&mut right_del.node);
+                                self.visit_mut(&mut left_del);
+                                self.visit_mut(&mut right_del);
                                 ISpineSeqNode::DeleteConflict(
                                     left_del,
                                     right_del,
@@ -311,32 +312,27 @@ where
                                 )
                             }
                             (true, false) => {
-                                let right_del = Colored {
-                                    node: self.merge(right_del.node, left_ins),
-                                    colors: right_del.colors,
-                                };
-                                self.visit_mut(&mut left_del.node);
-                                ISpineSeqNode::DeleteConflict(right_del, left_del, right_ins)
+                                self.visit_mut(&mut left_del);
+                                ISpineSeqNode::DeleteConflict(
+                                    self.merge(right_del, left_ins),
+                                    left_del,
+                                    right_ins,
+                                )
                             }
                             (false, true) => {
-                                let left_del = Colored {
-                                    node: self.merge(left_del.node, right_ins),
-                                    colors: left_del.colors,
-                                };
-                                self.visit_mut(&mut right_del.node);
-                                ISpineSeqNode::DeleteConflict(left_del, right_del, left_ins)
+                                self.visit_mut(&mut right_del);
+                                ISpineSeqNode::DeleteConflict(
+                                    self.merge(left_del, right_ins),
+                                    right_del,
+                                    left_ins,
+                                )
                             }
                             (true, true) => {
                                 // Solve both conflicts at once!
-                                let left_del = Colored {
-                                    node: self.merge(left_del.node, right_ins),
-                                    colors: left_del.colors,
-                                };
-                                let right_del = Colored {
-                                    node: self.merge(right_del.node, left_ins),
-                                    colors: right_del.colors,
-                                };
-                                ISpineSeqNode::BothDeleted(left_del, right_del)
+                                ISpineSeqNode::BothDeleted(
+                                    self.merge(left_del, right_ins),
+                                    self.merge(right_del, left_ins),
+                                )
                             }
                         }
                     }

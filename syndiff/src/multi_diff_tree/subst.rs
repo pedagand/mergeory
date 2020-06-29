@@ -35,6 +35,7 @@ impl Substituter {
         }
     }
 
+    // Warning: The colors on the returned tree are arbitrary and should be replaced or discarded
     fn del_subst<D, I>(&mut self, mv: Metavariable) -> DelNode<D, I>
     where
         Substituter: VisitMut<DelNode<D, I>>,
@@ -42,7 +43,7 @@ impl Substituter {
     {
         let repl = match std::mem::replace(&mut self.del_subst[mv.0], ComputableSubst::Processing) {
             ComputableSubst::Computed(repl_del) => *repl_del.downcast().unwrap(),
-            ComputableSubst::Pending(None) => DelNode::Ellided(mv),
+            ComputableSubst::Pending(None) => DelNode::Ellided(Colored::new_white(mv)),
             ComputableSubst::Pending(Some(repl_del)) => {
                 let mut repl_del = *repl_del.downcast().unwrap();
                 self.visit_mut(&mut repl_del);
@@ -51,7 +52,7 @@ impl Substituter {
             ComputableSubst::Processing => {
                 // In del_subst cycles can only occur between metavariables that should be all
                 // unified together. Break the cycle by behaving once as identity.
-                DelNode::Ellided(mv)
+                DelNode::Ellided(Colored::new_white(mv))
             }
         };
         self.del_subst[mv.0] = ComputableSubst::Computed(Box::new(repl.clone()));
@@ -142,11 +143,16 @@ impl<D, I> VisitMut<DelNode<D, I>> for Substituter
 where
     Substituter: VisitMut<D>,
     DelNode<D, I>: Clone + 'static,
+    ColorReplacer: VisitMut<DelNode<D, I>>,
 {
     fn visit_mut(&mut self, node: &mut DelNode<D, I>) {
         match node {
-            DelNode::InPlace(del) => self.visit_mut(del),
-            DelNode::Ellided(mv) => *node = self.del_subst(*mv),
+            DelNode::InPlace(del) => self.visit_mut(&mut del.node),
+            DelNode::Ellided(mv) => {
+                let mut subst = self.del_subst(mv.node);
+                ColorReplacer(mv.colors).visit_mut(&mut subst);
+                *node = subst;
+            }
             DelNode::MetavariableConflict(_, del, _) => {
                 // The insertion part will be visited only if the conflict stays
                 <Substituter as VisitMut<DelNode<D, I>>>::visit_mut(self, del)
@@ -158,7 +164,7 @@ where
 impl<I: DelEquivType> VisitMut<InsNode<I>> for Substituter
 where
     Substituter: VisitMut<I>,
-    Substituter: VisitMut<I::Del>,
+    Substituter: VisitMut<DelNode<I::Del, I>>,
     IdMerger: Merge<InsNode<I>, InsNode<I>, InsNode<I>>,
     InferInsFromDel: Convert<I::Del, I>,
     InsNode<I>: Clone + 'static,
@@ -245,17 +251,17 @@ where
         for node in &mut seq.0 {
             match node {
                 SpineSeqNode::Zipped(spine) => self.visit_mut(spine),
-                SpineSeqNode::Deleted(del) => self.visit_mut(&mut del.node),
+                SpineSeqNode::Deleted(del) => self.visit_mut(del),
                 SpineSeqNode::DeleteConflict(del, ins) => {
-                    self.visit_mut(&mut del.node);
+                    self.visit_mut(del);
                     self.visit_mut(ins);
 
                     // Solve the delete conflict if del and ins are identical after substitution
                     // ARGH! I don't understand why I need manual type annotation here...
-                    if Merge::<DelNode<D, I>, _, _>::can_merge(&mut IdMerger, &del.node, ins) {
+                    if Merge::<DelNode<D, I>, _, _>::can_merge(&mut IdMerger, del, ins) {
                         *node = SpineSeqNode::Deleted(std::mem::replace(
                             del,
-                            Colored::new_white(DelNode::Ellided(Metavariable(usize::MAX))),
+                            DelNode::Ellided(Colored::new_white(Metavariable(usize::MAX))),
                         ))
                     }
                 }
@@ -289,6 +295,26 @@ where
     }
 }
 
+pub struct ColorReplacer(ColorSet);
+
+impl<D, I> VisitMut<DelNode<D, I>> for ColorReplacer
+where
+    ColorReplacer: VisitMut<D>,
+{
+    fn visit_mut(&mut self, node: &mut DelNode<D, I>) {
+        match node {
+            DelNode::InPlace(del) => {
+                self.visit_mut(&mut del.node);
+                del.colors = self.0;
+            }
+            DelNode::Ellided(mv) => mv.colors = self.0,
+            DelNode::MetavariableConflict(_, del, _) => {
+                VisitMut::<DelNode<D, I>>::visit_mut(self, del)
+            }
+        }
+    }
+}
+
 pub struct InferInsFromDel(ColorSet);
 
 impl<D, I> Convert<DelNode<D, I>, InsNode<I>> for InferInsFromDel
@@ -298,11 +324,11 @@ where
     fn convert(&mut self, del: DelNode<D, I>) -> InsNode<I> {
         match del {
             DelNode::InPlace(del) => InsNode::InPlace(Colored {
-                node: self.convert(del),
+                node: self.convert(del.node),
                 colors: self.0,
             }),
             DelNode::Ellided(mv) => InsNode::Ellided(Colored {
-                node: mv,
+                node: mv.node,
                 colors: self.0,
             }),
             DelNode::MetavariableConflict(_, del, _) => {
@@ -348,14 +374,15 @@ where
 {
     fn visit_mut(&mut self, node: &mut DelNode<D, I>) {
         match node {
-            DelNode::InPlace(del) => self.visit_mut(del),
+            DelNode::InPlace(del) => self.visit_mut(&mut del.node),
             DelNode::Ellided(_) => (),
             DelNode::MetavariableConflict(mv, del, ins) => {
                 VisitMut::<DelNode<D, I>>::visit_mut(self, del);
                 match &self.0.ins_subst[mv.0] {
                     ComputableSubst::Computed(_)
                     | ComputableSubst::Pending(MetavarStatus::Keep) => {
-                        *node = std::mem::replace(&mut **del, DelNode::Ellided(*mv))
+                        *node =
+                            std::mem::replace(&mut **del, DelNode::Ellided(Colored::new_white(*mv)))
                     }
                     ComputableSubst::Pending(MetavarStatus::Conflict)
                     | ComputableSubst::Pending(MetavarStatus::Replace(_)) => {
@@ -398,8 +425,8 @@ where
         for node in &mut seq.0 {
             match node {
                 SpineSeqNode::Zipped(spine) => self.visit_mut(spine),
-                SpineSeqNode::Deleted(del) => self.visit_mut(&mut del.node),
-                SpineSeqNode::DeleteConflict(del, _) => self.visit_mut(&mut del.node),
+                SpineSeqNode::Deleted(del) => self.visit_mut(del),
+                SpineSeqNode::DeleteConflict(del, _) => self.visit_mut(del),
                 SpineSeqNode::Inserted(_) | SpineSeqNode::InsertOrderConflict(_) => (),
             }
         }

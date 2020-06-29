@@ -1,8 +1,8 @@
 use crate::ast;
-use crate::diff_tree::{Aligned, AlignedSeq, ChangeNode, DiffNode};
+use crate::diff_tree::{Aligned, AlignedSeq, ChangeNode, DiffNode, Metavariable};
 use crate::family_traits::Convert;
 use crate::multi_diff_tree::{
-    DelNode, InsNode, InsSeq, InsSeqNode, SpineNode, SpineSeq, SpineSeqNode,
+    ColorSet, Colored, DelNode, InsNode, InsSeq, InsSeqNode, SpineNode, SpineSeq, SpineSeqNode,
 };
 use proc_macro2::{Span, TokenStream};
 use quote::{quote, ToTokens};
@@ -36,61 +36,71 @@ impl VerbatimMacro for syn::Stmt {
     }
 }
 
-pub struct ToSourceRepr;
+pub struct ToSourceRepr(Option<ColorSet>);
+
+impl<O> Convert<Metavariable, O> for ToSourceRepr
+where
+    O: VerbatimMacro,
+{
+    fn convert(&mut self, mv: Metavariable) -> O {
+        O::verbatim_macro(quote!(mv![#mv]))
+    }
+}
 
 // Implementations for converting diff_tree
 
-impl<In, Out: VerbatimMacro> Convert<ChangeNode<In>, Out> for ToSourceRepr
+impl<I, O> Convert<ChangeNode<I>, O> for ToSourceRepr
 where
-    ToSourceRepr: Convert<In, Out>,
+    ToSourceRepr: Convert<I, O>,
+    O: VerbatimMacro,
 {
-    fn convert(&mut self, input: ChangeNode<In>) -> Out {
+    fn convert(&mut self, input: ChangeNode<I>) -> O {
         match input {
             ChangeNode::InPlace(node) => self.convert(node),
-            ChangeNode::Ellided(metavar) => Out::verbatim_macro(quote!(mv![#metavar])),
+            ChangeNode::Ellided(mv) => Convert::<Metavariable, O>::convert(self, mv),
         }
     }
 }
 
-impl<InSpine, InChange, Out: ToTokens + VerbatimMacro> Convert<DiffNode<InSpine, InChange>, Out>
-    for ToSourceRepr
+impl<S, C, O> Convert<DiffNode<S, C>, O> for ToSourceRepr
 where
-    ToSourceRepr: Convert<InSpine, Out>,
-    ToSourceRepr: Convert<InChange, Out>,
+    ToSourceRepr: Convert<S, O>,
+    ToSourceRepr: Convert<C, O>,
+    O: ToTokens + VerbatimMacro,
 {
-    fn convert(&mut self, input: DiffNode<InSpine, InChange>) -> Out {
+    fn convert(&mut self, input: DiffNode<S, C>) -> O {
         match input {
             DiffNode::Spine(node) => self.convert(node),
             DiffNode::Changed(del, ins) => {
-                let del: Out = self.convert(del);
-                let ins: Out = self.convert(ins);
-                Out::verbatim_macro(quote!(changed![{#del}, {#ins}]))
+                let del: O = self.convert(del);
+                let ins: O = self.convert(ins);
+                O::verbatim_macro(quote!(changed![{#del}, {#ins}]))
             }
-            DiffNode::Unchanged(None) => Out::verbatim_macro(quote!(unchanged![])),
-            DiffNode::Unchanged(Some(metavar)) => Out::verbatim_macro(quote!(unchanged![#metavar])),
+            DiffNode::Unchanged(None) => O::verbatim_macro(quote!(unchanged![])),
+            DiffNode::Unchanged(Some(mv)) => O::verbatim_macro(quote!(unchanged![#mv])),
         }
     }
 }
 
-impl<InSpine, InChange, Out: ToTokens + VerbatimMacro>
-    Convert<AlignedSeq<InSpine, InChange>, Vec<Out>> for ToSourceRepr
+impl<S, C, O> Convert<AlignedSeq<S, C>, Vec<O>> for ToSourceRepr
 where
-    ToSourceRepr: Convert<DiffNode<InSpine, InChange>, Out>,
-    ToSourceRepr: Convert<InChange, Out>,
+    ToSourceRepr: Convert<DiffNode<S, C>, O>,
+    ToSourceRepr: Convert<C, O>,
+    O: ToTokens + VerbatimMacro,
 {
-    fn convert(&mut self, input: AlignedSeq<InSpine, InChange>) -> Vec<Out> {
+    fn convert(&mut self, input: AlignedSeq<S, C>) -> Vec<O> {
         input
             .0
             .into_iter()
             .map(|elt| match elt {
                 Aligned::Zipped(spine) => self.convert(spine),
                 Aligned::Deleted(del) => {
-                    let del: Out = self.convert(del);
-                    Out::verbatim_macro(quote!(deleted![#del]))
+                    let del: O = self.convert(del);
+                    O::verbatim_macro(quote!(deleted![#del]))
                 }
                 Aligned::Inserted(ins) => {
-                    let ins: Out = self.convert(ins);
-                    Out::verbatim_macro(quote!(inserted![#ins]))
+                    let ins: O = self.convert(ins);
+                    O::verbatim_macro(quote!(inserted![#ins]))
                 }
             })
             .collect()
@@ -99,16 +109,34 @@ where
 
 // Implementations to convert multi_diff_tree
 
+impl<T, O> Convert<Colored<T>, O> for ToSourceRepr
+where
+    ToSourceRepr: Convert<T, O>,
+    O: ToTokens + VerbatimMacro,
+{
+    fn convert(&mut self, input: Colored<T>) -> O {
+        match self.0 {
+            None => self.convert(input.node),
+            Some(col) if input.colors == col => self.convert(input.node),
+            Some(_) => {
+                let color_set = input.colors;
+                let node = ToSourceRepr(Some(color_set)).convert(input.node);
+                O::verbatim_macro(quote!(colored![#color_set, {#node}]))
+            }
+        }
+    }
+}
+
 impl<D, I, O> Convert<DelNode<D, I>, O> for ToSourceRepr
 where
-    ToSourceRepr: Convert<D, O>,
+    ToSourceRepr: Convert<Colored<D>, O>,
     ToSourceRepr: Convert<InsNode<I>, O>,
     O: ToTokens + VerbatimMacro,
 {
     fn convert(&mut self, input: DelNode<D, I>) -> O {
         match input {
             DelNode::InPlace(del) => self.convert(del),
-            DelNode::Ellided(mv) => O::verbatim_macro(quote!(mv![#mv])),
+            DelNode::Ellided(mv) => self.convert(mv),
             DelNode::MetavariableConflict(mv, del, ins) => {
                 let del = Convert::<DelNode<D, I>, O>::convert(self, *del);
                 let ins = self.convert(ins);
@@ -120,16 +148,13 @@ where
 
 impl<I, O> Convert<InsNode<I>, O> for ToSourceRepr
 where
-    ToSourceRepr: Convert<I, O>,
+    ToSourceRepr: Convert<Colored<I>, O>,
     O: ToTokens + VerbatimMacro,
 {
     fn convert(&mut self, input: InsNode<I>) -> O {
         match input {
-            InsNode::InPlace(ins) => self.convert(ins.node),
-            InsNode::Ellided(mv) => {
-                let mv = mv.node;
-                O::verbatim_macro(quote!(mv![#mv]))
-            }
+            InsNode::InPlace(ins) => self.convert(ins),
+            InsNode::Ellided(mv) => Convert::<Colored<Metavariable>, O>::convert(self, mv),
             InsNode::Conflict(conflict) => {
                 let ins_iter = conflict
                     .into_iter()
@@ -157,10 +182,19 @@ where
                 }
                 InsSeqNode::InsertOrderConflict(ins_vec) => {
                     let ins_seq_iter = ins_vec.into_iter().map(|ins_seq| {
-                        let ins_iter = ins_seq.node.into_iter().map(|ins| self.convert(ins));
-                        quote!(#(#ins_iter)*)
+                        if self.0.is_none() {
+                            let ins_iter = ins_seq.node.into_iter().map(|ins| self.convert(ins));
+                            quote!({#(#ins_iter)*})
+                        } else {
+                            let ins_colors = ins_seq.colors;
+                            let ins_iter = ins_seq
+                                .node
+                                .into_iter()
+                                .map(|ins| ToSourceRepr(Some(ins_colors)).convert(ins));
+                            quote!((#ins_colors, {#(#ins_iter)*}))
+                        }
                     });
-                    O::verbatim_macro(quote!(insert_order_conflict![#({#ins_seq_iter}),*]))
+                    O::verbatim_macro(quote!(insert_order_conflict![#(#ins_seq_iter),*]))
                 }
             })
             .collect()
@@ -179,9 +213,10 @@ where
             SpineNode::Spine(spine) => self.convert(spine),
             SpineNode::Unchanged => O::verbatim_macro(quote!(unchanged![])),
             SpineNode::Changed(DelNode::Ellided(del_mv), InsNode::Ellided(ins_mv))
-                if del_mv == ins_mv.node =>
+                if del_mv.node == ins_mv.node =>
             {
-                O::verbatim_macro(quote!(unchanged![#del_mv]))
+                let mv = del_mv.node;
+                O::verbatim_macro(quote!(unchanged![#mv]))
             }
             SpineNode::Changed(del, ins) => {
                 let del = self.convert(del);
@@ -206,24 +241,42 @@ where
             .map(|node| match node {
                 SpineSeqNode::Zipped(spine) => self.convert(spine),
                 SpineSeqNode::Deleted(del) => {
-                    let del = self.convert(del.node);
+                    let del = self.convert(del);
                     O::verbatim_macro(quote!(deleted![#del]))
                 }
                 SpineSeqNode::DeleteConflict(del, ins) => {
-                    let del = self.convert(del.node);
+                    let del = self.convert(del);
                     let ins = self.convert(ins);
                     O::verbatim_macro(quote!(delete_conflict![{#del}, {#ins}]))
                 }
                 SpineSeqNode::Inserted(ins_seq) => {
-                    let ins_iter = ins_seq.node.into_iter().map(|ins| self.convert(ins));
-                    O::verbatim_macro(quote!(inserted![#(#ins_iter)*]))
+                    if self.0.is_none() {
+                        let ins_iter = ins_seq.node.into_iter().map(|ins| self.convert(ins));
+                        O::verbatim_macro(quote!(inserted![#(#ins_iter)*]))
+                    } else {
+                        let ins_colors = ins_seq.colors;
+                        let ins_iter = ins_seq
+                            .node
+                            .into_iter()
+                            .map(|ins| ToSourceRepr(Some(ins_colors)).convert(ins));
+                        O::verbatim_macro(quote!(inserted![#ins_colors, {#(#ins_iter)*}]))
+                    }
                 }
                 SpineSeqNode::InsertOrderConflict(ins_vec) => {
                     let ins_seq_iter = ins_vec.into_iter().map(|ins_seq| {
-                        let ins_iter = ins_seq.node.into_iter().map(|ins| self.convert(ins));
-                        quote!(#(#ins_iter)*)
+                        if self.0.is_none() {
+                            let ins_iter = ins_seq.node.into_iter().map(|ins| self.convert(ins));
+                            quote!({#(#ins_iter)*})
+                        } else {
+                            let ins_colors = ins_seq.colors;
+                            let ins_iter = ins_seq
+                                .node
+                                .into_iter()
+                                .map(|ins| ToSourceRepr(Some(ins_colors)).convert(ins));
+                            quote!((#ins_colors, {#(#ins_iter)*}))
+                        }
                     });
-                    O::verbatim_macro(quote!(insert_order_conflict![#({#ins_seq_iter}),*]))
+                    O::verbatim_macro(quote!(insert_order_conflict![#(#ins_seq_iter),*]))
                 }
             })
             .collect()
@@ -308,9 +361,16 @@ convert_expr_reference!(
     ast::multi_diff::ExprReference,
 );
 
-pub fn source_repr<In, Out>(input: In) -> Out
+pub fn source_repr<I, O>(input: I) -> O
 where
-    ToSourceRepr: Convert<In, Out>,
+    ToSourceRepr: Convert<I, O>,
 {
-    ToSourceRepr.convert(input)
+    ToSourceRepr(None).convert(input)
+}
+
+pub fn colored_source_repr<I, O>(input: I) -> O
+where
+    ToSourceRepr: Convert<I, O>,
+{
+    ToSourceRepr(Some(ColorSet::white())).convert(input)
 }

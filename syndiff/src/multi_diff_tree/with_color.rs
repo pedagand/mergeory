@@ -53,12 +53,12 @@ where
 
 impl<C, D, I> Convert<ChangeNode<C>, DelNode<D, I>> for WithColor
 where
-    WithColor: Convert<C, D>,
+    WithColor: Convert<C, Colored<D>>,
 {
     fn convert(&mut self, input: ChangeNode<C>) -> DelNode<D, I> {
         match input {
             ChangeNode::InPlace(node) => DelNode::InPlace(self.convert(node)),
-            ChangeNode::Ellided(mv) => DelNode::Ellided(mv),
+            ChangeNode::Ellided(mv) => DelNode::Ellided(self.color(mv)),
         }
     }
 }
@@ -74,8 +74,8 @@ where
             DiffNode::Spine(spine) => SpineNode::Spine(self.convert(spine)),
             DiffNode::Changed(del, ins) => SpineNode::Changed(self.convert(del), self.convert(ins)),
             DiffNode::Unchanged(Some(mv)) => SpineNode::Changed(
-                self.convert(ChangeNode::Ellided(mv)),
-                self.convert(ChangeNode::Ellided(mv)),
+                DelNode::Ellided(Colored::new_white(mv)),
+                InsNode::Ellided(Colored::new_white(mv)),
             ),
             DiffNode::Unchanged(None) => SpineNode::Unchanged,
         }
@@ -85,7 +85,7 @@ where
 impl<S, MS, C, D, I> Convert<AlignedSeq<S, C>, SpineSeq<MS, D, I>> for WithColor
 where
     WithColor: Convert<DiffNode<S, C>, SpineNode<MS, D, I>>,
-    WithColor: Convert<ChangeNode<C>, Colored<DelNode<D, I>>>,
+    WithColor: Convert<ChangeNode<C>, DelNode<D, I>>,
     WithColor: Convert<ChangeNode<C>, InsNode<I>>,
 {
     fn convert(&mut self, input: AlignedSeq<S, C>) -> SpineSeq<MS, D, I> {

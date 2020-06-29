@@ -13,13 +13,13 @@ pub struct MetavarRemover {
 impl<D, I, T> Merge<DelNode<D, I>, T, DelNode<D, I>> for MetavarRemover
 where
     MetavarRemover: Merge<D, T, D>,
-    InferFromSyn: Convert<T, D>,
+    InferFromSynColored: Convert<T, DelNode<D, I>>,
     T: Eq + Clone + 'static,
 {
     fn can_merge(&mut self, diff: &DelNode<D, I>, source: &T) -> bool {
         // Here just compare the in place nodes, without caring about unification problems
         match diff {
-            DelNode::InPlace(d) => self.can_merge(d, source),
+            DelNode::InPlace(d) => self.can_merge(&d.node, source),
             DelNode::Ellided(_) => true,
             DelNode::MetavariableConflict(_, d, _) => {
                 Merge::<DelNode<D, I>, T, _>::can_merge(self, d, source)
@@ -29,15 +29,19 @@ where
 
     fn merge(&mut self, diff: DelNode<D, I>, source: T) -> DelNode<D, I> {
         match diff {
-            DelNode::InPlace(d) => DelNode::InPlace(self.merge(d, source)),
+            DelNode::InPlace(d) => DelNode::InPlace(Colored {
+                node: self.merge(d.node, source),
+                colors: d.colors,
+            }),
             DelNode::Ellided(mv) => {
-                if self.metavar_replacements.len() <= mv.0 {
+                let mv_id = mv.node.0;
+                if self.metavar_replacements.len() <= mv_id {
                     self.metavar_replacements
-                        .resize_with(mv.0 + 1, Default::default);
-                    self.metavar_conflict.resize(mv.0 + 1, false);
+                        .resize_with(mv_id + 1, Default::default);
+                    self.metavar_conflict.resize(mv_id + 1, false);
                 }
-                match &self.metavar_replacements[mv.0] {
-                    None => self.metavar_replacements[mv.0] = Some(Box::new(source.clone())),
+                match &self.metavar_replacements[mv_id] {
+                    None => self.metavar_replacements[mv_id] = Some(Box::new(source.clone())),
                     Some(tree) => {
                         let tree = tree.downcast_ref::<T>().unwrap();
                         if tree != &source {
@@ -45,7 +49,7 @@ where
                         }
                     }
                 }
-                DelNode::InPlace(InferFromSyn.convert(source))
+                InferFromSynColored(mv.colors).convert(source)
             }
             DelNode::MetavariableConflict(mv, del, ins) => {
                 if self.metavar_replacements.len() <= mv.0 {
@@ -110,7 +114,7 @@ where
                         Some(n) => n,
                         None => return false,
                     };
-                    if !self.can_merge(&del.node, source_node) {
+                    if !self.can_merge(del, source_node) {
                         return false;
                     }
                 }
@@ -132,20 +136,11 @@ where
                     }
                     SpineSeqNode::Deleted(del) => {
                         let source_node = source_iter.next().unwrap();
-                        SpineSeqNode::Deleted(Colored {
-                            node: self.merge(del.node, source_node),
-                            colors: del.colors,
-                        })
+                        SpineSeqNode::Deleted(self.merge(del, source_node))
                     }
                     SpineSeqNode::DeleteConflict(del, ins) => {
                         let source_node = source_iter.next().unwrap();
-                        SpineSeqNode::DeleteConflict(
-                            Colored {
-                                node: self.merge(del.node, source_node),
-                                colors: del.colors,
-                            },
-                            ins,
-                        )
+                        SpineSeqNode::DeleteConflict(self.merge(del, source_node), ins)
                     }
                     SpineSeqNode::Inserted(_) | SpineSeqNode::InsertOrderConflict(_) => diff_node,
                 })
@@ -313,16 +308,19 @@ where
     }
 }
 
-pub struct InferFromSyn;
-
-impl<T, D, I> Convert<T, DelNode<D, I>> for InferFromSyn
+impl<T, D, I> Convert<T, DelNode<D, I>> for InferFromSynColored
 where
-    InferFromSyn: Convert<T, D>,
+    InferFromSynColored: Convert<T, D>,
 {
     fn convert(&mut self, node: T) -> DelNode<D, I> {
-        DelNode::InPlace(self.convert(node))
+        DelNode::InPlace(Colored {
+            node: self.convert(node),
+            colors: self.0,
+        })
     }
 }
+
+pub struct InferFromSyn;
 
 impl<T, S, D, I> Convert<T, SpineNode<S, D, I>> for InferFromSyn
 where

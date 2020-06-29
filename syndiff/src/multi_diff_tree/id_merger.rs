@@ -90,8 +90,8 @@ where
 {
     fn can_merge(&mut self, del: &DelNode<D, I>, ins: &InsNode<I>) -> bool {
         match (del, ins) {
-            (DelNode::InPlace(del), InsNode::InPlace(ins)) => self.can_merge(del, &ins.node),
-            (DelNode::Ellided(del_mv), InsNode::Ellided(ins_mv)) => *del_mv == ins_mv.node,
+            (DelNode::InPlace(del), InsNode::InPlace(ins)) => self.can_merge(&del.node, &ins.node),
+            (DelNode::Ellided(del_mv), InsNode::Ellided(ins_mv)) => del_mv.node == ins_mv.node,
             (DelNode::MetavariableConflict(_, del, _), ins) => {
                 Merge::<DelNode<D, I>, _, _>::can_merge(self, del, ins)
             }

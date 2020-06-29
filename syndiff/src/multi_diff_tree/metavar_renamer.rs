@@ -125,12 +125,12 @@ where
         for node in &mut seq.0 {
             match node {
                 SpineSeqNode::Zipped(spine) => self.visit_mut(spine),
-                SpineSeqNode::Deleted(del) => self.visit_mut(&mut del.node),
+                SpineSeqNode::Deleted(del) => self.visit_mut(del),
                 SpineSeqNode::DeleteConflict(del, ins) => {
-                    self.visit_mut(&mut del.node);
+                    self.visit_mut(del);
                     self.visit_mut(ins);
                 }
-                SpineSeqNode::Inserted(ins) => self.visit_mut(&mut ins.node),
+                SpineSeqNode::Inserted(ins) => self.visit_mut(ins),
                 SpineSeqNode::InsertOrderConflict(ins_vec) => {
                     for ins_seq in ins_vec {
                         for ins in &mut ins_seq.node {

@@ -1,5 +1,6 @@
 use crate::diff_tree::Metavariable;
 use crate::family_traits::{Merge, VisitMut};
+use quote::quote;
 
 pub(crate) mod align_spine;
 pub(crate) mod id_merger;
@@ -29,12 +30,43 @@ impl ColorSet {
     pub fn contains(&self, color: usize) -> bool {
         self.0 & (1 << color) != 0
     }
+
+    pub fn color_list(&self) -> Vec<u8> {
+        let mut list = Vec::new();
+        for c in 0..64 {
+            if self.contains(c as usize) {
+                list.push(c)
+            }
+        }
+        list
+    }
 }
 
 impl std::ops::BitOr for ColorSet {
     type Output = ColorSet;
     fn bitor(self, rhs: ColorSet) -> ColorSet {
         ColorSet(self.0 | rhs.0)
+    }
+}
+
+impl std::ops::BitOrAssign for ColorSet {
+    fn bitor_assign(&mut self, rhs: ColorSet) {
+        self.0 |= rhs.0
+    }
+}
+
+impl quote::ToTokens for ColorSet {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        if *self == ColorSet::white() {
+            tokens.extend(std::iter::once(quote!(_)));
+            return;
+        }
+
+        let color_lit = self
+            .color_list()
+            .into_iter()
+            .map(|c| proc_macro2::Literal::u8_unsuffixed(c));
+        tokens.extend(std::iter::once(quote!(#(#color_lit)&*)))
     }
 }
 
@@ -72,8 +104,8 @@ where
 
 #[derive(Clone)]
 pub enum DelNode<D, I> {
-    InPlace(D),
-    Ellided(Metavariable),
+    InPlace(Colored<D>),
+    Ellided(Colored<Metavariable>),
     MetavariableConflict(Metavariable, Box<DelNode<D, I>>, InsNode<I>),
 }
 
@@ -99,8 +131,8 @@ pub enum SpineNode<S, D, I> {
 }
 pub enum SpineSeqNode<S, D, I> {
     Zipped(SpineNode<S, D, I>),
-    Deleted(Colored<DelNode<D, I>>),
-    DeleteConflict(Colored<DelNode<D, I>>, InsNode<I>),
+    Deleted(DelNode<D, I>),
+    DeleteConflict(DelNode<D, I>, InsNode<I>),
     Inserted(Colored<Vec<InsNode<I>>>),
     InsertOrderConflict(Vec<Colored<Vec<InsNode<I>>>>),
 }

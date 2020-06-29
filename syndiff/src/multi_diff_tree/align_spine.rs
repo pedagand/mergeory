@@ -10,14 +10,9 @@ pub enum MergeSpineNode<S, D, I> {
 }
 pub enum MergeSpineSeqNode<S, D, I> {
     Zipped(MergeSpineNode<S, D, I>),
-    BothDeleted(Colored<DelNode<D, I>>, Colored<DelNode<D, I>>),
-    OneDeleteConflict(Colored<DelNode<D, I>>, Colored<DelNode<D, I>>, InsNode<I>),
-    BothDeleteConflict(
-        Colored<DelNode<D, I>>,
-        InsNode<I>,
-        Colored<DelNode<D, I>>,
-        InsNode<I>,
-    ),
+    BothDeleted(DelNode<D, I>, DelNode<D, I>),
+    OneDeleteConflict(DelNode<D, I>, DelNode<D, I>, InsNode<I>),
+    BothDeleteConflict(DelNode<D, I>, InsNode<I>, DelNode<D, I>, InsNode<I>),
     Insert(Vec<Colored<Vec<InsNode<I>>>>),
 }
 pub struct MergeSpineSeq<S, D, I>(pub Vec<MergeSpineSeqNode<S, D, I>>);
@@ -35,7 +30,7 @@ where
             SpineNode::Spine(s) => {
                 let (del, ins) = self.split(s);
                 (
-                    DelNode::InPlace(del),
+                    DelNode::InPlace(Colored::new_white(del)),
                     InsNode::InPlace(Colored::new_white(ins)),
                 )
             }
@@ -43,7 +38,7 @@ where
                 let new_metavar = Metavariable(self.next_metavar);
                 self.next_metavar += 1;
                 (
-                    DelNode::Ellided(new_metavar),
+                    DelNode::Ellided(Colored::new_white(new_metavar)),
                     InsNode::Ellided(Colored::new_white(new_metavar)),
                 )
             }
@@ -60,7 +55,6 @@ where
         let mut del_seq = Vec::new();
         let mut ins_seq = Vec::new();
         for seq_node in input.0 {
-            // FIXME: We lose a color here, this is weird, and probably unsound
             match seq_node {
                 SpineSeqNode::Zipped(node) => {
                     let (del, ins) = self.split(node);
@@ -68,10 +62,10 @@ where
                     ins_seq.push(InsSeqNode::Node(ins));
                 }
                 SpineSeqNode::Deleted(del) => {
-                    del_seq.push(del.node);
+                    del_seq.push(del);
                 }
                 SpineSeqNode::DeleteConflict(del, ins) => {
-                    del_seq.push(del.node);
+                    del_seq.push(del);
                     ins_seq.push(InsSeqNode::DeleteConflict(ins));
                 }
                 SpineSeqNode::Inserted(ins_list) => {
@@ -127,7 +121,7 @@ where
             (SpineNode::Changed(del, ins), SpineNode::Spine(spine))
             | (SpineNode::Spine(spine), SpineNode::Changed(del, ins)) => {
                 let (spine_del, spine_ins) = self.split(spine);
-                let spine_del = DelNode::InPlace(spine_del);
+                let spine_del = DelNode::InPlace(Colored::new_white(spine_del));
                 let spine_ins = InsNode::InPlace(Colored::new_white(spine_ins));
                 MergeSpineNode::BothChanged(del, ins, spine_del, spine_ins)
             }
@@ -179,17 +173,12 @@ where
             (SpineSeqNode::Deleted(del), SpineSeqNode::Zipped(spine))
             | (SpineSeqNode::Zipped(spine), SpineSeqNode::Deleted(del)) => {
                 let (spine_del, spine_ins) = self.split(spine);
-                MergeSpineSeqNode::OneDeleteConflict(del, Colored::new_white(spine_del), spine_ins)
+                MergeSpineSeqNode::OneDeleteConflict(del, spine_del, spine_ins)
             }
             (SpineSeqNode::DeleteConflict(c_del, c_ins), SpineSeqNode::Zipped(spine))
             | (SpineSeqNode::Zipped(spine), SpineSeqNode::DeleteConflict(c_del, c_ins)) => {
                 let (spine_del, spine_ins) = self.split(spine);
-                MergeSpineSeqNode::BothDeleteConflict(
-                    Colored::new_white(spine_del),
-                    spine_ins,
-                    c_del,
-                    c_ins,
-                )
+                MergeSpineSeqNode::BothDeleteConflict(spine_del, spine_ins, c_del, c_ins)
             }
             // Insertions are handled at the SpineSeq level, do not merge them here
             (SpineSeqNode::Inserted(_), _) | (_, SpineSeqNode::Inserted(_)) => unreachable!(),
@@ -299,14 +288,14 @@ where
                     SpineSeqNode::Deleted(del) => {
                         let unchanged_mv = Metavariable(self.next_metavar);
                         self.next_metavar += 1;
-                        let unchanged_del = Colored::new_white(DelNode::Ellided(unchanged_mv));
+                        let unchanged_del = DelNode::Ellided(Colored::new_white(unchanged_mv));
                         let unchanged_ins = InsNode::Ellided(Colored::new_white(unchanged_mv));
                         MergeSpineSeqNode::OneDeleteConflict(del, unchanged_del, unchanged_ins)
                     }
                     SpineSeqNode::DeleteConflict(conflict_del, conflict_ins) => {
                         let unchanged_mv = Metavariable(self.next_metavar);
                         self.next_metavar += 1;
-                        let unchanged_del = Colored::new_white(DelNode::Ellided(unchanged_mv));
+                        let unchanged_del = DelNode::Ellided(Colored::new_white(unchanged_mv));
                         let unchanged_ins = InsNode::Ellided(Colored::new_white(unchanged_mv));
                         MergeSpineSeqNode::BothDeleteConflict(
                             conflict_del,

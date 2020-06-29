@@ -6,23 +6,18 @@ use quote::quote;
 use std::io::Write;
 use std::process::{Command, Stdio};
 use syndiff::multi_diff_tree::remove_metavars;
-use syndiff::source_repr::source_repr;
+use syndiff::source_repr::{colored_source_repr, source_repr};
 use syndiff::{compute_diff, merge_diffs};
-
-#[derive(PartialEq, Eq, Copy, Clone)]
-enum OutputMode {
-    Diff,
-    StandaloneDiff,
-}
 
 fn main() {
     let mut origin_filename = None;
     let mut modified_filenames = Vec::new();
-    let mut output_mode = OutputMode::Diff;
+    let mut standalone_mode = false;
+    let mut colored_mode = false;
     for arg in env::args().skip(1) {
         match arg.as_ref() {
-            "-d" | "--diff" => output_mode = OutputMode::Diff,
-            "-s" | "--standalone" => output_mode = OutputMode::StandaloneDiff,
+            "-s" | "--standalone" => standalone_mode = true,
+            "-c" | "--colored" => colored_mode = true,
             _ => {
                 if origin_filename.is_none() {
                     origin_filename = Some(arg);
@@ -50,15 +45,20 @@ fn main() {
         process::exit(1);
     }
 
-    let result_tree: syn::File = if diff_trees.len() == 1 && output_mode == OutputMode::Diff {
+    let result_tree: syn::File = if diff_trees.len() == 1 && !standalone_mode {
         source_repr(diff_trees.pop().unwrap())
     } else {
         let merged_diffs = merge_diffs(diff_trees).unwrap();
-        let out_tree = match output_mode {
-            OutputMode::Diff => merged_diffs,
-            OutputMode::StandaloneDiff => remove_metavars(merged_diffs, origin_src).unwrap(),
+        let out_tree = if standalone_mode {
+            remove_metavars(merged_diffs, origin_src).unwrap()
+        } else {
+            merged_diffs
         };
-        source_repr(out_tree)
+        if colored_mode {
+            colored_source_repr(out_tree)
+        } else {
+            source_repr(out_tree)
+        }
     };
 
     // Pretty print the result

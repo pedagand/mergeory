@@ -256,18 +256,20 @@ syn_codegen! {
         family_impl!(VisitMut<del> for InsMerger);
         family_impl!(Convert<merge_spine, ins_merged_spine> for InsMerger);
 
-        use crate::multi_diff_tree::merge_del::DelMerger;
+        use crate::multi_diff_tree::merge_del::{DelMerger, ColorAdder};
         family_impl!(Merge<del, del, del> for DelMerger);
         family_impl!(Convert<ins_merged_spine, self> for DelMerger);
+        family_impl!(VisitMut<del> for ColorAdder);
 
         use crate::multi_diff_tree::id_merger::IdMerger;
         family_impl!(Merge<ins, ins, ins> for IdMerger);
         family_impl!(Merge<del, ins, del> for IdMerger);
 
-        use crate::multi_diff_tree::subst::{Substituter, InferInsFromDel, SolvedConflictsRemover};
+        use crate::multi_diff_tree::subst::{Substituter, ColorReplacer, InferInsFromDel, SolvedConflictsRemover};
         family_impl!(VisitMut<del> for Substituter);
         family_impl!(VisitMut<ins> for Substituter);
         family_impl!(VisitMut<self> for Substituter);
+        family_impl!(VisitMut<del> for ColorReplacer);
         family_impl!(Convert<del, ins> for InferInsFromDel);
         family_impl!(VisitMut<del> for SolvedConflictsRemover);
         family_impl!(VisitMut<self> for SolvedConflictsRemover);
@@ -283,7 +285,7 @@ syn_codegen! {
         #[extra_call(proc_macro2::TokenStream, proc_macro2::Literal, proc_macro2::Span, Reserved)]
         family_impl!(Convert<syn, ins> for InferFromSynColored);
         #[extra_call(proc_macro2::TokenStream, proc_macro2::Literal, proc_macro2::Span, Reserved)]
-        family_impl!(Convert<syn, del> for InferFromSyn);
+        family_impl!(Convert<syn, del> for InferFromSynColored);
         #[extra_call(proc_macro2::TokenStream, proc_macro2::Literal, proc_macro2::Span, Reserved)]
         family_impl!(Convert<syn, self> for InferFromSyn);
 
