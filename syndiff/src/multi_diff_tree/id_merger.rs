@@ -11,7 +11,7 @@ where
     fn can_merge(&mut self, left: &InsNode<I>, right: &InsNode<I>) -> bool {
         match (left, right) {
             (InsNode::InPlace(left), InsNode::InPlace(right)) => self.can_merge(left, right),
-            (InsNode::Ellided(left), InsNode::Ellided(right)) => left.node == right.node,
+            (InsNode::Ellided(left), InsNode::Ellided(right)) => left == right,
             (InsNode::Conflict(left), InsNode::Conflict(right)) => {
                 Merge::<Vec<InsNode<I>>, _, _>::can_merge(self, left, right)
             }
@@ -24,10 +24,7 @@ where
             (InsNode::InPlace(left), InsNode::InPlace(right)) => {
                 InsNode::InPlace(self.merge(left, right))
             }
-            (InsNode::Ellided(left), InsNode::Ellided(right)) => InsNode::Ellided(Colored {
-                node: left.node,
-                colors: left.colors | right.colors,
-            }),
+            (InsNode::Ellided(mv), InsNode::Ellided(_)) => InsNode::Ellided(mv),
             (InsNode::Conflict(left), InsNode::Conflict(right)) => {
                 InsNode::Conflict(Merge::<Vec<InsNode<I>>, _, _>::merge(self, left, right))
             }
@@ -91,7 +88,7 @@ where
     fn can_merge(&mut self, del: &DelNode<D, I>, ins: &InsNode<I>) -> bool {
         match (del, ins) {
             (DelNode::InPlace(del), InsNode::InPlace(ins)) => self.can_merge(&del.node, &ins.node),
-            (DelNode::Ellided(del_mv), InsNode::Ellided(ins_mv)) => del_mv.node == ins_mv.node,
+            (DelNode::Ellided(del_mv), InsNode::Ellided(ins_mv)) => del_mv.node == *ins_mv,
             (DelNode::MetavariableConflict(_, del, _), ins) => {
                 Merge::<DelNode<D, I>, _, _>::can_merge(self, del, ins)
             }

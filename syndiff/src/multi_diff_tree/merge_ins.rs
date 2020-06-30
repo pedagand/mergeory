@@ -204,7 +204,7 @@ where
                 *del = DelNode::MetavariableConflict(
                     mv.node,
                     Box::new(DelNode::Ellided(*mv)),
-                    InsNode::Ellided(Colored::new_white(mv.node)),
+                    InsNode::Ellided(mv.node),
                 )
             }
             DelNode::MetavariableConflict(mv, del, _) => {

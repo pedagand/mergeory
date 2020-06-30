@@ -57,9 +57,7 @@ where
     fn visit_mut(&mut self, node: &mut InsNode<I>) {
         match node {
             InsNode::InPlace(subnode) => self.visit_mut(subnode),
-            InsNode::Ellided(metavar) => {
-                VisitMut::<Colored<Metavariable>>::visit_mut(self, metavar)
-            }
+            InsNode::Ellided(metavar) => VisitMut::<Metavariable>::visit_mut(self, metavar),
             InsNode::Conflict(subnodes) => {
                 for subnode in subnodes {
                     VisitMut::<InsNode<I>>::visit_mut(self, subnode)

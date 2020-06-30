@@ -59,7 +59,7 @@ impl Substituter {
         repl
     }
 
-    fn ins_subst<I: DelEquivType>(&mut self, mv: Colored<Metavariable>) -> InsNode<I>
+    fn ins_subst<I: DelEquivType>(&mut self, mv: Metavariable) -> InsNode<I>
     where
         Substituter: VisitMut<InsNode<I>>,
         Substituter: VisitMut<DelNode<I::Del, I>>,
@@ -68,48 +68,34 @@ impl Substituter {
         InsNode<I>: Clone + 'static,
         DelNode<I::Del, I>: Clone + 'static,
     {
-        let mv_id = mv.node.0;
-        let subst = match std::mem::replace(&mut self.ins_subst[mv_id], ComputableSubst::Processing)
+        let subst = match std::mem::replace(&mut self.ins_subst[mv.0], ComputableSubst::Processing)
         {
             ComputableSubst::Computed(repl_ins) => {
-                let subst = *repl_ins.downcast::<InsNode<I>>().unwrap();
-                self.ins_subst[mv_id] = ComputableSubst::Computed(Box::new(subst.clone()));
-                Some(subst)
+                Some(*repl_ins.downcast::<InsNode<I>>().unwrap())
             }
             ComputableSubst::Pending(MetavarStatus::Keep) => {
-                // Recompute everytime to allow different color sets
-                self.ins_subst[mv_id] = ComputableSubst::Pending(MetavarStatus::Keep);
                 // Build the insertion substitution from the deletion substitution
-                let del_subst = self.del_subst(mv.node);
-                Some(InferInsFromDel(mv.colors).convert(del_subst))
+                let del_subst = self.del_subst(mv);
+                Some(InferInsFromDel.convert(del_subst))
             }
             ComputableSubst::Pending(MetavarStatus::Replace(repl_ins)) => {
-                self.ins_cycle_stack.push((mv.node, false));
+                self.ins_cycle_stack.push((mv, false));
                 let mut repl_ins = *repl_ins.downcast::<Vec<InsNode<I>>>().unwrap();
                 for ins in &mut repl_ins {
                     self.visit_mut(ins)
                 }
                 let (cycle_mv, cycle) = self.ins_cycle_stack.pop().unwrap();
-                assert!(cycle_mv == mv.node);
+                assert!(cycle_mv == mv);
                 if !cycle {
                     // No cycle during computation on potential replacements, try to fuse them
                     let last_ins = repl_ins.pop().unwrap();
-                    let merged_ins = repl_ins.into_iter().try_fold(last_ins, |acc, ins| {
+                    repl_ins.into_iter().try_fold(last_ins, |acc, ins| {
                         if IdMerger.can_merge(&acc, &ins) {
                             Some(IdMerger.merge(acc, ins))
                         } else {
                             None
                         }
-                    });
-                    match merged_ins {
-                        Some(repl_ins) => {
-                            // All the potential substitutions are mergeable
-                            self.ins_subst[mv_id] =
-                                ComputableSubst::Computed(Box::new(repl_ins.clone()));
-                            Some(repl_ins)
-                        }
-                        None => None,
-                    }
+                    })
                 } else {
                     None
                 }
@@ -120,19 +106,22 @@ impl Substituter {
                 // in that cycle.
                 for (stack_mv, cycle_flag) in self.ins_cycle_stack.iter_mut().rev() {
                     *cycle_flag = true;
-                    if *stack_mv == mv.node {
+                    if *stack_mv == mv {
                         break;
                     }
                 }
-                assert!(!self.ins_cycle_stack[0].1 || self.ins_cycle_stack[0].0 == mv.node);
+                assert!(!self.ins_cycle_stack[0].1 || self.ins_cycle_stack[0].0 == mv);
                 None
             }
         };
         match subst {
-            Some(subst) => subst,
+            Some(subst) => {
+                self.ins_subst[mv.0] = ComputableSubst::Computed(Box::new(subst.clone()));
+                subst
+            }
             None => {
-                // Save conflict and return a simple colored metavariable
-                self.ins_subst[mv_id] = ComputableSubst::Pending(MetavarStatus::Conflict);
+                // Save conflict and return a simple white metavariable
+                self.ins_subst[mv.0] = ComputableSubst::Pending(MetavarStatus::Conflict);
                 InsNode::Ellided(mv)
             }
         }
@@ -315,7 +304,7 @@ where
     }
 }
 
-pub struct InferInsFromDel(ColorSet);
+pub struct InferInsFromDel;
 
 impl<D, I> Convert<DelNode<D, I>, InsNode<I>> for InferInsFromDel
 where
@@ -323,14 +312,8 @@ where
 {
     fn convert(&mut self, del: DelNode<D, I>) -> InsNode<I> {
         match del {
-            DelNode::InPlace(del) => InsNode::InPlace(Colored {
-                node: self.convert(del.node),
-                colors: self.0,
-            }),
-            DelNode::Ellided(mv) => InsNode::Ellided(Colored {
-                node: mv.node,
-                colors: self.0,
-            }),
+            DelNode::InPlace(del) => InsNode::InPlace(Colored::new_white(self.convert(del.node))),
+            DelNode::Ellided(mv) => InsNode::Ellided(mv.node),
             DelNode::MetavariableConflict(_, del, _) => {
                 Convert::<DelNode<D, I>, _>::convert(self, *del)
             }

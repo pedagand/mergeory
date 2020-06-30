@@ -1,3 +1,4 @@
+use super::id_merger::IdMerger;
 use super::{
     ColorSet, Colored, DelNode, InsNode, InsSeq, InsSeqNode, SpineNode, SpineSeq, SpineSeqNode,
 };
@@ -13,8 +14,11 @@ pub struct MetavarRemover {
 impl<D, I, T> Merge<DelNode<D, I>, T, DelNode<D, I>> for MetavarRemover
 where
     MetavarRemover: Merge<D, T, D>,
+    InferFromSyn: Convert<T, InsNode<I>>,
     InferFromSynColored: Convert<T, DelNode<D, I>>,
-    T: Eq + Clone + 'static,
+    IdMerger: Merge<InsNode<I>, InsNode<I>, InsNode<I>>,
+    InsNode<I>: 'static,
+    T: Clone,
 {
     fn can_merge(&mut self, diff: &DelNode<D, I>, source: &T) -> bool {
         // Here just compare the in place nodes, without caring about unification problems
@@ -40,11 +44,13 @@ where
                         .resize_with(mv_id + 1, Default::default);
                     self.metavar_conflict.resize(mv_id + 1, false);
                 }
+
+                let ins_repl = InferFromSyn.convert(source.clone());
                 match &self.metavar_replacements[mv_id] {
-                    None => self.metavar_replacements[mv_id] = Some(Box::new(source.clone())),
-                    Some(tree) => {
-                        let tree = tree.downcast_ref::<T>().unwrap();
-                        if tree != &source {
+                    None => self.metavar_replacements[mv_id] = Some(Box::new(ins_repl)),
+                    Some(cur_repl) => {
+                        let cur_repl = cur_repl.downcast_ref::<InsNode<I>>().unwrap();
+                        if !IdMerger.can_merge(cur_repl, &ins_repl) {
                             self.mergeable = false;
                         }
                     }
@@ -176,25 +182,23 @@ where
     }
 }
 
-impl<I: SynEquivType> VisitMut<InsNode<I>> for MetavarRemover
+impl<I> VisitMut<InsNode<I>> for MetavarRemover
 where
     MetavarRemover: VisitMut<Colored<I>>,
-    InferFromSynColored: Convert<I::Syn, InsNode<I>>,
-    I::Syn: Clone + 'static,
+    InsNode<I>: Clone + 'static,
 {
     fn visit_mut(&mut self, node: &mut InsNode<I>) {
         match node {
             InsNode::InPlace(ins) => self.visit_mut(ins),
             InsNode::Ellided(mv) => {
-                if self.metavar_replacements.len() <= mv.node.0 {
+                if self.metavar_replacements.len() <= mv.0 {
                     panic!("A metavariable appears in insertion but never in deletion");
                 }
-                if !self.metavar_conflict[mv.node.0] {
-                    match &self.metavar_replacements[mv.node.0] {
+                if !self.metavar_conflict[mv.0] {
+                    match &self.metavar_replacements[mv.0] {
                         None => panic!("A metavariable appears in insertion but never in deletion"),
                         Some(repl) => {
-                            let repl = repl.downcast_ref::<I::Syn>().unwrap().clone();
-                            *node = InferFromSynColored(mv.colors).convert(repl)
+                            *node = repl.downcast_ref::<InsNode<I>>().unwrap().clone();
                         }
                     }
                 }
@@ -282,32 +286,6 @@ where
 
 pub struct InferFromSynColored(ColorSet);
 
-impl<T, I> Convert<T, InsNode<I>> for InferFromSynColored
-where
-    InferFromSynColored: Convert<T, I>,
-{
-    fn convert(&mut self, node: T) -> InsNode<I> {
-        InsNode::InPlace(Colored {
-            node: self.convert(node),
-            colors: self.0,
-        })
-    }
-}
-
-impl<T, I> Convert<Vec<T>, InsSeq<I>> for InferFromSynColored
-where
-    InferFromSynColored: Convert<T, InsNode<I>>,
-{
-    fn convert(&mut self, node_seq: Vec<T>) -> InsSeq<I> {
-        InsSeq(
-            node_seq
-                .into_iter()
-                .map(|node| InsSeqNode::Node(self.convert(node)))
-                .collect(),
-        )
-    }
-}
-
 impl<T, D, I> Convert<T, DelNode<D, I>> for InferFromSynColored
 where
     InferFromSynColored: Convert<T, D>,
@@ -321,6 +299,29 @@ where
 }
 
 pub struct InferFromSyn;
+
+impl<T, I> Convert<T, InsNode<I>> for InferFromSyn
+where
+    InferFromSyn: Convert<T, I>,
+{
+    fn convert(&mut self, node: T) -> InsNode<I> {
+        InsNode::InPlace(Colored::new_white(self.convert(node)))
+    }
+}
+
+impl<T, I> Convert<Vec<T>, InsSeq<I>> for InferFromSyn
+where
+    InferFromSyn: Convert<T, InsNode<I>>,
+{
+    fn convert(&mut self, node_seq: Vec<T>) -> InsSeq<I> {
+        InsSeq(
+            node_seq
+                .into_iter()
+                .map(|node| InsSeqNode::Node(self.convert(node)))
+                .collect(),
+        )
+    }
+}
 
 impl<T, S, D, I> Convert<T, SpineNode<S, D, I>> for InferFromSyn
 where
@@ -344,19 +345,6 @@ where
         )
     }
 }
-
-pub trait SynEquivType {
-    type Syn;
-}
-
-macro_rules! impl_syn_equiv_type_for_ins {
-    { $($ast_typ:ident),* } => {
-        $(impl SynEquivType for crate::ast::multi_diff::ins::$ast_typ {
-            type Syn = syn::$ast_typ;
-        })*
-    }
-}
-impl_syn_equiv_type_for_ins!(Expr, Stmt, Item, TraitItem, ImplItem, ForeignItem);
 
 pub fn remove_metavars<S, T>(multi_diff: S, source: T) -> Option<S>
 where

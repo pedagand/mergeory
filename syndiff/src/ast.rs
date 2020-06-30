@@ -283,9 +283,9 @@ syn_codegen! {
         family_impl!(VisitMut<del> for MetavarRemover);
         family_impl!(VisitMut<self> for MetavarRemover);
         #[extra_call(proc_macro2::TokenStream, proc_macro2::Literal, proc_macro2::Span, Reserved)]
-        family_impl!(Convert<syn, ins> for InferFromSynColored);
-        #[extra_call(proc_macro2::TokenStream, proc_macro2::Literal, proc_macro2::Span, Reserved)]
         family_impl!(Convert<syn, del> for InferFromSynColored);
+        #[extra_call(proc_macro2::TokenStream, proc_macro2::Literal, proc_macro2::Span, Reserved)]
+        family_impl!(Convert<syn, ins> for InferFromSyn);
         #[extra_call(proc_macro2::TokenStream, proc_macro2::Literal, proc_macro2::Span, Reserved)]
         family_impl!(Convert<syn, self> for InferFromSyn);
 

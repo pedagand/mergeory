@@ -154,7 +154,7 @@ where
     fn convert(&mut self, input: InsNode<I>) -> O {
         match input {
             InsNode::InPlace(ins) => self.convert(ins),
-            InsNode::Ellided(mv) => Convert::<Colored<Metavariable>, O>::convert(self, mv),
+            InsNode::Ellided(mv) => Convert::<Metavariable, O>::convert(self, mv),
             InsNode::Conflict(conflict) => {
                 let ins_iter = conflict
                     .into_iter()
@@ -213,10 +213,9 @@ where
             SpineNode::Spine(spine) => self.convert(spine),
             SpineNode::Unchanged => O::verbatim_macro(quote!(unchanged![])),
             SpineNode::Changed(DelNode::Ellided(del_mv), InsNode::Ellided(ins_mv))
-                if del_mv.node == ins_mv.node =>
+                if del_mv.node == ins_mv =>
             {
-                let mv = del_mv.node;
-                O::verbatim_macro(quote!(unchanged![#mv]))
+                O::verbatim_macro(quote!(unchanged![#ins_mv]))
             }
             SpineNode::Changed(del, ins) => {
                 let del = self.convert(del);

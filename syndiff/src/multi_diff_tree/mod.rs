@@ -112,7 +112,7 @@ pub enum DelNode<D, I> {
 #[derive(Clone)]
 pub enum InsNode<I> {
     InPlace(Colored<I>),
-    Ellided(Colored<Metavariable>),
+    Ellided(Metavariable),
     Conflict(Vec<InsNode<I>>),
 }
 #[derive(Clone)]
