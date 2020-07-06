@@ -1,5 +1,7 @@
 \documentclass[a4paper,10pt]{article}
 \usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[top=2.5cm, bottom=2.5cm, left=2.5cm, right=2.5cm]{geometry}
 
 \title{Notes about theory of merge}
 \author{Guillaume Bertholon}
@@ -10,7 +12,14 @@
   breaklines=true,
   extendedchars=true,
   captionpos=b,
-  style=boxed
+  style=boxed,
+  escapechar=@,
+  stringstyle=,
+  keywordstyle=,% reserved keywords
+  keywordstyle=[2],% traits
+  keywordstyle=[3],% primitive types
+  keywordstyle=[4],% type and value constructors
+  keywordstyle=[5],% macros
 }
 
 \usepackage{tikz}
@@ -28,6 +37,8 @@
 
 \usepackage{bussproofs}
 \usepackage{amsmath}
+\usepackage{soul}
+\usepackage{amssymb}
 \newcommand{\typsep}{\ |\ }
 
 \usepackage{hyperref}
@@ -39,7 +50,170 @@
 
 \maketitle
 
-How can we compose simulataneous changes?
+In software ingeneering people rarely work alone on big projects. Therefore, quite often they want to merge their work with what has been done by others. To ease these fusions, and keep track of the changes, they often use version control systems such as Git. We will call a commit, an atomic action of changing several files that makes sense by itself (whatever this may mean for the programmer). Typical commits are refactorings, bugfixes or new features added. Programers make commits simulataneously, beeing unaware of what other users may have done at the same time, however the final product is a fusion what they all did. This space of unawareness can lead to subtle bugs, that cannot be seen if people only review changes and not the final code\footnote{Modern coding techniques involve continuous integration testing to mitigate that, but tests cases are rarely perfect, and we want to expose another approach.}.
+
+\section{Overview}
+
+We will present there a method to merge syntactically source codes, and then deducing which expressions remain semantically ambiguous. A semantic ambiguity means that nobody from the original commiters, was fully aware of its value, or said differently, it has a value that comes from the fusion operation itself. These ambiguity points, should be manually reviewed, and resolved.
+
+I will there quickly present on an example the ideas of this new merging procedure, the full description beeing given later.
+
+Suppose we have the following code (middle) with two simulataneous commits (left and right):
+\noindent
+\begin{minipage}{.32\textwidth}
+\begin{lstlisting}[rulecolor=\color{blue!20}]
+// Blue commit
+fn f(c: bool) {
+    let x = answer();
+    let k = if c {
+        2
+    } else {
+        x * x
+    };
+    let y = k * x;
+    println!("{}", y)
+}
+
+fn answer() -> i32 {
+    let a = 2;
+    let b = 40;
+    a + b
+}
+\end{lstlisting}
+\end{minipage}\hfill
+\begin{minipage}{.32\textwidth}
+\begin{lstlisting}
+// Original
+fn f(c: bool) {
+    let a = 2;
+    let b = 40;
+    let x = a + b;
+
+    let k = if c {
+        2
+    } else {
+        x
+    };
+
+    let y = k * x;
+    println!("{}", y)
+}
+\end{lstlisting}
+\end{minipage}\hfill
+\begin{minipage}{.32\textwidth}
+\begin{lstlisting}[rulecolor=\color{orange!30}]
+// Orange commit
+fn f(c: bool) {
+    let a = 4;
+    let b = 41;
+    let x = a + b;
+
+    let k = if c {
+        1
+    } else {
+        x
+    };
+
+    let y = k * x;
+    println!("{}", y)
+}
+\end{lstlisting}
+\end{minipage}
+\vspace{-.4cm}
+\begin{lstlisting}[label=lst:overview_commits, caption={A source code and two concurrent commits on it}]
+\end{lstlisting}
+
+We first compute two syntax driven differences for each commit that we want to merge. Differences can have either unchanged holes (depicted as $\square$ below), or multi-source multi-target code moves (depicted as greek letters) to abstract away subtrees that are irrelevant for the commit and ease fusion later.
+
+To take into account the knowledge of a commit of some modification we use awareness colors. Each commit is associated with a tint. If a piece of code has a given tint, then it is known by the corresponding commit. The color that we call white is given to the source program and is considered as having all the tints at once. In the example, left commit has blue tint, and right commit has orange tint. We can see in their diff that they taint the code they introduced and the modification they made.
+
+\noindent
+\begin{minipage}{.32\textwidth}
+\setstcolor{blue}
+\setulcolor{blue}
+\begin{lstlisting}[rulecolor=\color{blue!20}]
+fn f(c: bool) {
+    @\st{$\alpha$}@;
+    @\st{$\beta$}@;
+    let x = @\st{$\gamma$} $\rightarrow$@
+        @{\color{blue} \ul{answer()}}@;
+    let k = if @$\square$@ {
+        @$\square$@;
+    } else {
+        @\st{$\delta$} $\rightarrow$ \ul{$\delta$ {\color{blue}*} $\delta$}@
+    };
+    @$\square$@;
+    @$\square$@;
+}
+
+@{\color{blue} \ul{fn answer() -> i32 \{}}@
+    @\ul{$\alpha${\color{blue};}}@
+    @\ul{$\beta${\color{blue};\color{black}}}@
+    @\ul{$\gamma$}@
+@{\color{blue} \ul{\}}}@
+\end{lstlisting}
+\end{minipage}\hfill
+\begin{minipage}{.32\textwidth}
+\begin{lstlisting}
+fn f(c: bool) {
+    @\setstcolor{blue}\st{let a = {\color{orange}2}}@;
+    @\setstcolor{blue}\st{let b = {\color{orange}40}}@;
+    let x = @\setstcolor{blue}\st{a + b}@ @$\rightarrow$@
+        @{\color{blue}\ul{answer()}}@;
+    let k = if c {
+        @\setstcolor{orange}\st{2} $\rightarrow$ {\color{orange}\ul{1}}@
+    } else {
+        @\setstcolor{blue}\st{x} $\rightarrow$ \setulcolor{blue}\ul{x {\color{blue}*} x}@
+    };
+    let y = k * x;
+    println!("{}", y)
+}
+
+@{\color{blue}\ul{fn answer() -> i32 \{}}@
+    @\setulcolor{blue}\ul{let a = {\color{orange}4};}@
+    @\setulcolor{blue}\ul{let b = {\color{orange}41};}@
+    @\setulcolor{blue}\ul{a + b}@
+@{\color{blue}\ul{\}}}@
+\end{lstlisting}
+\end{minipage}\hfill
+\begin{minipage}{.32\textwidth}
+\setstcolor{orange}
+\setulcolor{orange}
+\begin{lstlisting}[rulecolor=\color{orange!30}]
+fn f(c: bool) {
+    let a = @\st{2} $\rightarrow$ {\color{orange}\ul{4}}@;
+    let b = @\st{40} $\rightarrow$ {\color{orange}\ul{41}}@;
+    @$\square$@;
+
+    let k = if @$\square$@ {
+        @\st{2} $\rightarrow$ {\color{orange}\ul{1}}@
+    } else {
+        @$\square$@
+    };
+    @$\square$@;
+    @$\square$@;
+}
+
+
+
+
+
+@@
+\end{lstlisting}
+\end{minipage}\hfill
+\vspace{-.4cm}
+\begin{lstlisting}[label=lst:overview_diffs, caption={Left (resp. right) represent the difference between original source code and blue commit (resp. orange commit). Center is the syntactic fusion of these two differences.}]
+\end{lstlisting}
+
+After having generated individual syntactic differences, we can merge them  and remove holes by reusing the original program, producing the code above in the middle. This process is designed such that it never makes any arbitrary choices, and can sometimes generate conflicts. However, it tries whenever possible to push the changes following moved code to ease refactoring fusions (see lines 16 and 17). Note that this process propagates awareness colors.
+
+Then we can enter in the semantic check phase. The key idea here is to interpret a difference as a correlation oracle that links the merged program to the original one. On this oracle, we derive an analysis that checks the absence of behaviour that depends on an ambiguous value. Ambiguity can be linked to the color black (ie. without any tint), because it means that nobody is aware of the value. The necessity of doing this analysis on a correlation oracle and not the resulting program comes from the fact that deleted instructions must be taken into account.
+
+In our example the color black appears for instance at line 11 when $c$ is true, because variable $x$ gets a blue color at line 4, and variable $k$ gets an orange color at line 7, therefore value of variable $y$ at line 11 is not known by any commit. It also appears at line 16 and 17 as orange is not aware that its code has been moved, and blue could theoretically have reordered instructions.
+
+This analysis can be theoretically described on traces, but in practice we need a static analysis. This is possible but we need to be careful with branching for instance at line 10, variable $k$ can have either color blue or orange. This is not a problem in practice because we can create a new virtual color representing the superposition of blue and orange and simply continue the analysis.
+
+To finish this example, we need a user to be able to efficiently resolve the conflicts. Here saying that on lines 2 to 5 and 15 to 19, blue has done only semantic preserving changes is enough as it will remove the blue colors in each of these lines. Therefore, given this information, the two commits can be safely merged with the guarantee that no unintented behaviour\footnote{Side channel attack vectors might still be silently introduced unless we also model them into the analysis.} will be silently introduced by the fusion itself.
 
 \section{Definitions}
 
@@ -457,12 +631,9 @@ Where $\oplus$ is a function transposing a deletion tree to an insertion tree by
 \end{prooftree}
 
 \section{Semantic merge}
-\paragraph{TODO} Update this section!
-
 Having two commits syntactically merged do not mean that the result is a valid
 semantic combination that respect the intention of all original commits.
-That's why after this first syntax step, we must also check the semantic of the
-fusion.
+That's why after this first syntax merging step, we must also check the semantic of the fusion.
 
 \subsection{A key principle: mandatory disambiguation}
 \paragraph{A generic definition of a valid merge} A merge is valid if for any state of the program, there is a single unambiguous trace after applying all the modifications of the concurrent commits. There should be no automatic choice in favor of any of the commits. This means that if two commits touched the same state of the program or the same expression at the same time, the merge will be considered not valid. We call a point in a trace where the semantic is ambiguous a collision.
