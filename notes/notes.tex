@@ -50,15 +50,16 @@
 
 \maketitle
 
-In software ingeneering people rarely work alone on big projects. Therefore, quite often they want to merge their work with what has been done by others. To ease these fusions, and keep track of the changes, they often use version control systems such as Git. We will call a commit, an atomic action of changing several files that makes sense by itself (whatever this may mean for the programmer). Typical commits are refactorings, bugfixes or new features added. Programers make commits simulataneously, beeing unaware of what other users may have done at the same time, however the final product is a fusion what they all did. This space of unawareness can lead to subtle bugs, that cannot be seen if people only review changes and not the final code\footnote{Modern coding techniques involve continuous integration testing to mitigate that, but tests cases are rarely perfect, and we want to expose another approach.}.
+In software engineering people rarely work alone on big projects. Therefore, quite often they want to merge their work with what has been done by others. To ease these fusions, and keep track of the changes, they often use version control systems such as Git. We will call a commit, an atomic action of changing several files that makes sense by itself (whatever this may mean for the programmer). Typical commits are refactorings, bugfixes or new features added. Programmers make commits simultaneously, being unaware of what other users may have done at the same time, however the final product is a fusion what they all did. This space of unawareness can lead to subtle bugs, that cannot be seen if people only review changes and not the final code\footnote{Modern coding techniques involve continuous integration testing to mitigate that, but tests cases are rarely perfect, and we want to expose another approach.}.
 
 \section{Overview}
 
-We will present there a method to merge syntactically source codes, and then deducing which expressions remain semantically ambiguous. A semantic ambiguity means that nobody from the original commiters, was fully aware of its value, or said differently, it has a value that comes from the fusion operation itself. These ambiguity points, should be manually reviewed, and resolved.
+We will present there a method to merge syntactically source codes, and then deducing which expressions remain semantically ambiguous. A semantic ambiguity means that nobody from the original committers, was fully aware of its value, or said differently, it has a value that comes from the fusion operation itself. These ambiguity points, should be manually reviewed, and resolved.
 
-I will there quickly present on an example the ideas of this new merging procedure, the full description beeing given later.
+I will there quickly present on an example the ideas of this new merging procedure, the full description being given later.
 
-Suppose we have the following code (middle) with two simulataneous commits (left and right):
+Suppose we have the following code (middle) with two simultaneous commits (left and right):
+
 \noindent
 \begin{minipage}{.32\textwidth}
 \begin{lstlisting}[rulecolor=\color{blue!20}]
@@ -123,7 +124,7 @@ fn f(c: bool) {
 \begin{lstlisting}[label=lst:overview_commits, caption={A source code and two concurrent commits on it}]
 \end{lstlisting}
 
-We first compute two syntax driven differences for each commit that we want to merge. Differences can have either unchanged holes (depicted as $\square$ below), or multi-source multi-target code moves (depicted as greek letters) to abstract away subtrees that are irrelevant for the commit and ease fusion later.
+We first compute two syntax driven differences for each commit that we want to merge. Differences can have either unchanged holes (depicted as $\square$ below), or multi-source multi-target code moves (depicted as Greek letters) to abstract away sub-trees that are irrelevant for the commit and ease fusion later.
 
 To take into account the knowledge of a commit of some modification we use awareness colors. Each commit is associated with a tint. If a piece of code has a given tint, then it is known by the corresponding commit. The color that we call white is given to the source program and is considered as having all the tints at once. In the example, left commit has blue tint, and right commit has orange tint. We can see in their diff that they taint the code they introduced and the modification they made.
 
@@ -207,13 +208,13 @@ fn f(c: bool) {
 
 After having generated individual syntactic differences, we can merge them  and remove holes by reusing the original program, producing the code above in the middle. This process is designed such that it never makes any arbitrary choices, and can sometimes generate conflicts. However, it tries whenever possible to push the changes following moved code to ease refactoring fusions (see lines 16 and 17). Note that this process propagates awareness colors.
 
-Then we can enter in the semantic check phase. The key idea here is to interpret a difference as a correlation oracle that links the merged program to the original one. On this oracle, we derive an analysis that checks the absence of behaviour that depends on an ambiguous value. Ambiguity can be linked to the color black (ie. without any tint), because it means that nobody is aware of the value. The necessity of doing this analysis on a correlation oracle and not the resulting program comes from the fact that deleted instructions must be taken into account.
+Then we can enter in the semantic check phase. The key idea here is to interpret a difference as a correlation oracle that links the merged program to the original one. On this oracle, we derive an analysis that checks the absence of behavior that depends on an ambiguous value. Ambiguity can be linked to the color black (i.e. without any tint), because it means that nobody is aware of the value. The necessity of doing this analysis on a correlation oracle and not the resulting program comes from the fact that deleted instructions must be taken into account.
 
 In our example the color black appears for instance at line 11 when $c$ is true, because variable $x$ gets a blue color at line 4, and variable $k$ gets an orange color at line 7, therefore value of variable $y$ at line 11 is not known by any commit. It also appears at line 16 and 17 as orange is not aware that its code has been moved, and blue could theoretically have reordered instructions.
 
-This analysis can be theoretically described on traces, but in practice we need a static analysis. This is possible but we need to be careful with branching for instance at line 10, variable $k$ can have either color blue or orange. This is not a problem in practice because we can create a new virtual color representing the superposition of blue and orange and simply continue the analysis.
+This analysis can be theoretically described on traces, but in practice we need a static analysis. This is possible but we need to be careful with branching for instance at line 10, variable $k$ can have either color blue or orange. We will see that this is not a problem because we can create a new virtual color representing the superposition of blue and orange and simply continue the analysis.
 
-To finish this example, we need a user to be able to efficiently resolve the conflicts. Here saying that on lines 2 to 5 and 15 to 19, blue has done only semantic preserving changes is enough as it will remove the blue colors in each of these lines. Therefore, given this information, the two commits can be safely merged with the guarantee that no unintented behaviour\footnote{Side channel attack vectors might still be silently introduced unless we also model them into the analysis.} will be silently introduced by the fusion itself.
+To finish this example, we need a user to be able to efficiently resolve the conflicts. Here saying that on lines 2 to 5 and 15 to 19, blue has done only semantic preserving changes is enough as it will remove the blue colors in each of these lines. Therefore, given this information, the two commits can be safely merged with the guarantee that no unintended behavior\footnote{Side channel attack vectors might still be silently introduced unless we also model them into the analysis.} will be silently introduced by the fusion itself.
 
 \section{Definitions}
 
@@ -263,10 +264,10 @@ We encode program differences as a new kind of syntax tree that follows the cons
 Basically, a difference can be viewed as two syntax trees, a deleted one, and an inserted one. Therefore the simplest valid difference from code $d$ to code $i$ is simply the pair $(d, i)$.
 
 However, to ease fusion, produce better output and remove redundancy we change two things.
-First, we ellide identical subtrees that are present in both $d$ and $i$.
+First, we elide identical sub-trees that are present in both $d$ and $i$.
 Secondly, we merge together identical constructions between the deletion and insertion tree starting from the root.
 
-The ellisions can be seen as code moved from a location in $d$ into another location in $i$, but the actual content is temporarily forgotten inside what we call a metavariable. In this paper, we will denote these ellisions by $\alpha, \beta, \gamma,$ and so on.
+The elisions can be seen as code moved from a location in $d$ into another location in $i$, but the actual content is temporarily forgotten inside what we call a meta-variable. In this paper, we will denote these elisions by $\alpha, \beta, \gamma,$ and so on.
 
 Trying to merge together two nodes in the AST is easy, we simply need to check if they use the same root constructor, recursively merge if it is the case, and fail otherwise. However, this approach is really bad with sequences (eg. sequences of functions or sequences of statements). We do not want to fully split a list if only one element has been inserted, removed or changed. Therefore, we use list edit scripts instead as the output of a merge operation on two sequences. We call the merged part of the difference tree its spine.
 
@@ -283,11 +284,11 @@ s &::= Zip(t) \typsep Del(c) \typsep Ins(c)\\
 To compute a syntactic difference, we take ASTs of both the original and the modified program and we run the following algorithm:
 \begin{itemize}
   \item Compute a hash for each node of each AST.
-  \item Take the subset of hashes occuring both in original and modified AST.
-  \item Ellide the nodes with a hash in the subset to remember just their hash.
-  \item If an ellided node do not match an ellision with the same hash in the other tree, replace it by the original subtree.
-  \item Merge both AST into a common spine where possible, else keep changes as two separate ellided trees. Always try to align sequences using recursively a dynamic algorithm minimizing the number of nodes of the resulting tree.
-  \item Optionally, replace each hash by a metavariable index for readability and simplicity.
+  \item Take the subset of hashes occurring both in original and modified AST.
+  \item Elide the nodes with a hash in the subset to remember just their hash.
+  \item If an elided node do not match an elision with the same hash in the other tree, replace it by the original sub-tree.
+  \item Merge both AST into a common spine where possible, else keep changes as two separate elided trees. Always try to align sequences using recursively a dynamic algorithm minimizing the number of nodes of the resulting tree.
+  \item Optionally, replace each hash by a meta-variable index for readability and simplicity.
 \end{itemize}
 
 This algorithm is in $O(nm)$ where $n$ (resp. $m$) is the number of node of the original (resp. modified) tree. The most computationally expansive part of the algorithm is computing sequence alignments, all the rest is linear.
@@ -357,8 +358,8 @@ t &::= S(\overrightarrow{t}, \overrightarrow{s}) \typsep id \typsep (d, i)\\
 s &::= Zip(t) \typsep Del(d) \typsep DelConflict(d, i) \typsep Ins(i) \typsep OrdConflict(\overrightarrow{\overrightarrow{i}})\\
 \end{align*}
 
-In the merging algorithm we use the interpretation of metavariables as multi-source multi-target move, and try to push changes toward the destination of the code deplacements.
-This is done in a two-phase way. First, if we have two changes, facing each other we try to inline one of them inside the deletion tree of the other, by allowing differences wherever we have a metavariable. To avoid making any arbitrary choice, this is ignored if both changes could be inlined in the other. Then, we check that these inlined changes are consistant for each metavariable, and if they are, we replace all occurences of the metavariable by the obtained insertion.
+In the merging algorithm we use the interpretation of meta-variables as multi-source multi-target move, and try to push changes toward the destination of the code movement.
+This is done in a two-phase way. First, if we have two changes, facing each other we try to inline one of them inside the deletion tree of the other, by allowing differences wherever we have a meta-variable. To avoid making any arbitrary choice, this is ignored if both changes could be inlined in the other. Then, we check that these inlined changes are consistent for each meta-variable, and if they are, we replace all occurrences of the meta-variable by the obtained insertion.
 
 In absence of conflicts, merged differences have the same semantics as simple difference trees.
 
@@ -367,14 +368,14 @@ Conflict represent parts that couldn't be merged and therefore prevent applicati
   \item $Conflict$ simply represent two different insertions that were in the same place.
   \item $DelConflict$ appears where one difference deletes a node while the other one had changes in it.
   \item $OrdConflict$ is caused by two insertions taking place at the same location. As the merge operation is never performing any choice, it cannot arbitrarily order them.
-  \item $MvConflict$ is triggered when a metavariable appears more than once in deletion tree, and the inlined insertions in each occurences differ, therefore not giving a consistant replacement.
+  \item $MvConflict$ is triggered when a meta-variable appears more than once in deletion tree, and the inlined insertions in each occurrences differ, therefore not giving a consistent replacement.
 \end{itemize}
 
-The application domain of the merged difference $t_1 \circ t_2$ is the insersection of the domains of $t_1$ and $t_2$ in absence of conflicts.
+The application domain of the merged difference $t_1 \circ t_2$ is the intersection of the domains of $t_1$ and $t_2$ in absence of conflicts.
 Also we ensure that $t \circ t = t$.
 
 \subsubsection{Specification of the difference merging algorithm}
-The difference merging algorithm is defined modulo two replacement functions $\Gamma$ and $\Delta$ from metavariable to respectively insertion and deletion trees, that are heavily constrained and in practice inferred during the merge.
+The difference merging algorithm is defined modulo two replacement functions $\Gamma$ and $\Delta$ from meta-variable to respectively insertion and deletion trees, that are heavily constrained and in practice inferred during the merge.
 
 \begin{prooftree}
  \AxiomC{$\Gamma, \Delta \vdash t_r \circ t_l = t$}
@@ -665,7 +666,7 @@ let y = x; // !!!
 \begin{lstlisting}[label=lst:change_introducing_modified, caption={Colliding changes by using a variable modified by someone else}]
 \end{lstlisting}
 
-\paragraph{Origin graphs for functionnal programs} To keep track of potential collisions we can create a graph of origins that is updated between each program state. In a program where variables are never mutable, this graph has a node for each variable plus one node for each modification (labelled by the commit). Two nodes are linked by an edge if the value of a variable comes from the value of another variable or comes directly from a modification.
+\paragraph{Origin graphs for functional programs} To keep track of potential collisions we can create a graph of origins that is updated between each program state. In a program where variables are never mutable, this graph has a node for each variable plus one node for each modification (labeled by the commit). Two nodes are linked by an edge if the value of a variable comes from the value of another variable or comes directly from a modification.
 
 If at a given point of a program, a node of the origin graph is transitively linked to modifications of different concurrent commits, then there is a collision on the variable definition.
 
@@ -708,13 +709,13 @@ let c = a + b; // Collision
   \draw[->] (b) -- (c);
 \end{tikzpicture}
 \end{minipage}
-\caption{Collision created after modification of two independant variables}
+\caption{Collision created after modification of two independent variables}
 \end{figure}
 \FloatBarrier
 
-\paragraph{Origin graph and control flow} If the value of a variable is used for defining control flow, all the variables inside the branches will gain a dependancy on it.
+\paragraph{Origin graph and control flow} If the value of a variable is used for defining control flow, all the variables inside the branches will gain a dependency on it.
 
-However incompatible branches can be treated independantly and do not generate conflicts by themselves.
+However incompatible branches can be treated independently and do not generate conflicts by themselves.
 
 \begin{figure}[ht]
 \begin{minipage}{.5\textwidth}
@@ -761,7 +762,7 @@ A modification in the override set, take precedence over any modification in any
 
 In the origin graph, a variable that takes a value defined in by an override modification will loose all incoming arrows as its value is now disambiguated for the current state, taking all further implications into account.
 
-Having a single overriden ancestor can be not enough for marking a conflict as solved though.
+Having a single overridden ancestor can be not enough for marking a conflict as solved though.
 
 \begin{figure}[ht]
 \begin{minipage}{.5\textwidth}
@@ -794,12 +795,12 @@ let d = c + b; // Collision!
   \draw[->] (b) to[out=-90,in=45] (d);
 \end{tikzpicture}
 \end{minipage}
-\caption{Origin graph for a merge with an overriding that solves one conflict line 3 but is insufficient to also solve the conflict line 5. Deleted edges are dotted, variables overriden have a double border.}
+\caption{Origin graph for a merge with an overriding that solves one conflict line 3 but is insufficient to also solve the conflict line 5. Deleted edges are dotted, variables overridden have a double border.}
 \end{figure}
 
-A override can arbitrarily alter a modification, or even touch something that was not modified to restore the intent of both modifications. In the example above, $o$ might have been untouched neither by $A$ or by $B$ or be touch by one of the commits or by both, it doesn't matter. That's why an override is also a way to state the behaviour of the program when the changes are on the same state.
+A override can arbitrarily alter a modification, or even touch something that was not modified to restore the intent of both modifications. In the example above, $o$ might have been untouched neither by $A$ or by $B$ or be touch by one of the commits or by both, it doesn't matter. That's why an override is also a way to state the behavior of the program when the changes are on the same state.
 
-Usually there can be several way to solve the same conflict, but some are more ``powerful'' than others. A variable assigned to an overriden expression should be considered as a variable with a restored semantic with respect to all the modifications.
+Usually there can be several way to solve the same conflict, but some are more ``powerful'' than others. A variable assigned to an overridden expression should be considered as a variable with a restored semantic with respect to all the modifications.
 
 \begin{figure}[ht]
 \begin{minipage}{.5\textwidth}
@@ -833,13 +834,13 @@ let d = c + b;
 \end{tikzpicture}
 \end{minipage}
 \caption{Origin graph for the same example as before except that now line 2 is
-overriden marking that $b$ has a preserved semantic. Therefore, line 5 is not showing a conflict anymore.}
+overridden marking that $b$ has a preserved semantic. Therefore, line 5 is not showing a conflict anymore.}
 \end{figure}
 
 \subsection{From trace to program point origin graphs}
 \paragraph{Graph coloring to check conflicts} For being able to quickly check that an assignment does not introduce a conflict, we can simply keep a coloring of the graph, that links each variable to the single unambiguous commit that modifies its semantic.
 Therefore a well-formed graph without conflicts only have incoming edges from nodes without coloring or with the same color as itself.
-Overriden variables will never be colored as they are considered to never collide with any of the concurrent commits.
+Overridden variables will never be colored as they are considered to never collide with any of the concurrent commits.
 
 \begin{figure}[ht]
 \begin{minipage}{.5\textwidth}
@@ -878,7 +879,7 @@ let z = y + b; // Conflict
 \label{fig:origin_graph_branches_color}
 \end{figure}
 
-\paragraph{Program point origin graph} Also, to ease verification we need to switch from origins graph specified for a given trace to origin graphs specified at a given program point. In absence of control flow expressions, we have no problem for defining it as there is only one trace going from the begining of the program to its end. However we need to deal with conditions and recursive calls (analoguous to loops but in a functional setup) and arbitrary nesting of these two.
+\paragraph{Program point origin graph} Also, to ease verification we need to switch from origins graph specified for a given trace to origin graphs specified at a given program point. In absence of control flow expressions, we have no problem for defining it as there is only one trace going from the beginning of the program to its end. However we need to deal with conditions and recursive calls (analogous to loops but in a functional setup) and arbitrary nesting of these two.
 
 A good origin graph at a given program point must be projectable on any trace leading to the program point, and show conflict if at least one of the trace has a conflict.
 
@@ -1012,9 +1013,9 @@ fn f(l: List) -> i32 {
 \end{figure}
 
 
-\paragraph{Higher order programs with closures} What happens if functions can be inside variables? Seems that simply considering that the function (and all its arguments) is a dependancy of all its calls is enough.
+\paragraph{Higher order programs with closures} What happens if functions can be inside variables? Seems that simply considering that the function (and all its arguments) is a dependency of all its calls is enough.
 
-We just need to be careful with captures. A conservative approach would consider that if a function captures a variable, then it gets a dependancy on it. But this can create conflicts that do not exist, if captured variables are used in different branches. A more natural approach is to analyze the inside of the function in the definition environment and then keep the color of the result for the function itself at the end.
+We just need to be careful with captures. A conservative approach would consider that if a function captures a variable, then it gets a dependency on it. But this can create conflicts that do not exist, if captured variables are used in different branches. A more natural approach is to analyze the inside of the function in the definition environment and then keep the color of the result for the function itself at the end.
 
 \begin{figure}[!ht]
 \begin{minipage}{.5\textwidth}
@@ -1104,7 +1105,7 @@ while (c < b) {
   \draw[->] (b) -- (c);
 \end{tikzpicture}
 \end{minipage}
-\caption{Origin graph at the end of a program containing a while-loop. Note that $c$ keeps its dependancy on $a$ as it used its previous value inside the loop.}
+\caption{Origin graph at the end of a program containing a while-loop. Note that $c$ keeps its dependency on $a$ as it used its previous value inside the loop.}
 \end{figure}
 
 \end{document}
