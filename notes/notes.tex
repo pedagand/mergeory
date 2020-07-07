@@ -155,10 +155,14 @@ fn f(c: bool) {
 \end{lstlisting}
 \end{minipage}\hfill
 \begin{minipage}{.32\textwidth}
+\newbox\boxtwo
+\sbox\boxtwo{\setulcolor{orange}\setul{-.75ex}{}\ul{2}}
+\newbox\boxforty
+\sbox\boxforty{\setulcolor{orange}\setul{-.75ex}{}\ul{40}}
 \begin{lstlisting}
 fn f(c: bool) {
-    @\setstcolor{blue}\st{let a = {\color{orange}2}}@;
-    @\setstcolor{blue}\st{let b = {\color{orange}40}}@;
+    @\setstcolor{blue}\st{let a = {\usebox\boxtwo}}@;
+    @\setstcolor{blue}\st{let b = {\usebox\boxforty}}@;
     let x = @\setstcolor{blue}\st{a + b}@ @$\rightarrow$@
         @{\color{blue}\ul{answer()}}@;
     let k = if c {
@@ -216,43 +220,43 @@ This analysis can be theoretically described on traces, but in practice we need 
 
 To finish this example, we need a user to be able to efficiently resolve the conflicts. Here saying that on lines 2 to 5 and 15 to 19, blue has done only semantic preserving changes is enough as it will remove the blue colors in each of these lines. Therefore, given this information, the two commits can be safely merged with the guarantee that no unintended behavior\footnote{Side channel attack vectors might still be silently introduced unless we also model them into the analysis.} will be silently introduced by the fusion itself.
 
-\section{Definitions}
-
-\paragraph{Commits \& modifications}
-In this section, I will have a very generic notion of commits. A commit is a set of modifications of the semantic of a program. A single modification
-can have an impact on several program states and several program variables.
-An example of a modification is the change of an expression in an assignment (\lstinline{x = expr}). This modification does not only touch the program variable \lstinline{x} but also each expression that depend the new value in the rest of the program.
-\begin{lstlisting}[caption=Modification of $x$]
-let mut x = 0; // changed
-let y = x + 1; // touched (x is changed)
-let z = y + 1; // touched (y is touched)
-x = 45;        // untouched
-let w = x - 3; // untouched (x have been reassigned)
-\end{lstlisting}
-Inside a commit we consider that all the modifications are compatible with each
-other as their author have thought of their potential interactions.
-With this idea of thoughtful interactions, we can consider that sequential commits can always be (virtually) squashed into a single commit before merging.
-
-\paragraph{Concurrent commits}
-Concurrent commits are commits that all transform the same initial program. Their authors were not aware of the modifications contained in other commits. Nonetheless, we want to be able to merge the modifications contained in all of them inside a single commit from the common source. A merged version is not always uniquely well-defined because concurrent modifications can (and will often) touch the same program states or variables and therefore collide. That's why there can be several merged versions of the same set of concurrent commits.
-
-Sometimes however they will never collide and a canonical merge commit will naturally exist. This is the case for instance if two incompatible branches are modified by concurrent commits.
-\begin{lstlisting}[caption=Merged version of two compatible concurrent commits modifying $x$]
-let x;
-if (c) {
-    x = 1; // changed in first concurrent commit
-} else {
-    x = 2; // changed in second concurrent commit
-}
-let y = x + 1; // touched but unambiguous
-\end{lstlisting}
+% \section{Definitions}
+%
+% \paragraph{Commits \& modifications}
+% In this section, I will have a very generic notion of commits. A commit is a set of modifications of the semantic of a program. A single modification
+% can have an impact on several program states and several program variables.
+% An example of a modification is the change of an expression in an assignment (\lstinline{x = expr}). This modification does not only touch the program variable \lstinline{x} but also each expression that depend the new value in the rest of the program.
+% \begin{lstlisting}[caption=Modification of $x$]
+% let mut x = 0; // changed
+% let y = x + 1; // touched (x is changed)
+% let z = y + 1; // touched (y is touched)
+% x = 45;        // untouched
+% let w = x - 3; // untouched (x have been reassigned)
+% \end{lstlisting}
+% Inside a commit we consider that all the modifications are compatible with each
+% other as their author have thought of their potential interactions.
+% With this idea of thoughtful interactions, we can consider that sequential commits can always be (virtually) squashed into a single commit before merging.
+%
+% \paragraph{Concurrent commits}
+% Concurrent commits are commits that all transform the same initial program. Their authors were not aware of the modifications contained in other commits. Nonetheless, we want to be able to merge the modifications contained in all of them inside a single commit from the common source. A merged version is not always uniquely well-defined because concurrent modifications can (and will often) touch the same program states or variables and therefore collide. That's why there can be several merged versions of the same set of concurrent commits.
+%
+% Sometimes however they will never collide and a canonical merge commit will naturally exist. This is the case for instance if two incompatible branches are modified by concurrent commits.
+% \begin{lstlisting}[caption=Merged version of two compatible concurrent commits modifying $x$]
+% let x;
+% if (c) {
+%     x = 1; // changed in first concurrent commit
+% } else {
+%     x = 2; // changed in second concurrent commit
+% }
+% let y = x + 1; // touched but unambiguous
+% \end{lstlisting}
 
 \section{Syntactic merge}
-If we want to merge concurrent commits into a single one, we need to be able to define a good merged commit. This should yield an executable merged program with provenance annotations that enable to retrieve the origin of a given expression.
+In this step we want two things: first get a procedure that takes concurrent commits and merge them together. Secondly, keep provenance annotations on the merged program to make an analysis of the merged program possible later.
 
-Standard tools (like diff or git) are using a line based merge. But in most languages, a line do not have any defined semantic. Therefore, I have taken the approach that concurrent commits should be merged in a syntax driven way.
+Standard tools (like diff or git) are using a line based merge. This make their algorithms be language insensitive (as long as it is textual) but in most programming languages, a line do not have any defined semantic. Therefore, we have taken the approach that concurrent commits should be merged in a syntax driven way.
 
-The high level approach to this syntactic merge is to first compute individual differences from the common ancestor to each commit, and then merge the differences trees into a singe one. Finally, we can apply the merged difference tree to the common ancestor and obtain a syntactically valid merge candidate (but maybe not semantically interesting, and not even necessarily free from compile-time errors).
+The high level approach to this syntactic merge is to first compute individual differences from the common ancestor to each commit, and then merge the differences trees into a singe one. Finally, we can apply the merged difference tree to the common ancestor and obtain a syntactically valid merge candidate. This one may not be the desired final merged code, and is not even necessarily free from conflicts or compile-time errors, but it is a synthesis of all the modifications, and should be a good base for manual refinement.
 
 \subsection{Syntax tree difference}
 We want a rather rich way of describing differences to prevent as much as possible useless syntactic conflicts.
@@ -261,13 +265,13 @@ Therefore our syntax tree difference structure will encode local tree modificati
 \subsubsection{Type for syntax tree differences}
 We encode program differences as a new kind of syntax tree that follows the constructors from the target language and add new ones.
 
-Basically, a difference can be viewed as two syntax trees, a deleted one, and an inserted one. Therefore the simplest valid difference from code $d$ to code $i$ is simply the pair $(d, i)$.
+Basically, a difference can be viewed as two syntax trees, a deleted one, and an inserted one. Therefore the simplest valid difference from code $d$ to code $i$ is simply the change \st{$d$} $\rightarrow$ \ul{$i$}.
 
 However, to ease fusion, produce better output and remove redundancy we change two things.
 First, we elide identical sub-trees that are present in both $d$ and $i$.
 Secondly, we merge together identical constructions between the deletion and insertion tree starting from the root.
 
-The elisions can be seen as code moved from a location in $d$ into another location in $i$, but the actual content is temporarily forgotten inside what we call a meta-variable. In this paper, we will denote these elisions by $\alpha, \beta, \gamma,$ and so on.
+The elisions can be seen as code moved from a location in $d$ into another location in $i$, but the actual content is temporarily forgotten inside what we call a meta-variable. In this paper, we will denote these elisions by Greek letters. As a given meta-variable can occur more that twice (at least once in deletion and once in insertion but maybe more), these code displacements have multiple sources and multiple targets, but a given meta-variable will always represent an identical code sub-tree.
 
 Trying to merge together two nodes in the AST is easy, we simply need to check if they use the same root constructor, recursively merge if it is the case, and fail otherwise. However, this approach is really bad with sequences (eg. sequences of functions or sequences of statements). We do not want to fully split a list if only one element has been inserted, removed or changed. Therefore, we use list edit scripts instead as the output of a merge operation on two sequences. We call the merged part of the difference tree its spine.
 
@@ -276,9 +280,11 @@ We denote by $S(\overrightarrow{t}, \overrightarrow{s})$ a constructor from the 
 This gives the following types for difference trees:
 \begin{align*}
 c &::= S(\overrightarrow{c}, \overrightarrow{c}) \typsep \alpha\\
-t &::= S(\overrightarrow{t}, \overrightarrow{s}) \typsep id \typsep (c, c)\\
-s &::= Zip(t) \typsep Del(c) \typsep Ins(c)\\
+t &::= S(\overrightarrow{t}, \overrightarrow{s}) \typsep \square \typsep \text{\st{$c$}} \rightarrow \text{\ul{$c$}}\\
+s &::= t \typsep \text{\st{$c$}} \typsep \text{\ul{$c$}}\\
 \end{align*}
+
+Here $\square$ represent a hole for unchanged sub-tree, \st{strike through} represent deleted code, and \ul{underlines} represent insertions.
 
 \subsubsection{Computing a syntactic difference}
 To compute a syntactic difference, we take ASTs of both the original and the modified program and we run the following algorithm:
@@ -288,7 +294,7 @@ To compute a syntactic difference, we take ASTs of both the original and the mod
   \item Elide the nodes with a hash in the subset to remember just their hash.
   \item If an elided node do not match an elision with the same hash in the other tree, replace it by the original sub-tree.
   \item Merge both AST into a common spine where possible, else keep changes as two separate elided trees. Always try to align sequences using recursively a dynamic algorithm minimizing the number of nodes of the resulting tree.
-  \item Optionally, replace each hash by a meta-variable index for readability and simplicity.
+  \item Replace each hash by a meta-variable letter (just an index in code), and replace changes $\text{\st{$\alpha$}} \rightarrow \text{\ul{$\alpha$}}$ by $\square$ when $\alpha$ does not occur elsewhere.
 \end{itemize}
 
 This algorithm is in $O(nm)$ where $n$ (resp. $m$) is the number of node of the original (resp. modified) tree. The most computationally expansive part of the algorithm is computing sequence alignments, all the rest is linear.
@@ -301,12 +307,12 @@ The implied function of a difference tree is defined as follows: let's suppose t
 
 \begin{prooftree}
  \AxiomC{}
- \UnaryInfC{$\Gamma \vdash id(t) = t$}
+ \UnaryInfC{$\Gamma \vdash \square(t) = t$}
 \end{prooftree}
 
 \begin{prooftree}
  \AxiomC{$\Gamma \vdash d(t)$}
- \UnaryInfC{$\Gamma \vdash (d,i)(t) = \Gamma(i)$}
+ \UnaryInfC{$\Gamma \vdash (\text{\st{$d$}} \rightarrow \text{\ul{$i$}})(t) = \Gamma(i)$}
 \end{prooftree}
 
 \begin{prooftree}
@@ -318,18 +324,18 @@ The implied function of a difference tree is defined as follows: let's suppose t
 \begin{prooftree}
  \AxiomC{$\Gamma \vdash t(d) = i$}
  \AxiomC{$\Gamma \vdash r(d_r) = i_r$}
- \BinaryInfC{$\Gamma \vdash (Zip(t)::r)(d::d_r) = i::i_r$}
+ \BinaryInfC{$\Gamma \vdash (t::r)(d::d_r) = i::i_r$}
 \end{prooftree}
 
 \begin{prooftree}
  \AxiomC{$\Gamma \vdash c(d)$}
  \AxiomC{$\Gamma \vdash r(d_r) = i_r$}
- \BinaryInfC{$\Gamma \vdash (Del(c)::r)(d::d_r) = i_r$}
+ \BinaryInfC{$\Gamma \vdash (\text{\st{$c$}}::r)(d::d_r) = i_r$}
 \end{prooftree}
 
 \begin{prooftree}
  \AxiomC{$\Gamma \vdash r(d_r) = i_r$}
- \UnaryInfC{$\Gamma \vdash (Ins(c)::r)(d_r) = \Gamma(c) :: i_r$}
+ \UnaryInfC{$\Gamma \vdash (\text{\ul{$c$}}::r)(d_r) = \Gamma(c) :: i_r$}
 \end{prooftree}
 
 \begin{prooftree}
@@ -343,6 +349,27 @@ The implied function of a difference tree is defined as follows: let's suppose t
  \BinaryInfC{$\Gamma \vdash S(c_t, c_s)(S(d_t, d_s))$}
 \end{prooftree}
 
+\subsection{Awareness colors}
+
+Before merging differences together, we want to define a way of keeping track of which commit introduced each modification. For that we use a notion of awareness colors.
+
+Each commit in a fusion get an associated tint. If we denote by $\mathbb{T}$ the set of all tints considered, we can define the color set as $\mathbb{C} = \mathcal{P}(\mathbb{T})$. This forms the complete lattice $(\mathbb{C}, \cup, \cap, \subset)$. We name the maximum in this lattice white (equal to $\mathbb{T}$, denoted $\circ$) and the minimum black (equal to $\emptyset$, denoted $\bullet$).
+
+A modification gets the color $c \in \mathbb{C}$, if for all tint in $c$, the associated commit is aware of the presence of the colored source code.
+
+The white color having all the tints, it represent a consensus of all the commits. On the other side, black represent the fact that no single commit can claim responsibility for a given value. This makes the white color the good choice for everything already present in the original file, and black a color that we want to track and avoid.
+
+Both code and modification can carry colors. Code has the color of the commits that introduced it, or is white if it comes from the original file. The same code can be introduced twice if the exact same insertion has been done by multiple commits. In this case it will have the union of both tints as its color. Similarly, insertions and deletions have the color of all the commits that made them.
+
+Before merging, we apply the singleton color corresponding to the commit on the difference tree recursively as follows:
+\begin{align*}
+{\color{red}c} &= {\color{red}S(\overrightarrow{c}, \overrightarrow{c})} \typsep \alpha\\
+{\color{red}t} &= S(\overrightarrow{\color{red}t}, \overrightarrow{\color{red}s}) \typsep \square \typsep \text{\setstcolor{red}\st{$c$}} \rightarrow \text{\color{red}\ul{$c$}}\\
+{\color{red}s} &= {\color{red}t} \typsep \text{\setstcolor{red}\st{$c$}} \typsep \text{\color{red}\ul{$c$}}\\
+\end{align*}
+
+Note that meta-variables and holes are never colored, and that AST structures are not colored in the spine but are in the inserted sub-trees.
+
 \subsection{Merging differences}
 Now that we have difference trees for each individual concurrent change, we can try to merge them in a way that keeps track of the origin of each piece of code.
 
@@ -354,12 +381,12 @@ We therefore break the symmetry between deletion and insertion trees as there wi
 d &::= S(\overrightarrow{d}, \overrightarrow{d}) \typsep \alpha \typsep MvConflict(\alpha, d, i) \\
 i &::= S(\overrightarrow{i}, \overrightarrow{j}) \typsep \alpha \typsep Conflict(\overrightarrow{i})\\
 j &::= i \typsep DelConflict(i) \typsep OrdConflict(\overrightarrow{i})\\
-t &::= S(\overrightarrow{t}, \overrightarrow{s}) \typsep id \typsep (d, i)\\
-s &::= Zip(t) \typsep Del(d) \typsep DelConflict(d, i) \typsep Ins(i) \typsep OrdConflict(\overrightarrow{\overrightarrow{i}})\\
+t &::= S(\overrightarrow{t}, \overrightarrow{s}) \typsep \square \typsep  \text{\st{$d$}} \rightarrow \text{\ul{$i$}}\\
+s &::= t \typsep \text{\st{$d$}} \typsep DelConflict(d, i) \typsep \text{\ul{$i$}} \typsep OrdConflict(\overrightarrow{\overrightarrow{i}})\\
 \end{align*}
 
 In the merging algorithm we use the interpretation of meta-variables as multi-source multi-target move, and try to push changes toward the destination of the code movement.
-This is done in a two-phase way. First, if we have two changes, facing each other we try to inline one of them inside the deletion tree of the other, by allowing differences wherever we have a meta-variable. To avoid making any arbitrary choice, this is ignored if both changes could be inlined in the other. Then, we check that these inlined changes are consistent for each meta-variable, and if they are, we replace all occurrences of the meta-variable by the obtained insertion.
+This is done in a two-phase way. First, if we have two changes facing each other we try to inline one of them inside the deletion tree of the other, by allowing differences wherever we have a meta-variable. To avoid making any arbitrary choice, this is ignored if both changes could be inlined in the other. Then, we check that these inlined changes are consistent for each meta-variable, and if they are, we replace all occurrences of the meta-variable by the obtained insertion.
 
 In absence of conflicts, merged differences have the same semantics as simple difference trees.
 
