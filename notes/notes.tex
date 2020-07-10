@@ -14,6 +14,7 @@
   captionpos=b,
   style=boxed,
   escapechar=@,
+  % We want to disable any syntax coloring to focus on awareness colors
   stringstyle=,
   keywordstyle=,% reserved keywords
   keywordstyle=[2],% traits
@@ -134,8 +135,8 @@ To take into account the knowledge of a commit of some modification we use aware
 \setulcolor{blue}
 \begin{lstlisting}[rulecolor=\color{blue!20}]
 fn f(c: bool) {
-    @\st{$\alpha$}@;
-    @\st{$\beta$}@;
+    @\st{$\alpha$;}@
+    @\st{$\beta$;}@
     let x = @\st{$\gamma$} $\rightarrow$@
         @{\color{blue} \ul{answer()}}@;
     let k = if @$\square$@ {
@@ -161,8 +162,8 @@ fn f(c: bool) {
 \sbox\boxforty{\setulcolor{orange}\setul{-.75ex}{}\ul{40}}
 \begin{lstlisting}
 fn f(c: bool) {
-    @\setstcolor{blue}\st{let a = {\usebox\boxtwo}}@;
-    @\setstcolor{blue}\st{let b = {\usebox\boxforty}}@;
+    @\setstcolor{blue}\st{let a = {\usebox\boxtwo};}@
+    @\setstcolor{blue}\st{let b = {\usebox\boxforty};}@
     let x = @\setstcolor{blue}\st{a + b}@ @$\rightarrow$@
         @{\color{blue}\ul{answer()}}@;
     let k = if c {
@@ -252,7 +253,7 @@ To finish this example, we need a user to be able to efficiently resolve the con
 % \end{lstlisting}
 
 \section{Syntactic merge}
-In this step we want two things: first get a procedure that takes concurrent commits and merge them together. Secondly, keep provenance annotations on the merged program to make an analysis of the merged program possible later.
+In this step we want two things: first get a procedure that takes concurrent commits and merge them together. Secondly, keep provenance annotations on the merged program to make an analysis possible later.
 
 Standard tools (like diff or git) are using a line based merge. This make their algorithms be language insensitive (as long as it is textual) but in most programming languages, a line do not have any defined semantic. Therefore, we have taken the approach that concurrent commits should be merged in a syntax driven way.
 
@@ -275,7 +276,7 @@ The elisions can be seen as code moved from a location in $d$ into another locat
 
 Trying to merge together two nodes in the AST is easy, we simply need to check if they use the same root constructor, recursively merge if it is the case, and fail otherwise. However, this approach is really bad with sequences (eg. sequences of functions or sequences of statements). We do not want to fully split a list if only one element has been inserted, removed or changed. Therefore, we use list edit scripts instead as the output of a merge operation on two sequences. We call the merged part of the difference tree its spine.
 
-We denote by $S(\overrightarrow{t}, \overrightarrow{s})$ a constructor from the target language AST, with an arbitrary but fixed arity of trees ($t$) and sequences ($s$).
+We denote by $S(\overrightarrow{t}, \overrightarrow{s})$ a constructor from the target language AST, with an arbitrary but fixed arity of trees ($t$) and sequences ($s$). For instance one of the possible $S$ could be the language construction \lstinline[mathescape]|if $t_{cond}$ { $\overrightarrow{s_{true}}$ } else { $\overrightarrow{s_{false}}$ }| with one expression sub-tree and two nested sequences of instructions.
 
 This gives the following types for difference trees:
 \begin{align*}
@@ -292,7 +293,7 @@ To compute a syntactic difference, we take ASTs of both the original and the mod
   \item Compute a hash for each node of each AST.
   \item Take the subset of hashes occurring both in original and modified AST.
   \item Elide the nodes with a hash in the subset to remember just their hash.
-  \item If an elided node do not match an elision with the same hash in the other tree, replace it by the original sub-tree.
+  \item If an elided node does not match an elision with the same hash in the other tree, replace it by the original sub-tree.
   \item Merge both AST into a common spine where possible, else keep changes as two separate elided trees. Always try to align sequences using recursively a dynamic algorithm minimizing the number of nodes of the resulting tree.
   \item Replace each hash by a meta-variable letter (just an index in code), and replace changes $\text{\st{$\alpha$}} \rightarrow \text{\ul{$\alpha$}}$ by $\square$ when $\alpha$ does not occur elsewhere.
 \end{itemize}
@@ -305,55 +306,76 @@ The difference between $d$ and $i$ is therefore a function that is at least mapp
 
 The implied function of a difference tree is defined as follows: let's suppose that we have $\Gamma$ a function from metavariable inside the difference tree, to syntax trees, given by an oracle. In practice, $\Gamma$ is constrained enough to be inferred.
 
+\noindent
+\begin{minipage}{.49\textwidth}
 \begin{prooftree}
  \AxiomC{}
+ \RightLabel{\textsc{Id}}
  \UnaryInfC{$\Gamma \vdash \square(t) = t$}
 \end{prooftree}
 
 \begin{prooftree}
  \AxiomC{$\Gamma \vdash d(t)$}
+ \RightLabel{\textsc{Change}}
  \UnaryInfC{$\Gamma \vdash (\text{\st{$d$}} \rightarrow \text{\ul{$i$}})(t) = \Gamma(i)$}
 \end{prooftree}
 
 \begin{prooftree}
  \AxiomC{$\overrightarrow{\Gamma \vdash t(d_t) = i_t}$}
  \AxiomC{$\overrightarrow{\Gamma \vdash s(d_s) = i_s}$}
+ \RightLabel{\textsc{Spine}}
  \BinaryInfC{$\Gamma \vdash S(\overrightarrow{t},\overrightarrow{s})(S(\overrightarrow{d_t},\overrightarrow{d_s})) = S(\overrightarrow{i_t}, \overrightarrow{i_s})$}
 \end{prooftree}
 
 \begin{prooftree}
  \AxiomC{$\Gamma \vdash t(d) = i$}
  \AxiomC{$\Gamma \vdash r(d_r) = i_r$}
+ \RightLabel{\textsc{SeqZip}}
  \BinaryInfC{$\Gamma \vdash (t::r)(d::d_r) = i::i_r$}
 \end{prooftree}
-
+\end{minipage}
+\begin{minipage}{.49\textwidth}
 \begin{prooftree}
  \AxiomC{$\Gamma \vdash c(d)$}
  \AxiomC{$\Gamma \vdash r(d_r) = i_r$}
+ \RightLabel{\textsc{SeqDel}}
  \BinaryInfC{$\Gamma \vdash (\text{\st{$c$}}::r)(d::d_r) = i_r$}
 \end{prooftree}
 
 \begin{prooftree}
  \AxiomC{$\Gamma \vdash r(d_r) = i_r$}
+ \RightLabel{\textsc{SeqIns}}
  \UnaryInfC{$\Gamma \vdash (\text{\ul{$c$}}::r)(d_r) = \Gamma(c) :: i_r$}
 \end{prooftree}
 
 \begin{prooftree}
  \AxiomC{$\Gamma(\alpha) = d$}
+ \RightLabel{\textsc{DelMv}}
  \UnaryInfC{$\Gamma \vdash \alpha(d)$}
 \end{prooftree}
 
 \begin{prooftree}
  \AxiomC{$\overrightarrow{\Gamma \vdash c_t(d_t)}$}
  \AxiomC{$\overrightarrow{\Gamma \vdash c_s(d_s)}$}
- \BinaryInfC{$\Gamma \vdash S(c_t, c_s)(S(d_t, d_s))$}
+ \RightLabel{\textsc{DelSyn}}
+ \BinaryInfC{$\Gamma \vdash S(\overrightarrow{c_t}, \overrightarrow{c_s})(S(\overrightarrow{d_t}, \overrightarrow{d_s}))$}
 \end{prooftree}
+\end{minipage}
+
+\subsubsection{Practical considerations: how to extend a syntax tree}
+Implementing an algorithm that requires extending a syntax tree can be tidious in practice because we want to attach new information and/or create holes on a fixed structure while keeping the typedness of the tree.
+
+Along this paper, I give a Rust implementation for the syntax difference and merging algorithm of Rust codes. The parser used (the syn crate) uses more than 180 types in its syntax trees, so manual extension was not an option.
+
+The solution I give is based on a somehow generic code generation system (implemented as procedural macro). The idea is that we want to add the ability to extend a type family of mutually recursive sum of products (i.e. nested enums and structs in Rust terminology) by changing systematically some types by others inside it, thus generating a new family variant. Then, we also make a code generator to browse through or convert between variants of the same family. After generation, manual code is only required for the new structures of the trees.
+
+Note that for having a production ready tool, the current parser is not adapted, as it systematically forgets the comments inside source code. But this is left for future work as a pure engeneering problem.
 
 \subsection{Awareness colors}
 
 Before merging differences together, we want to define a way of keeping track of which commit introduced each modification. For that we use a notion of awareness colors.
 
-Each commit in a fusion get an associated tint. If we denote by $\mathbb{T}$ the set of all tints considered, we can define the color set as $\mathbb{C} = \mathcal{P}(\mathbb{T})$. This forms the complete lattice $(\mathbb{C}, \cup, \cap, \subset)$. We name the maximum in this lattice white (equal to $\mathbb{T}$, denoted $\circ$) and the minimum black (equal to $\emptyset$, denoted $\bullet$).
+Each commit in a fusion get an associated tint. If we denote by $\mathbb{T}$ the set of all tints considered, we can define the color set as $\mathbb{C} = \mathcal{P}(\mathbb{T})$. This forms the complete lattice $(\mathbb{C}, \cup, \cap, \subset)$. We name the maximum in this lattice white (equal to $\mathbb{T}$, denoted $\top$) and the minimum black (equal to $\emptyset$, denoted $\bot$).
 
 A modification gets the color $c \in \mathbb{C}$, if for all tint in $c$, the associated commit is aware of the presence of the colored source code.
 
@@ -368,7 +390,7 @@ Before merging, we apply the singleton color corresponding to the commit on the 
 {\color{red}s} &= {\color{red}t} \typsep \text{\setstcolor{red}\st{$c$}} \typsep \text{\color{red}\ul{$c$}}\\
 \end{align*}
 
-Note that meta-variables and holes are never colored, and that AST structures are not colored in the spine but are in the inserted sub-trees.
+Note that meta-variables and holes are never colored, and that AST structures are not colored in the spine but are in the inserted sub-trees. This reflects the fact that in the spine and inside holes, code comes from the original source code, while elsewhere it is introduced by the commit.
 
 \subsection{Merging differences}
 Now that we have difference trees for each individual concurrent change, we can try to merge them in a way that keeps track of the origin of each piece of code.
@@ -385,7 +407,7 @@ t &::= S(\overrightarrow{t}, \overrightarrow{s}) \typsep \square \typsep  \text{
 s &::= t \typsep \text{\st{$d$}} \typsep DelConflict(d, i) \typsep \text{\ul{$i$}} \typsep OrdConflict(\overrightarrow{\overrightarrow{i}})\\
 \end{align*}
 
-In the merging algorithm we use the interpretation of meta-variables as multi-source multi-target move, and try to push changes toward the destination of the code movement.
+When dealing with meta-variables, that represent a multi-source multi-target code move, our merging algorithm will try to push changes toward the destination of the code movement.
 This is done in a two-phase way. First, if we have two changes facing each other we try to inline one of them inside the deletion tree of the other, by allowing differences wherever we have a meta-variable. To avoid making any arbitrary choice, this is ignored if both changes could be inlined in the other. Then, we check that these inlined changes are consistent for each meta-variable, and if they are, we replace all occurrences of the meta-variable by the obtained insertion.
 
 In absence of conflicts, merged differences have the same semantics as simple difference trees.
@@ -393,7 +415,7 @@ In absence of conflicts, merged differences have the same semantics as simple di
 Conflict represent parts that couldn't be merged and therefore prevent application of the difference on any tree. They can come from four different sources:
 \begin{itemize}
   \item $Conflict$ simply represent two different insertions that were in the same place.
-  \item $DelConflict$ appears where one difference deletes a node while the other one had changes in it.
+  \item $DelConflict$ appears where one commit deletes a node while the other one had changes in it.
   \item $OrdConflict$ is caused by two insertions taking place at the same location. As the merge operation is never performing any choice, it cannot arbitrarily order them.
   \item $MvConflict$ is triggered when a meta-variable appears more than once in deletion tree, and the inlined insertions in each occurrences differ, therefore not giving a consistent replacement.
 \end{itemize}
@@ -659,9 +681,18 @@ Where $\oplus$ is a function transposing a deletion tree to an insertion tree by
 \end{prooftree}
 
 \section{Semantic merge}
-Having two commits syntactically merged do not mean that the result is a valid
-semantic combination that respect the intention of all original commits.
-That's why after this first syntax merging step, we must also check the semantic of the fusion.
+Having two commits syntactically merged do not mean that the result is a valid semantic combination that respect the intention of all original commits.
+
+That's why after the syntax merging step, we also want to check the semantic of the fusion.
+
+In this section we will show that first non-conflicting difference trees can be interpreted as correlation oracles between the original code and a merged candidate. And secondly that we can derive an analysis that ensures that at least one commit is fully aware of any branching done by the resulting program. If we combine this invariant with the fact that the fusion never lose any introduced change, we obtain the certainty that the intentions inside all original commits are respected.
+
+\subsection{Interpreting a difference tree as a correlation oracle}
+\subsubsection{Definition of a correlation oracle}
+TODO
+
+\subsubsection{The difference oracle}
+TODO
 
 \subsection{A key principle: mandatory disambiguation}
 \paragraph{A generic definition of a valid merge} A merge is valid if for any state of the program, there is a single unambiguous trace after applying all the modifications of the concurrent commits. There should be no automatic choice in favor of any of the commits. This means that if two commits touched the same state of the program or the same expression at the same time, the merge will be considered not valid. We call a point in a trace where the semantic is ambiguous a collision.
