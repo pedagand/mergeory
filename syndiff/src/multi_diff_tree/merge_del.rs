@@ -24,7 +24,7 @@ where
             | (other, DelNode::MetavariableConflict(_, del, _)) => {
                 Merge::<DelNode<D, I>, _, _>::can_merge(self, del, other)
             }
-            (DelNode::Ellided(_), _) | (_, DelNode::Ellided(_)) => true,
+            (DelNode::Elided(_), _) | (_, DelNode::Elided(_)) => true,
         }
     }
 
@@ -38,13 +38,13 @@ where
                 let new_del = Merge::<DelNode<D, I>, _, _>::merge(self, *del, other);
                 DelNode::MetavariableConflict(mv, Box::new(new_del), ins)
             }
-            (DelNode::Ellided(mv), DelNode::Ellided(other_mv)) if mv.node == other_mv.node => {
-                DelNode::Ellided(Colored {
+            (DelNode::Elided(mv), DelNode::Elided(other_mv)) if mv.node == other_mv.node => {
+                DelNode::Elided(Colored {
                     node: mv.node,
                     colors: mv.colors | other_mv.colors,
                 })
             }
-            (DelNode::Ellided(mv), mut other) | (mut other, DelNode::Ellided(mv)) => {
+            (DelNode::Elided(mv), mut other) | (mut other, DelNode::Elided(mv)) => {
                 let mv_id = mv.node.0;
                 match self.metavars_del[mv_id].take() {
                     Some(repl_tree) => {
@@ -145,7 +145,7 @@ where
                 self.visit_mut(&mut del.node);
                 del.colors |= self.0
             }
-            DelNode::Ellided(mv) => mv.colors |= self.0,
+            DelNode::Elided(mv) => mv.colors |= self.0,
             DelNode::MetavariableConflict(_, del, _) => {
                 VisitMut::<DelNode<D, I>>::visit_mut(self, del)
             }

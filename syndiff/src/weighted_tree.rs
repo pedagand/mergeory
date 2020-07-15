@@ -1,9 +1,9 @@
 use crate::ast;
-use crate::ellided_tree::MaybeEllided;
+use crate::elided_tree::MaybeElided;
 use crate::family_traits::Convert;
 
 pub struct Weighted<T> {
-    pub node: MaybeEllided<T>,
+    pub node: MaybeElided<T>,
     pub weight: u32,
 }
 
@@ -11,11 +11,11 @@ pub struct AlignableSeq<T>(pub Vec<Weighted<T>>);
 
 pub struct ComputeWeight(u32);
 
-impl<In, Out> Convert<MaybeEllided<In>, Weighted<Out>> for ComputeWeight
+impl<In, Out> Convert<MaybeElided<In>, Weighted<Out>> for ComputeWeight
 where
-    ComputeWeight: Convert<MaybeEllided<In>, MaybeEllided<Out>>,
+    ComputeWeight: Convert<MaybeElided<In>, MaybeElided<Out>>,
 {
-    fn convert(&mut self, input: MaybeEllided<In>) -> Weighted<Out> {
+    fn convert(&mut self, input: MaybeElided<In>) -> Weighted<Out> {
         let mut sub_weigther = ComputeWeight(1);
         let node = sub_weigther.convert(input);
         self.0 += sub_weigther.0;
@@ -37,11 +37,11 @@ where
 
 pub struct ForgetWeight;
 
-impl<In, Out> Convert<Weighted<In>, MaybeEllided<Out>> for ForgetWeight
+impl<In, Out> Convert<Weighted<In>, MaybeElided<Out>> for ForgetWeight
 where
-    ForgetWeight: Convert<MaybeEllided<In>, MaybeEllided<Out>>,
+    ForgetWeight: Convert<MaybeElided<In>, MaybeElided<Out>>,
 {
-    fn convert(&mut self, input: Weighted<In>) -> MaybeEllided<Out> {
+    fn convert(&mut self, input: Weighted<In>) -> MaybeElided<Out> {
         self.convert(input.node)
     }
 }
@@ -55,22 +55,22 @@ where
     }
 }
 
-macro_rules! skip_maybe_ellided {
+macro_rules! skip_maybe_elided {
     {$($convert_ty:ty),*} => {
-        $(impl<In, Out> Convert<MaybeEllided<In>, MaybeEllided<Out>> for $convert_ty
+        $(impl<In, Out> Convert<MaybeElided<In>, MaybeElided<Out>> for $convert_ty
         where
             $convert_ty: Convert<In, Out>,
         {
-            fn convert(&mut self, input: MaybeEllided<In>) -> MaybeEllided<Out> {
+            fn convert(&mut self, input: MaybeElided<In>) -> MaybeElided<Out> {
                 match input {
-                    MaybeEllided::InPlace(node) => MaybeEllided::InPlace(self.convert(node)),
-                    MaybeEllided::Ellided(hash) => MaybeEllided::Ellided(hash),
+                    MaybeElided::InPlace(node) => MaybeElided::InPlace(self.convert(node)),
+                    MaybeElided::Elided(hash) => MaybeElided::Elided(hash),
                 }
             }
         })*
     }
 }
-skip_maybe_ellided!(ComputeWeight, ForgetWeight);
+skip_maybe_elided!(ComputeWeight, ForgetWeight);
 
 // We need a way to refer to a uniquely defined type without scope annotations
 pub trait ForgettableWeight {
@@ -80,7 +80,7 @@ pub trait ForgettableWeight {
 macro_rules! impl_forgettable_weight {
     { $($ast_typ:ident),* } => {
         $(impl ForgettableWeight for ast::weighted::$ast_typ {
-            type WithoutWeight = ast::ellided::$ast_typ;
+            type WithoutWeight = ast::elided::$ast_typ;
         })*
     }
 }

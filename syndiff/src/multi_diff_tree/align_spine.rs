@@ -38,8 +38,8 @@ where
                 let new_metavar = Metavariable(self.next_metavar);
                 self.next_metavar += 1;
                 (
-                    DelNode::Ellided(Colored::new_white(new_metavar)),
-                    InsNode::Ellided(new_metavar),
+                    DelNode::Elided(Colored::new_white(new_metavar)),
+                    InsNode::Elided(new_metavar),
                 )
             }
             SpineNode::Changed(del, ins) => (del, ins),
@@ -288,15 +288,15 @@ where
                     SpineSeqNode::Deleted(del) => {
                         let unchanged_mv = Metavariable(self.next_metavar);
                         self.next_metavar += 1;
-                        let unchanged_del = DelNode::Ellided(Colored::new_white(unchanged_mv));
-                        let unchanged_ins = InsNode::Ellided(unchanged_mv);
+                        let unchanged_del = DelNode::Elided(Colored::new_white(unchanged_mv));
+                        let unchanged_ins = InsNode::Elided(unchanged_mv);
                         MergeSpineSeqNode::OneDeleteConflict(del, unchanged_del, unchanged_ins)
                     }
                     SpineSeqNode::DeleteConflict(conflict_del, conflict_ins) => {
                         let unchanged_mv = Metavariable(self.next_metavar);
                         self.next_metavar += 1;
-                        let unchanged_del = DelNode::Ellided(Colored::new_white(unchanged_mv));
-                        let unchanged_ins = InsNode::Ellided(unchanged_mv);
+                        let unchanged_del = DelNode::Elided(Colored::new_white(unchanged_mv));
+                        let unchanged_ins = InsNode::Elided(unchanged_mv);
                         MergeSpineSeqNode::BothDeleteConflict(
                             conflict_del,
                             conflict_ins,

@@ -40,7 +40,7 @@ where
     fn visit_mut(&mut self, node: &mut DelNode<D, I>) {
         match node {
             DelNode::InPlace(subnode) => self.visit_mut(subnode),
-            DelNode::Ellided(metavar) => self.visit_mut(metavar),
+            DelNode::Elided(metavar) => self.visit_mut(metavar),
             DelNode::MetavariableConflict(metavar, del, ins) => {
                 self.visit_mut(metavar);
                 VisitMut::<DelNode<D, I>>::visit_mut(self, del);
@@ -57,7 +57,7 @@ where
     fn visit_mut(&mut self, node: &mut InsNode<I>) {
         match node {
             InsNode::InPlace(subnode) => self.visit_mut(subnode),
-            InsNode::Ellided(metavar) => VisitMut::<Metavariable>::visit_mut(self, metavar),
+            InsNode::Elided(metavar) => VisitMut::<Metavariable>::visit_mut(self, metavar),
             InsNode::Conflict(subnodes) => {
                 for subnode in subnodes {
                     VisitMut::<InsNode<I>>::visit_mut(self, subnode)

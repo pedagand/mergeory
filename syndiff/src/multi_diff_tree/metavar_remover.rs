@@ -24,7 +24,7 @@ where
         // Here just compare the in place nodes, without caring about unification problems
         match diff {
             DelNode::InPlace(d) => self.can_merge(&d.node, source),
-            DelNode::Ellided(_) => true,
+            DelNode::Elided(_) => true,
             DelNode::MetavariableConflict(_, d, _) => {
                 Merge::<DelNode<D, I>, T, _>::can_merge(self, d, source)
             }
@@ -37,7 +37,7 @@ where
                 node: self.merge(d.node, source),
                 colors: d.colors,
             }),
-            DelNode::Ellided(mv) => {
+            DelNode::Elided(mv) => {
                 let mv_id = mv.node.0;
                 if self.metavar_replacements.len() <= mv_id {
                     self.metavar_replacements
@@ -190,7 +190,7 @@ where
     fn visit_mut(&mut self, node: &mut InsNode<I>) {
         match node {
             InsNode::InPlace(ins) => self.visit_mut(ins),
-            InsNode::Ellided(mv) => {
+            InsNode::Elided(mv) => {
                 if self.metavar_replacements.len() <= mv.0 {
                     panic!("A metavariable appears in insertion but never in deletion");
                 }
@@ -235,7 +235,7 @@ where
     fn visit_mut(&mut self, node: &mut DelNode<D, I>) {
         match node {
             DelNode::InPlace(del) => self.visit_mut(del),
-            DelNode::Ellided(_) => panic!("A metavariable was not removed in deletion tree"),
+            DelNode::Elided(_) => panic!("A metavariable was not removed in deletion tree"),
             DelNode::MetavariableConflict(_, del, ins) => {
                 self.visit_mut(ins);
                 VisitMut::<DelNode<D, I>>::visit_mut(self, del);

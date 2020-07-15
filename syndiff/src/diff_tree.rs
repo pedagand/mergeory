@@ -1,4 +1,4 @@
-use crate::ellided_tree::MaybeEllided;
+use crate::elided_tree::MaybeElided;
 use crate::family_traits::{Convert, Visit};
 use crate::hash_tree::HashSum;
 use crate::spine_tree::{Aligned as HAligned, AlignedSeq as HAlignedSeq, DiffNode as HDiffNode};
@@ -25,7 +25,7 @@ impl quote::ToTokens for Metavariable {
 
 pub enum ChangeNode<T> {
     InPlace(T),
-    Ellided(Metavariable),
+    Elided(Metavariable),
 }
 
 pub enum DiffNode<Spine, Change> {
@@ -46,14 +46,14 @@ pub struct MetavariableNamer {
     next_id: usize,
 }
 
-impl<T: 'static> Visit<MaybeEllided<T>> for MetavariableNamer
+impl<T: 'static> Visit<MaybeElided<T>> for MetavariableNamer
 where
     MetavariableNamer: Visit<T>,
 {
-    fn visit(&mut self, input: &MaybeEllided<T>) {
+    fn visit(&mut self, input: &MaybeElided<T>) {
         match input {
-            MaybeEllided::InPlace(node) => self.visit(node),
-            MaybeEllided::Ellided(hash) => {
+            MaybeElided::InPlace(node) => self.visit(node),
+            MaybeElided::Elided(hash) => {
                 let key = (TypeId::of::<T>(), *hash);
                 if let Entry::Vacant(entry) = self.metavars.entry(key) {
                     entry.insert(Metavariable(self.next_id));
@@ -97,15 +97,15 @@ where
     }
 }
 
-impl<In: 'static, Out> Convert<MaybeEllided<In>, ChangeNode<Out>> for MetavariableNamer
+impl<In: 'static, Out> Convert<MaybeElided<In>, ChangeNode<Out>> for MetavariableNamer
 where
     MetavariableNamer: Convert<In, Out>,
 {
-    fn convert(&mut self, input: MaybeEllided<In>) -> ChangeNode<Out> {
+    fn convert(&mut self, input: MaybeElided<In>) -> ChangeNode<Out> {
         match input {
-            MaybeEllided::InPlace(node) => ChangeNode::InPlace(self.convert(node)),
-            MaybeEllided::Ellided(hash) => {
-                ChangeNode::Ellided(self.metavars[&(TypeId::of::<In>(), hash)])
+            MaybeElided::InPlace(node) => ChangeNode::InPlace(self.convert(node)),
+            MaybeElided::Elided(hash) => {
+                ChangeNode::Elided(self.metavars[&(TypeId::of::<In>(), hash)])
             }
         }
     }

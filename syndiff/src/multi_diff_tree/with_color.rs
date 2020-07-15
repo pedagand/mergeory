@@ -32,7 +32,7 @@ where
     fn convert(&mut self, input: ChangeNode<C>) -> InsNode<I> {
         match input {
             ChangeNode::InPlace(node) => InsNode::InPlace(self.convert(node)),
-            ChangeNode::Ellided(mv) => InsNode::Ellided(mv),
+            ChangeNode::Elided(mv) => InsNode::Elided(mv),
         }
     }
 }
@@ -58,7 +58,7 @@ where
     fn convert(&mut self, input: ChangeNode<C>) -> DelNode<D, I> {
         match input {
             ChangeNode::InPlace(node) => DelNode::InPlace(self.convert(node)),
-            ChangeNode::Ellided(mv) => DelNode::Ellided(self.color(mv)),
+            ChangeNode::Elided(mv) => DelNode::Elided(self.color(mv)),
         }
     }
 }
@@ -73,10 +73,9 @@ where
         match input {
             DiffNode::Spine(spine) => SpineNode::Spine(self.convert(spine)),
             DiffNode::Changed(del, ins) => SpineNode::Changed(self.convert(del), self.convert(ins)),
-            DiffNode::Unchanged(Some(mv)) => SpineNode::Changed(
-                DelNode::Ellided(Colored::new_white(mv)),
-                InsNode::Ellided(mv),
-            ),
+            DiffNode::Unchanged(Some(mv)) => {
+                SpineNode::Changed(DelNode::Elided(Colored::new_white(mv)), InsNode::Elided(mv))
+            }
             DiffNode::Unchanged(None) => SpineNode::Unchanged,
         }
     }

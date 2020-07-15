@@ -43,7 +43,7 @@ impl Substituter {
     {
         let repl = match std::mem::replace(&mut self.del_subst[mv.0], ComputableSubst::Processing) {
             ComputableSubst::Computed(repl_del) => *repl_del.downcast().unwrap(),
-            ComputableSubst::Pending(None) => DelNode::Ellided(Colored::new_white(mv)),
+            ComputableSubst::Pending(None) => DelNode::Elided(Colored::new_white(mv)),
             ComputableSubst::Pending(Some(repl_del)) => {
                 let mut repl_del = *repl_del.downcast().unwrap();
                 self.visit_mut(&mut repl_del);
@@ -52,7 +52,7 @@ impl Substituter {
             ComputableSubst::Processing => {
                 // In del_subst cycles can only occur between metavariables that should be all
                 // unified together. Break the cycle by behaving once as identity.
-                DelNode::Ellided(Colored::new_white(mv))
+                DelNode::Elided(Colored::new_white(mv))
             }
         };
         self.del_subst[mv.0] = ComputableSubst::Computed(Box::new(repl.clone()));
@@ -122,7 +122,7 @@ impl Substituter {
             None => {
                 // Save conflict and return a simple white metavariable
                 self.ins_subst[mv.0] = ComputableSubst::Pending(MetavarStatus::Conflict);
-                InsNode::Ellided(mv)
+                InsNode::Elided(mv)
             }
         }
     }
@@ -137,7 +137,7 @@ where
     fn visit_mut(&mut self, node: &mut DelNode<D, I>) {
         match node {
             DelNode::InPlace(del) => self.visit_mut(&mut del.node),
-            DelNode::Ellided(mv) => {
+            DelNode::Elided(mv) => {
                 let mut subst = self.del_subst(mv.node);
                 ColorReplacer(mv.colors).visit_mut(&mut subst);
                 *node = subst;
@@ -162,7 +162,7 @@ where
     fn visit_mut(&mut self, node: &mut InsNode<I>) {
         match node {
             InsNode::InPlace(ins) => self.visit_mut(&mut ins.node),
-            InsNode::Ellided(mv) => *node = self.ins_subst(*mv),
+            InsNode::Elided(mv) => *node = self.ins_subst(*mv),
             InsNode::Conflict(conflict_list) => {
                 for ins in &mut *conflict_list {
                     <Substituter as VisitMut<InsNode<I>>>::visit_mut(self, ins)
@@ -250,7 +250,7 @@ where
                     if Merge::<DelNode<D, I>, _, _>::can_merge(&mut IdMerger, del, ins) {
                         *node = SpineSeqNode::Deleted(std::mem::replace(
                             del,
-                            DelNode::Ellided(Colored::new_white(Metavariable(usize::MAX))),
+                            DelNode::Elided(Colored::new_white(Metavariable(usize::MAX))),
                         ))
                     }
                 }
@@ -296,7 +296,7 @@ where
                 self.visit_mut(&mut del.node);
                 del.colors = self.0;
             }
-            DelNode::Ellided(mv) => mv.colors = self.0,
+            DelNode::Elided(mv) => mv.colors = self.0,
             DelNode::MetavariableConflict(_, del, _) => {
                 VisitMut::<DelNode<D, I>>::visit_mut(self, del)
             }
@@ -313,7 +313,7 @@ where
     fn convert(&mut self, del: DelNode<D, I>) -> InsNode<I> {
         match del {
             DelNode::InPlace(del) => InsNode::InPlace(Colored::new_white(self.convert(del.node))),
-            DelNode::Ellided(mv) => InsNode::Ellided(mv.node),
+            DelNode::Elided(mv) => InsNode::Elided(mv.node),
             DelNode::MetavariableConflict(_, del, _) => {
                 Convert::<DelNode<D, I>, _>::convert(self, *del)
             }
@@ -358,14 +358,14 @@ where
     fn visit_mut(&mut self, node: &mut DelNode<D, I>) {
         match node {
             DelNode::InPlace(del) => self.visit_mut(&mut del.node),
-            DelNode::Ellided(_) => (),
+            DelNode::Elided(_) => (),
             DelNode::MetavariableConflict(mv, del, ins) => {
                 VisitMut::<DelNode<D, I>>::visit_mut(self, del);
                 match &self.0.ins_subst[mv.0] {
                     ComputableSubst::Computed(_)
                     | ComputableSubst::Pending(MetavarStatus::Keep) => {
                         *node =
-                            std::mem::replace(&mut **del, DelNode::Ellided(Colored::new_white(*mv)))
+                            std::mem::replace(&mut **del, DelNode::Elided(Colored::new_white(*mv)))
                     }
                     ComputableSubst::Pending(MetavarStatus::Conflict)
                     | ComputableSubst::Pending(MetavarStatus::Replace(_)) => {

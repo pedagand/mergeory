@@ -57,7 +57,7 @@ where
     fn convert(&mut self, input: ChangeNode<I>) -> O {
         match input {
             ChangeNode::InPlace(node) => self.convert(node),
-            ChangeNode::Ellided(mv) => Convert::<Metavariable, O>::convert(self, mv),
+            ChangeNode::Elided(mv) => Convert::<Metavariable, O>::convert(self, mv),
         }
     }
 }
@@ -136,7 +136,7 @@ where
     fn convert(&mut self, input: DelNode<D, I>) -> O {
         match input {
             DelNode::InPlace(del) => self.convert(del),
-            DelNode::Ellided(mv) => self.convert(mv),
+            DelNode::Elided(mv) => self.convert(mv),
             DelNode::MetavariableConflict(mv, del, ins) => {
                 let del = Convert::<DelNode<D, I>, O>::convert(self, *del);
                 let ins = self.convert(ins);
@@ -154,7 +154,7 @@ where
     fn convert(&mut self, input: InsNode<I>) -> O {
         match input {
             InsNode::InPlace(ins) => self.convert(ins),
-            InsNode::Ellided(mv) => Convert::<Metavariable, O>::convert(self, mv),
+            InsNode::Elided(mv) => Convert::<Metavariable, O>::convert(self, mv),
             InsNode::Conflict(conflict) => {
                 let ins_iter = conflict
                     .into_iter()
@@ -212,7 +212,7 @@ where
         match input {
             SpineNode::Spine(spine) => self.convert(spine),
             SpineNode::Unchanged => O::verbatim_macro(quote!(unchanged![])),
-            SpineNode::Changed(DelNode::Ellided(del_mv), InsNode::Ellided(ins_mv))
+            SpineNode::Changed(DelNode::Elided(del_mv), InsNode::Elided(ins_mv))
                 if del_mv.node == ins_mv =>
             {
                 O::verbatim_macro(quote!(unchanged![#ins_mv]))

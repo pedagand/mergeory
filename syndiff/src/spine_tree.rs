@@ -1,4 +1,4 @@
-use crate::ellided_tree::MaybeEllided;
+use crate::elided_tree::MaybeElided;
 use crate::family_traits::{Convert, Merge};
 use crate::hash_tree::HashSum;
 use crate::weighted_tree::{
@@ -8,7 +8,7 @@ use std::collections::VecDeque;
 
 pub enum DiffNode<Spine, Change> {
     Spine(Spine),
-    Changed(MaybeEllided<Change>, MaybeEllided<Change>),
+    Changed(MaybeElided<Change>, MaybeElided<Change>),
     Unchanged(HashSum),
 }
 
@@ -20,8 +20,8 @@ enum NodeAlign {
 
 pub enum Aligned<Spine, Change> {
     Zipped(DiffNode<Spine, Change>),
-    Deleted(MaybeEllided<Change>),
-    Inserted(MaybeEllided<Change>),
+    Deleted(MaybeElided<Change>),
+    Inserted(MaybeElided<Change>),
 }
 pub struct AlignedSeq<Spine, Change>(pub Vec<Aligned<Spine, Change>>);
 
@@ -43,7 +43,7 @@ impl<In: ForgettableWeight, Out> Merge<Weighted<In>, Weighted<In>, DiffNode<Out,
     for SpineZipper
 where
     SpineZipper: Merge<In, In, Out>,
-    ForgetWeight: Convert<Weighted<In>, MaybeEllided<In::WithoutWeight>>,
+    ForgetWeight: Convert<Weighted<In>, MaybeElided<In::WithoutWeight>>,
 {
     fn can_merge(&mut self, del: &Weighted<In>, ins: &Weighted<In>) -> bool {
         // A diff node always succeed at merging two trees but we must compute
@@ -51,13 +51,13 @@ where
         // ourselves
         let mut sub_zipper = SpineZipper::default();
         let node_align = match (&del.node, &ins.node) {
-            (MaybeEllided::InPlace(del), MaybeEllided::InPlace(ins))
+            (MaybeElided::InPlace(del), MaybeElided::InPlace(ins))
                 if sub_zipper.can_merge(del, ins) =>
             {
                 self.cost += sub_zipper.cost;
                 NodeAlign::Zip(sub_zipper)
             }
-            (MaybeEllided::Ellided(hdel), MaybeEllided::Ellided(hins)) if hdel == hins => {
+            (MaybeElided::Elided(hdel), MaybeElided::Elided(hins)) if hdel == hins => {
                 NodeAlign::Copy
             }
             _ => {
@@ -72,8 +72,7 @@ where
     fn merge(&mut self, del: Weighted<In>, ins: Weighted<In>) -> DiffNode<Out, In::WithoutWeight> {
         match self.node_alignments.pop_front().unwrap() {
             NodeAlign::Zip(mut sub_zipper) => {
-                if let (MaybeEllided::InPlace(del), MaybeEllided::InPlace(ins)) =
-                    (del.node, ins.node)
+                if let (MaybeElided::InPlace(del), MaybeElided::InPlace(ins)) = (del.node, ins.node)
                 {
                     DiffNode::Spine(sub_zipper.merge(del, ins))
                 } else {
@@ -81,7 +80,7 @@ where
                 }
             }
             NodeAlign::Copy => {
-                if let MaybeEllided::Ellided(h) = del.node {
+                if let MaybeElided::Elided(h) = del.node {
                     DiffNode::Unchanged(h)
                 } else {
                     panic!("Wrong node alignment applied by SpineZipper")
@@ -100,7 +99,7 @@ impl<In: ForgettableWeight, Out>
     Merge<AlignableSeq<In>, AlignableSeq<In>, AlignedSeq<Out, In::WithoutWeight>> for SpineZipper
 where
     SpineZipper: Merge<Weighted<In>, Weighted<In>, DiffNode<Out, In::WithoutWeight>>,
-    ForgetWeight: Convert<Weighted<In>, MaybeEllided<In::WithoutWeight>>,
+    ForgetWeight: Convert<Weighted<In>, MaybeElided<In::WithoutWeight>>,
 {
     fn can_merge(&mut self, del: &AlignableSeq<In>, ins: &AlignableSeq<In>) -> bool {
         // We need to decide the alignment here because the merge operation can

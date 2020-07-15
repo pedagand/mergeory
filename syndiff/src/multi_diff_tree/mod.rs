@@ -105,14 +105,14 @@ where
 #[derive(Clone)]
 pub enum DelNode<D, I> {
     InPlace(Colored<D>),
-    Ellided(Colored<Metavariable>),
+    Elided(Colored<Metavariable>),
     MetavariableConflict(Metavariable, Box<DelNode<D, I>>, InsNode<I>),
 }
 
 #[derive(Clone)]
 pub enum InsNode<I> {
     InPlace(Colored<I>),
-    Ellided(Metavariable),
+    Elided(Metavariable),
     Conflict(Vec<InsNode<I>>),
 }
 #[derive(Clone)]

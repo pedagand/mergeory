@@ -107,7 +107,7 @@ where
 {
     fn can_merge(&mut self, del: &DelNode<D, I>, ins: &InsNode<I>) -> bool {
         match (del, ins) {
-            (DelNode::Ellided(_), _) => true,
+            (DelNode::Elided(_), _) => true,
             (DelNode::MetavariableConflict(_, _, _), _) => true,
             (DelNode::InPlace(del_subtree), InsNode::InPlace(ins_subtree)) => {
                 if ins_subtree.colors == ColorSet::white() {
@@ -124,7 +124,7 @@ where
 
     fn merge(&mut self, del: DelNode<D, I>, ins: InsNode<I>) -> DelNode<D, I> {
         match (del, ins) {
-            (DelNode::Ellided(mv), ins) => {
+            (DelNode::Elided(mv), ins) => {
                 // Here we may have to clone the insert tree once to check for potential conflicts
                 let mv_id = mv.node.0;
                 let cur_status = std::mem::take(&mut self.metavars_status[mv_id]);
@@ -139,7 +139,7 @@ where
                         MetavarStatus::Conflict
                     }
                 });
-                DelNode::MetavariableConflict(mv.node, Box::new(DelNode::Ellided(mv)), ins)
+                DelNode::MetavariableConflict(mv.node, Box::new(DelNode::Elided(mv)), ins)
             }
             (DelNode::MetavariableConflict(mv, del, conflict_ins), ins) => {
                 self.metavars_status[mv.0] = Some(MetavarStatus::Conflict);
@@ -193,7 +193,7 @@ where
     fn visit_mut(&mut self, del: &mut DelNode<D, I>) {
         match del {
             DelNode::InPlace(del_subtree) => self.visit_mut(&mut del_subtree.node),
-            DelNode::Ellided(mv) => {
+            DelNode::Elided(mv) => {
                 let mv_id = mv.node.0;
                 self.metavars_status[mv_id] = Some(match &self.metavars_status[mv_id] {
                     None | Some(MetavarStatus::Keep) => MetavarStatus::Keep,
@@ -203,8 +203,8 @@ where
                 });
                 *del = DelNode::MetavariableConflict(
                     mv.node,
-                    Box::new(DelNode::Ellided(*mv)),
-                    InsNode::Ellided(mv.node),
+                    Box::new(DelNode::Elided(*mv)),
+                    InsNode::Elided(mv.node),
                 )
             }
             DelNode::MetavariableConflict(mv, del, _) => {
