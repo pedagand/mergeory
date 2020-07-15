@@ -46,15 +46,60 @@
 \usepackage{hyperref}
 \hypersetup{hidelinks}
 
+\newcommand\yrg[1]{\textcolor{red}{(YRG: #1)}}
+
 \usepackage[section]{placeins}
 
 \begin{document}
 
 \maketitle
 
-In software engineering people rarely work alone on big projects. Therefore, quite often they want to merge their work with what has been done by others. To ease these fusions, and keep track of the changes, they often use version control systems such as Git. We will call a commit, an atomic action of changing several files that makes sense by itself (whatever this may mean for the programmer). Typical commits are refactorings, bugfixes or new features added. Programmers make commits simultaneously, being unaware of what other users may have done at the same time, however the final product is a fusion what they all did. This space of unawareness can lead to subtle bugs, that cannot be seen if people only review changes and not the final code\footnote{Modern coding techniques involve continuous integration testing to mitigate that, but tests cases are rarely perfect, and we want to expose another approach.}.
+In software engineering, people rarely work alone on large
+projects. Therefore, quite often they want to merge their work with
+what has been done by others in the meantime.
+%
+To automate these fusions, and keep track of the changes, developpers use
+dedicated tools named \textit{version control systems}, e.g. Git \yrg{ref?}.
+
+A \textit{commit} is an atomic action of changing several
+source code files that makes sense by itself (whatever this may mean
+for the programmer). Typical commits are refactorings, bugfixes or the
+introduction of new features.
+
+Programmers make commits simultaneously, being unaware of what other
+users may have done at the same time. However, the final product is a
+fusion of what they all did. This space of unawareness can lead to
+subtle bugs, that cannot be seen if people only review changes and not
+the final code\footnote{Modern coding techniques involve continuous
+  integration testing to mitigate that, but tests cases are rarely
+  perfect, and we want to expose another approach.}.
+
+The current tools to merge concurrent changes to source code are
+purely textual: as long as two modifications modify distinct lines of
+code, a system like Git accepts to merge them
+automatically. Unfortunately, even if two modifications are physically
+separated they may interact, especially when one modification breaks
+the assumptions on top of which the other has been conceived. In this
+work, we propose a semantically sound notion of commits merge which
+captures that kind of unforeseen interactions between concurrent
+modifications.
+
+\paragraph{Plan and contributions}
+In Section~\ref{sec:overview}, we show on a running example how a
+purely textual merge of modifications may introduce bugs. We
+illustrate how our tool capture this bug as semantic conflicts between
+the commits. We also explain its architecture which is based on two
+main components, which also are the two main contributions of this
+work: (i) an algorithm which implements a principled notion of
+syntactic merge at the level of abstract syntax trees
+(Section~\ref{sec:syntactic-merge}) ; (ii) a semantic notion of merge
+at the level of execution traces (Section~\ref{sec:semantic-merge}).
+As we shall discuss in Section~\ref{sec:related-work}, our work
+improves on existing approaches of syntactic merge and it offers a
+practical, expressive, and original notion of semantic merge.
 
 \section{Overview}
+\label{sec:overview}
 
 We will present there a method to merge syntactically source codes, and then deducing which expressions remain semantically ambiguous. A semantic ambiguity means that nobody from the original committers, was fully aware of its value, or said differently, it has a value that comes from the fusion operation itself. These ambiguity points, should be manually reviewed, and resolved.
 
