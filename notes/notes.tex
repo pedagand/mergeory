@@ -28,6 +28,7 @@
 \usetikzlibrary{positioning}
 \usetikzlibrary{shapes.geometric}
 \tikzstyle{varnode} = [draw, circle, text height=1.5ex, text depth=.25ex, align=center]
+\tikzstyle{mvnode} = [draw, regular polygon, regular polygon sides=3, text height=1.5ex, text depth=.25ex, align=center]
 \tikzstyle{modnode} = [draw, rectangle]
 \tikzstyle{condnode} = [draw, diamond]
 \tikzstyle{conflict} = [red, fill=red!10]
@@ -274,6 +275,53 @@ Secondly, we merge together identical constructions between the deletion and ins
 
 The elisions can be seen as code moved from a location in $d$ into another location in $i$, but the actual content is temporarily forgotten inside what we call a meta-variable. In this paper, we will denote these elisions by Greek letters. As a given meta-variable can occur more that twice (at least once in deletion and once in insertion but maybe more), these code displacements have multiple sources and multiple targets, but a given meta-variable will always represent an identical code sub-tree.
 
+\begin{figure}[ht]
+\begin{minipage}{0.49\textwidth}
+\centering\begin{tikzpicture}
+    \node[varnode] (del_plus) {$+$};
+    \node[varnode, colorA] (del_times) at ($(del_plus)+(-0.5,-1)$) {$*$};
+    \node[varnode, colorB] (del_one) at ($(del_plus)+(0.5,-1)$) {$x$};
+    \node[varnode, colorA] (del_two) at ($(del_times)+(-0.5,-1)$) {$2$};
+    \node[varnode, colorA] (del_three) at ($(del_times)+(0.5,-1)$) {$x$};
+    \draw (del_plus) -- (del_times);
+    \draw (del_plus) -- (del_one);
+    \draw (del_times) -- (del_two);
+    \draw (del_times) -- (del_three);
+
+    \node[varnode] (ins_minus) at ($(del_plus)+(3,0)$) {$-$};
+    \node[varnode, colorA] (ins_times) at ($(ins_minus)+(-0.5,-1)$) {$*$};
+    \node[varnode, colorB] (ins_one) at ($(ins_minus)+(0.5,-1)$) {$x$};
+    \node[varnode, colorA] (ins_two) at ($(ins_times)+(-0.5,-1)$) {$2$};
+    \node[varnode, colorA] (ins_three) at ($(ins_times)+(0.5,-1)$) {$x$};
+    \draw (ins_minus) -- (ins_times);
+    \draw (ins_minus) -- (ins_one);
+    \draw (ins_times) -- (ins_two);
+    \draw (ins_times) -- (ins_three);
+
+    \node (arrow) at ($(del_one)!0.5!(ins_times)$) {$\rightarrow$};
+\end{tikzpicture}
+\end{minipage}
+\begin{minipage}{0.49\textwidth}
+\centering\begin{tikzpicture}
+    \node[varnode] (del_plus) {$+$};
+    \node[mvnode, colorA] (del_alpha) at ($(del_plus)+(-0.75,-1.5)$) {$\alpha$};
+    \node[mvnode, colorB] (del_beta) at ($(del_plus)+(0.75,-1.5)$) {$\beta$};
+    \draw (del_plus) -- (del_alpha.north);
+    \draw (del_plus) -- (del_beta.north);
+
+    \node[varnode] (ins_minus) at ($(del_plus)+(4,0)$) {$-$};
+    \node[mvnode, colorA] (ins_alpha) at ($(ins_minus)+(-0.75,-1.5)$) {$\alpha$};
+    \node[mvnode, colorB] (ins_beta) at ($(ins_minus)+(0.75,-1.5)$) {$\beta$};
+    \draw (ins_minus) -- (ins_alpha.north);
+    \draw (ins_minus) -- (ins_beta.north);
+
+    \node (arrow) at ($($(del_beta)!0.5!(del_plus)$)!0.5!($(ins_alpha)!0.5!(ins_minus)$)$) {$\rightarrow$};
+\end{tikzpicture}
+\end{minipage}
+\label{fig:metavar_elision}
+\caption{The change \st{$(2*x)+x$} $\rightarrow$ \ul{$(2*x)-x$} becomes \st{$\alpha+\beta$} $\rightarrow$ \ul{$\alpha-\beta$} after meta-variable elision.}
+\end{figure}
+
 Trying to merge together two nodes in the AST is easy, we simply need to check if they use the same root constructor, recursively merge if it is the case, and fail otherwise. However, this approach is really bad with sequences (eg. sequences of functions or sequences of statements). We do not want to fully split a list if only one element has been inserted, removed or changed. Therefore, we use list edit scripts instead as the output of a merge operation on two sequences. We call the merged part of the difference tree its spine.
 
 We denote by $S(\overrightarrow{t}, \overrightarrow{s})$ a constructor from the target language AST, with an arbitrary but fixed arity of trees ($t$) and sequences ($s$). For instance one of the possible $S$ could be the language construction \lstinline[mathescape]|if $t_{cond}$ { $\overrightarrow{s_{true}}$ } else { $\overrightarrow{s_{false}}$ }| with one expression sub-tree and two nested sequences of instructions.
@@ -304,7 +352,7 @@ This algorithm is in $O(nm)$ where $n$ (resp. $m$) is the number of node of the 
 We can see syntactic differences as partial functions turning a syntax tree into another syntax tree.
 The difference between $d$ and $i$ is therefore a function that is at least mapping $d$ into $i$, but it is also defined on some other trees sharing all the relevant structure with $d$.
 
-The implied function of a difference tree is defined as follows: let's suppose that we have $\Gamma$ a function from metavariable inside the difference tree, to syntax trees, given by an oracle. In practice, $\Gamma$ is constrained enough to be inferred.
+The implied function of a difference tree is defined as follows: let's suppose that we have $\Gamma$ a function from meta-variable inside the difference tree, to syntax trees, given by an oracle. In practice, $\Gamma$ is constrained enough to be inferred. Then apply the following syntax driven rules:
 
 \noindent
 \begin{minipage}{.49\textwidth}
@@ -367,7 +415,29 @@ Implementing an algorithm that requires extending a syntax tree can be tidious i
 
 Along this paper, I give a Rust implementation for the syntax difference and merging algorithm of Rust codes. The parser used (the syn crate) uses more than 180 types in its syntax trees, so manual extension was not an option.
 
-The solution I give is based on a somehow generic code generation system (implemented as procedural macro). The idea is that we want to add the ability to extend a type family of mutually recursive sum of products (i.e. nested enums and structs in Rust terminology) by changing systematically some types by others inside it, thus generating a new family variant. Then, we also make a code generator to browse through or convert between variants of the same family. After generation, manual code is only required for the new structures of the trees.
+The solution I give is based on a somehow generic code generation system (implemented as procedural macro). The idea is that we want to add the ability to extend a type family of mutually recursive sum of products (nested enums and structs in Rust terminology) by changing systematically some types by others inside it, thus generating a new family variant. Then, we also make a code generator to browse through or convert between variants of the same family. After generation, manual code is only required for the new structures of the trees.
+
+\begin{lstlisting}[label=lst:codegen, caption={Usage example of the code generator for creating the hash-tagged family variant}]
+syn_codegen! {
+    pub mod hash {
+        use crate::family_traits::Convert;
+        use crate::hash_tree::{HashTagged, TreeHasher};
+
+        #[derive(Hash, Eq, PartialEq)]
+        extend_family! {
+            Expr as HashTagged<Expr>,
+            Vec<Stmt> as Vec<HashTagged<Stmt>>,
+            Vec<Item> as Vec<HashTagged<Item>>,
+            [...] // other type replacements
+        }
+
+        family_impl!(Convert<syn, self> for TreeHasher);
+    }
+
+    [...] // other family variants
+}
+\end{lstlisting}
+
 
 Note that for having a production ready tool, the current parser is not adapted, as it systematically forgets the comments inside source code. But this is left for future work as a pure engeneering problem.
 
@@ -679,6 +749,20 @@ Where $\oplus$ is a function transposing a deletion tree to an insertion tree by
  \AxiomC{}
  \UnaryInfC{$\Gamma \vdash i_l \vee i_r = Conflict(\Gamma(i_l), \Gamma(i_r))$}
 \end{prooftree}
+
+\subsection{Algorithm for merging differences}
+The above specification is telling what a merged version must look like but doesn't tell how to compute this merged version. Simply following the rules is not enough, because we have two global variables $\Gamma$ and $\Delta$ to infer. Moreover, for $\Gamma$ there is a priori several possibilities. Hopefully, we can easily distinguish one that will minimize the number of conflicts generated. We want a valid $\Gamma$ that minimize the number of meta-variables associated to $\top$.
+
+From a high level point of view, the merging algorithm follows these steps:
+\begin{itemize}
+ \item Ensure that all the meta-variables used in both programs are disjoint by alpha-renaming whenever necessary.
+ \item Align the spines of both difference trees. This requires unrolling whenever one of the difference tree still has a spine node while the other has a difference at the same place. This step also aligns the sequences and detect insert order conflicts. (TODO: Figure here?)
+ \item Merge the insertion trees together. For each insertion we try to inline it inside the facing deletion tree first. If only one inlining could succeed, then we perform it, else we try to merge together the insertion trees. This take the union of tints as resulting color and create conflicts whenever both insertion do not match. By performing inlinings, we can remember $\Gamma^*$ a map form meta-variables to a list of the trees that were inlined on the metavariable.
+ \item Merge the deletion trees together. For that, we build $\Delta$ as we merge the sub-trees.
+ \item Then we perform all the substitutions wherever there are meta-variables with a replacement in $\Delta$ for deletion trees, and in $\Gamma$ for insertion trees.
+\end{itemize}
+
+If we want to merge more than two differences, we can reapply the same algorithm on already merged trees, thus accumulating modifications but also conflicts.
 
 \section{Semantic merge}
 Having two commits syntactically merged do not mean that the result is a valid semantic combination that respect the intention of all original commits.
