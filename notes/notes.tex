@@ -101,11 +101,23 @@ practical, expressive, and original notion of semantic merge.
 \section{Overview}
 \label{sec:overview}
 
-We will present there a method to merge syntactically source codes, and then deducing which expressions remain semantically ambiguous. A semantic ambiguity means that nobody from the original committers, was fully aware of its value, or said differently, it has a value that comes from the fusion operation itself. These ambiguity points, should be manually reviewed, and resolved.
+In this section, we present a method to syntactically merge source
+code files, and to deduce which expressions are semantically
+ambiguous. An expression is semantically ambiguous if nobody from the
+original committers was fully aware of its value ; or said
+differently, if it has a value that comes from the fusion operation
+itself. These ambiguity points, should be manually reviewed, and
+resolved.
 
-I will there quickly present on an example the ideas of this new merging procedure, the full description being given later.
+\yrg{Commencer par un exemple qui montre que la fusion textuelle
+ne fonctionne pas et illustrer la notion d'expression ambigue
+sur cet exemple.}
 
-Suppose we have the following code (middle) with two simultaneous commits (left and right):
+I will there quickly present on an example the ideas of this new
+merging procedure, the full description being given later.
+
+Suppose we have the following code (middle) with two simultaneous
+commits (left and right):
 
 \noindent
 \begin{minipage}{.32\textwidth}
