@@ -36,6 +36,8 @@
 \tikzstyle{colorB} = [fill=orange!40]
 \tikzstyle{colorC} = [fill=olive!30]
 \tikzstyle{colorD} = [fill=teal!30]
+\tikzstyle{deleted} = [fill=red!20]
+\tikzstyle{inserted} = [fill=olive!20]
 
 \usepackage{bussproofs}
 \usepackage{amsmath}
@@ -361,7 +363,7 @@ The elisions can be seen as code moved from a location in $d$ into another locat
 
     \node (arrow) at ($(del_one)!0.5!(ins_times)$) {$\rightarrow$};
 \end{tikzpicture}
-\end{minipage}
+\end{minipage}\hfill
 \begin{minipage}{0.49\textwidth}
 \centering\begin{tikzpicture}
     \node[varnode] (del_plus) {$+$};
@@ -384,6 +386,75 @@ The elisions can be seen as code moved from a location in $d$ into another locat
 \end{figure}
 
 Trying to merge together two nodes in the AST is easy, we simply need to check if they use the same root constructor, recursively merge if it is the case, and fail otherwise. However, this approach is really bad with sequences (eg. sequences of functions or sequences of statements). We do not want to fully split a list if only one element has been inserted, removed or changed. Therefore, we use list edit scripts instead as the output of a merge operation on two sequences. We call the merged part of the difference tree its spine.
+
+\begin{figure}[ht]
+\begin{minipage}{0.49\textwidth}
+\centering\begin{tikzpicture}
+    \node[varnode, deleted] (del_block) {$\{\ldots\}$};
+    \node[varnode, deleted] (del_stmt1) at ($(del_block)+(-1,-1)$) {$\textbf{let}$};
+    \node[varnode, deleted] (del_stmt2) at ($(del_block)+(1,-1)$) {$=$};
+    \node[varnode, deleted] (del_x) at ($(del_stmt1)+(-0.5,-1)$) {$x$};
+    \node[varnode, deleted] (del_three) at ($(del_stmt1)+(0.5,-1)$) {$3$};
+    \node[varnode, deleted] (del_y) at ($(del_stmt2)+(-0.5,-1)$) {$y$};
+    \node[varnode, deleted] (del_yx) at ($(del_stmt2)+(0.5,-1)$) {$x$};
+    \draw (del_block) -- (del_stmt1);
+    \draw (del_block) -- (del_stmt2);
+    \draw (del_stmt1) -- (del_x);
+    \draw (del_stmt1) -- (del_three);
+    \draw (del_stmt2) -- (del_y);
+    \draw (del_stmt2) -- (del_yx);
+
+    \node[varnode, inserted] (ins_block) at ($(del_plus)+(4.25,0)$) {$\{\ldots\}$};
+    \node[varnode, inserted] (ins_stmt1) at ($(ins_block)+(-1,-1)$) {$=$};
+    \node[varnode, inserted] (ins_stmt2) at ($(ins_block)+(1,-1)$) {$=$};
+    \node[varnode, inserted] (ins_y) at ($(ins_stmt1)+(-0.5,-1)$) {$y$};
+    \node[varnode, inserted] (ins_five) at ($(ins_stmt1)+(0.5,-1)$) {$5$};
+    \node[varnode, inserted] (ins_z) at ($(ins_stmt2)+(-0.5,-1)$) {$z$};
+    \node[varnode, inserted] (ins_nine) at ($(ins_stmt2)+(0.5,-1)$) {$9$};
+    \draw (ins_block) -- (ins_stmt1);
+    \draw (ins_block) -- (ins_stmt2);
+    \draw (ins_stmt1) -- (ins_y);
+    \draw (ins_stmt1) -- (ins_five);
+    \draw (ins_stmt2) -- (ins_z);
+    \draw (ins_stmt2) -- (ins_nine);
+
+    \node (arrow) at ($(del_stmt2)!0.5!(ins_stmt1)$) {$\rightarrow$};
+\end{tikzpicture}
+\end{minipage}\hfill
+\begin{minipage}{0.45\textwidth}
+\centering\begin{tikzpicture}
+    \node[varnode] (spine_block) {$\{\ldots\}$};
+    \node[modnode, scale=0.8, deleted] (spine_stmt1) at ($(spine_block)+(-2.5,-1.5)$) {\tikz{
+        \node[varnode] (del_stmt) {$\textbf{let}$};
+        \node[varnode] (del_x) at ($(del_stmt)+(-0.5,-1)$) {$x$};
+        \node[varnode] (del_three) at ($(del_stmt)+(0.5,-1)$) {$3$};
+        \draw (del_stmt) -- (del_x);
+        \draw (del_stmt) -- (del_three);
+    }};
+    \node[varnode] (spine_stmt2) at ($(spine_block)+(-0.25,-1)$) {$=$};
+    \node[modnode, scale=0.8, inserted] (spine_stmt3) at ($(spine_block)+(2.5,-1.5)$) {\tikz{
+        \node[varnode] (ins_stmt) at ($(ins_block)+(1,-1)$) {$=$};
+        \node[varnode] (ins_z) at ($(ins_stmt)+(-0.5,-1)$) {$z$};
+        \node[varnode] (ins_nine) at ($(ins_stmt)+(0.5,-1)$) {$9$};
+        \draw (ins_stmt) -- (ins_z);
+        \draw (ins_stmt) -- (ins_nine);
+    }};{};
+    \node[varnode] (spine_y) at ($(spine_stmt2)+(-0.75,-1)$) {$y$};
+    \node[modnode, scale=0.8] (change_y) at ($(spine_stmt2)+(0.75,-1)$) {\tikz{
+        \node[varnode, deleted] (x) {$x$};
+        \node[varnode, inserted] (five) at ($(x)+(1.2,0)$) {$5$};
+        \node (arrow) at ($(x)!0.5!(five)$) {$\rightarrow$};
+    }};
+    \draw (spine_block) -- (spine_stmt1);
+    \draw (spine_block) -- (spine_stmt2);
+    \draw (spine_block) -- (spine_stmt3);
+    \draw (spine_stmt2) -- (spine_y);
+    \draw (spine_stmt2) -- (change_y);
+\end{tikzpicture}
+\end{minipage}
+\label{fig:spine_seq_align}
+\caption{The change \st{$\{ \mathbf{let}\ x=3; y=5\}$} $\rightarrow$ \ul{$\{ y=5; z=9 \}$} becomes $\{\text{\st{$\mathbf{let}\ x=3;$}}\ y = \text{\st{$x$}} \rightarrow \text{\ul{$5$}}; \text{\ul{$z = 9$}}\}$ after spine merging and sequence alignment.}
+\end{figure}
 
 We denote by $S(\overrightarrow{t}, \overrightarrow{s})$ a constructor from the target language AST, with an arbitrary but fixed arity of trees ($t$) and sequences ($s$). For instance one of the possible $S$ could be the language construction \lstinline[mathescape]|if $t_{cond}$ { $\overrightarrow{s_{true}}$ } else { $\overrightarrow{s_{false}}$ }| with one expression sub-tree and two nested sequences of instructions.
 
@@ -409,7 +480,7 @@ To compute a syntactic difference, we take ASTs of both the original and the mod
 
 This algorithm is in $O(nm)$ where $n$ (resp. $m$) is the number of node of the original (resp. modified) tree. The most computationally expansive part of the algorithm is computing sequence alignments, all the rest is linear.
 
-\subsubsection{Semantics of syntactic differences}
+\subsubsection{Applying syntactic differences}
 We can see syntactic differences as partial functions turning a syntax tree into another syntax tree.
 The difference between $d$ and $i$ is therefore a function that is at least mapping $d$ into $i$, but it is also defined on some other trees sharing all the relevant structure with $d$.
 
