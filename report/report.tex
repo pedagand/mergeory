@@ -235,6 +235,8 @@ To take into account the knowledge of a commit of some modification we use aware
 \begin{minipage}{.32\textwidth}
 \setstcolor{blue}
 \setulcolor{blue}
+\newbox\boxsemicolon
+\sbox\boxsemicolon{\color{blue}\texttt{;}}
 \begin{lstlisting}[rulecolor=\color{blue!20}]
 fn f(c: bool) {
     @\st{$\alpha$;}@
@@ -251,17 +253,17 @@ fn f(c: bool) {
 }
 
 @{\color{blue} \ul{fn answer() -> i32 \{}}@
-    @\ul{$\alpha${\color{blue};}}@
-    @\ul{$\beta${\color{blue};\color{black}}}@
+    @\ul{$\alpha${\usebox\boxsemicolon}}@
+    @\ul{$\beta${\usebox\boxsemicolon}}@
     @\ul{$\gamma$}@
 @{\color{blue} \ul{\}}}@
 \end{lstlisting}
 \end{minipage}\hfill
 \begin{minipage}{.32\textwidth}
 \newbox\boxtwo
-\sbox\boxtwo{\setulcolor{orange}\setul{-.75ex}{}\ul{2}}
+\sbox\boxtwo{\setulcolor{orange}\setul{-.75ex}{}\ul{\texttt{2}}}
 \newbox\boxforty
-\sbox\boxforty{\setulcolor{orange}\setul{-.75ex}{}\ul{40}}
+\sbox\boxforty{\setulcolor{orange}\setul{-.75ex}{}\ul{\texttt{40}}}
 \begin{lstlisting}
 fn f(c: bool) {
     @\setstcolor{blue}\st{let a = {\usebox\boxtwo};}@
@@ -413,7 +415,7 @@ Trying to merge together two nodes in the AST is easy, we simply need to check i
     \draw (del_stmt2) -- (del_y);
     \draw (del_stmt2) -- (del_yx);
 
-    \node[varnode, colorIns] (ins_block) at ($(del_plus)+(4.25,0)$) {$\{\ldots\}$};
+    \node[varnode, colorIns] (ins_block) at ($(del_plus)+(4.1,0)$) {$\{\ldots\}$};
     \node[varnode, colorIns] (ins_stmt1) at ($(ins_block)+(-1,-1)$) {$=$};
     \node[varnode, colorIns] (ins_stmt2) at ($(ins_block)+(1,-1)$) {$=$};
     \node[varnode, colorIns] (ins_y) at ($(ins_stmt1)+(-0.5,-1)$) {$y$};
