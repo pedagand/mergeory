@@ -13,13 +13,6 @@
   captionpos=b,
   style=boxed,
   escapechar=@,
-  % We want to disable any syntax coloring to focus on awareness colors
-  stringstyle=,
-  keywordstyle=,% reserved keywords
-  keywordstyle=[2],% traits
-  keywordstyle=[3],% primitive types
-  keywordstyle=[4],% type and value constructors
-  keywordstyle=[5],% macros
 }
 
 \usepackage{tikz}
@@ -43,6 +36,37 @@
 \begin{document}
 
 \maketitle
+
+\section{Definitions}
+
+\paragraph{Commits \& modifications}
+In this section, I will have a very generic notion of commits. A commit is a set of modifications of the semantic of a program. A single modification
+can have an impact on several program states and several program variables.
+An example of a modification is the change of an expression in an assignment (\lstinline{x = expr}). This modification does not only touch the program variable \lstinline{x} but also each expression that depend the new value in the rest of the program.
+\begin{lstlisting}[caption=Modification of $x$]
+let mut x = 0; // changed
+let y = x + 1; // touched (x is changed)
+let z = y + 1; // touched (y is touched)
+x = 45;        // untouched
+let w = x - 3; // untouched (x have been reassigned)
+\end{lstlisting}
+Inside a commit we consider that all the modifications are compatible with each
+other as their author have thought of their potential interactions.
+With this idea of thoughtful interactions, we can consider that sequential commits can always be (virtually) squashed into a single commit before merging.
+
+\paragraph{Concurrent commits}
+Concurrent commits are commits that all transform the same initial program. Their authors were not aware of the modifications contained in other commits. Nonetheless, we want to be able to merge the modifications contained in all of them inside a single commit from the common source. A merged version is not always uniquely well-defined because concurrent modifications can (and will often) touch the same program states or variables and therefore collide. That's why there can be several merged versions of the same set of concurrent commits.
+
+Sometimes however they will never collide and a canonical merge commit will naturally exist. This is the case for instance if two incompatible branches are modified by concurrent commits.
+\begin{lstlisting}[caption=Merged version of two compatible concurrent commits modifying $x$]
+let x;
+if (c) {
+    x = 1; // changed in first concurrent commit
+} else {
+    x = 2; // changed in second concurrent commit
+}
+let y = x + 1; // touched but unambiguous
+\end{lstlisting}
 
 \section{A key principle: mandatory disambiguation}
 \paragraph{A generic definition of a valid merge} A merge is valid if for any state of the program, there is a single unambiguous trace after applying all the modifications of the concurrent commits. There should be no automatic choice in favor of any of the commits. This means that if two commits touched the same state of the program or the same expression at the same time, the merge will be considered not valid. We call a point in a trace where the semantic is ambiguous a collision.
@@ -463,7 +487,7 @@ let r = f(b, true);
 \label{fig:closure}
 \end{figure}
 
-\subsection{Oracles for structure preserving modifications}
+\section{Oracles for structure preserving modifications}
 
 \paragraph{Modification of expressions only} This idea works very well for commits that only consist of modifications of expressions and preserve the whole program structure (but maybe not the control flow).
 

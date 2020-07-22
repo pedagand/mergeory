@@ -323,37 +323,6 @@ This analysis can be theoretically described on traces, but in practice we need 
 
 To finish this example, we need a user to be able to efficiently resolve the conflicts. Here saying that on lines 2 to 5 and 15 to 19, blue has done only semantic preserving changes is enough as it will remove the blue colors in each of these lines. Therefore, given this information, the two commits can be safely merged with the guarantee that no unintended behavior\footnote{Side channel attack vectors might still be silently introduced unless we also model them into the analysis.} will be silently introduced by the fusion itself.
 
-% \section{Definitions}
-%
-% \paragraph{Commits \& modifications}
-% In this section, I will have a very generic notion of commits. A commit is a set of modifications of the semantic of a program. A single modification
-% can have an impact on several program states and several program variables.
-% An example of a modification is the change of an expression in an assignment (\lstinline{x = expr}). This modification does not only touch the program variable \lstinline{x} but also each expression that depend the new value in the rest of the program.
-% \begin{lstlisting}[caption=Modification of $x$]
-% let mut x = 0; // changed
-% let y = x + 1; // touched (x is changed)
-% let z = y + 1; // touched (y is touched)
-% x = 45;        // untouched
-% let w = x - 3; // untouched (x have been reassigned)
-% \end{lstlisting}
-% Inside a commit we consider that all the modifications are compatible with each
-% other as their author have thought of their potential interactions.
-% With this idea of thoughtful interactions, we can consider that sequential commits can always be (virtually) squashed into a single commit before merging.
-%
-% \paragraph{Concurrent commits}
-% Concurrent commits are commits that all transform the same initial program. Their authors were not aware of the modifications contained in other commits. Nonetheless, we want to be able to merge the modifications contained in all of them inside a single commit from the common source. A merged version is not always uniquely well-defined because concurrent modifications can (and will often) touch the same program states or variables and therefore collide. That's why there can be several merged versions of the same set of concurrent commits.
-%
-% Sometimes however they will never collide and a canonical merge commit will naturally exist. This is the case for instance if two incompatible branches are modified by concurrent commits.
-% \begin{lstlisting}[caption=Merged version of two compatible concurrent commits modifying $x$]
-% let x;
-% if (c) {
-%     x = 1; // changed in first concurrent commit
-% } else {
-%     x = 2; // changed in second concurrent commit
-% }
-% let y = x + 1; // touched but unambiguous
-% \end{lstlisting}
-
 \section{Syntactic merge}
 \label{sec:syntactic-merge}
 
