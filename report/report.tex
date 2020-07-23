@@ -41,21 +41,25 @@
 \usepackage{amsmath}
 \usepackage{soul}
 \usepackage{amssymb}
-\newcommand\typsep{\ |\ }
-\newcommand\merge{\!\Join\!}
+\newcommand\typsep{\mathrel{|}}
+\newcommand\merge{\mathbin{\Join}}
 \newcommand\mathst[1]{\text{\st{$#1$}}}
 \newcommand\mathul[1]{\text{\ul{$#1$}}}
 \newcommand\id{\square}
 \newcommand\change[2]{\mathst{#1} \rightarrow \mathul{#2}}
+\DeclareMathOperator\InsConflict{Ins!}
+\DeclareMathOperator\DelConflict{Del!}
+\DeclareMathOperator\OrdConflict{Ord!}
+\DeclareMathOperator\MvConflict{Mv!}
+\DeclareMathOperator\dom{dom}
 \allowdisplaybreaks
 
 \usepackage{hyperref}
 \hypersetup{hidelinks}
 
-\newcommand\yrg[1]{{\color{red}{(YRG: #1)}}}
-\newcommand\gb[1]{{\color{blue}{(GB: #1)}}}
+\newcommand\yrg[1]{{\color{red}{(\textbf{YRG:} #1)}}}
+\newcommand\gb[1]{{\color{blue}{(\textbf{GB:} #1)}}}
 \newcommand\todo[1]{{\color{teal}(\textbf{TODO:} #1)}}
-
 
 \usepackage[section]{placeins}
 
@@ -613,11 +617,11 @@ However, as with line based merge, this merging operation can and will regularly
 We therefore break the symmetry between deletion and insertion trees as there will be only one deletion and multiple insertions, and we need to extend our difference types to accumulate potential conflicts.
 
 \begin{align*}
-d &::= S(\overrightarrow{d}, \overrightarrow{d}) \typsep \alpha \typsep Mv!(\alpha, d, i) \\
-i &::= S(\overrightarrow{i}, \overrightarrow{j}) \typsep \alpha \typsep Ins!(\overrightarrow{i})\\
-j &::= i \typsep Del!(i) \typsep Ord!(\overrightarrow{i})\\
+d &::= S(\overrightarrow{d}, \overrightarrow{d}) \typsep \alpha \typsep \MvConflict(\alpha, d, i) \\
+i &::= S(\overrightarrow{i}, \overrightarrow{j}) \typsep \alpha \typsep \InsConflict(\overrightarrow{i})\\
+j &::= i \typsep \DelConflict(i) \typsep \OrdConflict(\overrightarrow{i})\\
 t &::= S(\overrightarrow{t}, \overrightarrow{s}) \typsep \id \typsep  \change{d}{i}\\
-s &::= t \typsep \mathst{d} \typsep Del!(d, i) \typsep \mathul{i} \typsep Ord!(\overrightarrow{\overrightarrow{i}})\\
+s &::= t \typsep \mathst{d} \typsep \DelConflict(d, i) \typsep \mathul{i} \typsep \OrdConflict(\overrightarrow{\overrightarrow{i}})\\
 \end{align*}
 
 When dealing with meta-variables, that represent a multi-source multi-target code move, our merging algorithm will try to push changes toward the destination of the code movement.
@@ -625,12 +629,12 @@ This is done in a two-phase way. First, if we have two changes facing each other
 
 In absence of conflicts, merged differences have the same semantics as simple difference trees.
 
-Conflict (denoted $Typ!$) represent parts that couldn't be merged and therefore prevent application of the difference on any tree. They can come from four different sources:
+Conflict represent parts that couldn't be merged and therefore prevent application of the difference on any tree. They can come from four different sources:
 \begin{itemize}
-  \item Insertion conflict ($Ins!$) simply represent two different insertions that were in the same place.
-  \item Deletion conflict ($Del!$) appears where one commit deletes a node while the other one had changes in it.
-  \item Insert order conflict ($Ord!$) is caused by two insertions taking place at the same location. As the merge operation is never performing any choice, it cannot arbitrarily order them.
-  \item Meta-variable conflict ($Mv!$) is triggered when a meta-variable appears more than once in deletion tree, and the inlined insertions in each occurrences differ, therefore not giving a consistent replacement.
+  \item Insertion conflict ($\InsConflict$) simply represent two different insertions that were in the same place.
+  \item Deletion conflict ($\DelConflict$) appears where one commit deletes a node while the other one had changes in it.
+  \item Insert order conflict ($\OrdConflict$) is caused by two insertions taking place at the same location. As the merge operation is never performing any choice, it cannot arbitrarily order them.
+  \item Meta-variable conflict ($\MvConflict$) is triggered when a meta-variable appears more than once in deletion tree, and the inlined insertions in each occurrences differ, therefore not giving a consistent replacement.
 \end{itemize}
 
 The application domain of the merged difference $t_1 \merge t_2$ is the intersection of the domains of $t_1$ and $t_2$ in absence of conflicts.
@@ -717,7 +721,7 @@ The difference merging algorithm is defined modulo two replacement functions $\G
  \AxiomC{$\Gamma \vdash d_r$}
  \AxiomC{$\Gamma, \Delta \vdash r_l \merge r_r = r$}
  \RightLabel{\textsc{DelZipConflict}}
- \QuinaryInfC{$\Gamma, \Delta \vdash (\mathst{d_l} :: r_l) \merge (t_r :: r_r) = Del!(d_l \wedge d_r, \Gamma(i_r)) :: r$}
+ \QuinaryInfC{$\Gamma, \Delta \vdash (\mathst{d_l} :: r_l) \merge (t_r :: r_r) = \DelConflict(d_l \wedge d_r, \Gamma(i_r)) :: r$}
 \end{prooftree}
 
 \begin{prooftree}
@@ -727,7 +731,7 @@ The difference merging algorithm is defined modulo two replacement functions $\G
  \AxiomC{$\Gamma \vdash d_r$}
  \AxiomC{$\Gamma, \Delta \vdash r_l \merge r_r = r$}
  \RightLabel{\textsc{DelConflNoInl}}
- \QuinaryInfC{$\Gamma, \Delta \vdash (Del!(d_l, i_l) :: r_l) \merge (Del!(d_r, i_r) :: r_r) = Del!(d_l \wedge d_r, i_l \vee i_r) :: r$}
+ \QuinaryInfC{$\Gamma, \Delta \vdash (\DelConflict(d_l, i_l) :: r_l) \merge (\DelConflict(d_r, i_r) :: r_r) = \DelConflict(d_l \wedge d_r, i_l \vee i_r) :: r$}
 \end{prooftree}
 
 \begin{prooftree}
@@ -736,7 +740,7 @@ The difference merging algorithm is defined modulo two replacement functions $\G
  \AxiomC{$\Gamma \vdash d_l$}
  \AxiomC{$\Gamma, \Delta \vdash r_l \merge r_r = r$}
  \RightLabel{\textsc{DelConflOneInl}}
- \QuaternaryInfC{$\Gamma, \Delta \vdash (Del!(d_l, i_l) :: r_l) \merge (Del!(d_r, i_r) :: r_r) = Del!(d_l \wedge d'_r, \Gamma(i_r)) :: r$}
+ \QuaternaryInfC{$\Gamma, \Delta \vdash (\DelConflict(d_l, i_l) :: r_l) \merge (\DelConflict(d_r, i_r) :: r_r) = \DelConflict(d_l \wedge d'_r, \Gamma(i_r)) :: r$}
 \end{prooftree}
 
 \begin{prooftree}
@@ -744,14 +748,14 @@ The difference merging algorithm is defined modulo two replacement functions $\G
  \AxiomC{$\Gamma \vdash i_r \subset d_l = d'_l$}
  \AxiomC{$\Gamma, \Delta \vdash r_l \merge r_r = r$}
  \RightLabel{\textsc{DelConflBothInl}}
- \TrinaryInfC{$\Gamma, \Delta \vdash (Del!(d_l, i_l) :: r_l) \merge (Del!(d_r, i_r) :: r_r) = \mathst{d'_l \wedge d'_r} :: r$}
+ \TrinaryInfC{$\Gamma, \Delta \vdash (\DelConflict(d_l, i_l) :: r_l) \merge (\DelConflict(d_r, i_r) :: r_r) = \mathst{d'_l \wedge d'_r} :: r$}
 \end{prooftree}
 
 \begin{prooftree}
  \AxiomC{$t_r = \change{d_r}{i_r}$}
- \AxiomC{$\Gamma, \Delta \vdash (Del!(d_l, i_l) :: r_l) \merge (Del!(d_r, i_r) :: r_r) = r$}
+ \AxiomC{$\Gamma, \Delta \vdash (\DelConflict(d_l, i_l) :: r_l) \merge (\DelConflict(d_r, i_r) :: r_r) = r$}
  \RightLabel{\textsc{DelConflZip}}
- \BinaryInfC{$\Gamma, \Delta \vdash (Del!(d_l, i_l) :: r_l) \merge (t_r :: r_r) = r$}
+ \BinaryInfC{$\Gamma, \Delta \vdash (\DelConflict(d_l, i_l) :: r_l) \merge (t_r :: r_r) = r$}
 \end{prooftree}
 
 \begin{prooftree}
@@ -760,7 +764,7 @@ The difference merging algorithm is defined modulo two replacement functions $\G
  \AxiomC{$\Gamma \vdash d_l$}
  \AxiomC{$\Gamma, \Delta \vdash r_l \merge r_r = r$}
  \RightLabel{\textsc{DelConflDelNoInl}}
- \QuaternaryInfC{$\Gamma, \Delta \vdash (Del!(d_l, i_l) :: r_l) \merge (\mathst{d_r} :: r_r) = Del!(d_l \wedge d_r, \Gamma(i_l)) :: r$}
+ \QuaternaryInfC{$\Gamma, \Delta \vdash (\DelConflict(d_l, i_l) :: r_l) \merge (\mathst{d_r} :: r_r) = \DelConflict(d_l \wedge d_r, \Gamma(i_l)) :: r$}
 \end{prooftree}
 
 \begin{prooftree}
@@ -768,14 +772,14 @@ The difference merging algorithm is defined modulo two replacement functions $\G
  \AxiomC{$\Gamma \vdash d_l$}
  \AxiomC{$\Gamma, \Delta \vdash r_l \merge r_r = r$}
  \RightLabel{\textsc{DelConflDelInl}}
- \TrinaryInfC{$\Gamma, \Delta \vdash (Del!(d_l, i_l) :: r_l) \merge (\mathst{d_r} :: r_r) = \mathst{d_l \wedge d'_r} :: r$}
+ \TrinaryInfC{$\Gamma, \Delta \vdash (\DelConflict(d_l, i_l) :: r_l) \merge (\mathst{d_r} :: r_r) = \mathst{d_l \wedge d'_r} :: r$}
 \end{prooftree}
 
 \paragraph{Merge insertions in sequence edit scripts}
 
 \begin{prooftree}
  \AxiomC{$s_r \neq \mathul{\cdot}$}
- \AxiomC{$s_r \neq Ord!(\cdot)$}
+ \AxiomC{$s_r \neq \OrdConflict(\cdot)$}
  \AxiomC{$\Gamma, \Delta \vdash r_l \merge (s_r :: r_r) = r$}
  \RightLabel{\textsc{InsBefore}}
  \TrinaryInfC{$\Gamma, \Delta \vdash (\mathul{i_l} :: r_l) \merge (s_r :: r_r) = \mathul{\Gamma(i_l)} :: r$}
@@ -791,27 +795,27 @@ The difference merging algorithm is defined modulo two replacement functions $\G
 \begin{prooftree}
  \AxiomC{$\Gamma, \Delta \vdash r_l \merge r_r = r$}
  \RightLabel{\textsc{OrdConfl}}
- \UnaryInfC{$\Gamma, \Delta \vdash (\mathul{i_l} :: r_l) \merge (\mathul{i_r} :: r_r) = Ord!([\Gamma(i_l), \Gamma(i_r)]) :: r$}
+ \UnaryInfC{$\Gamma, \Delta \vdash (\mathul{i_l} :: r_l) \merge (\mathul{i_r} :: r_r) = \OrdConflict([\Gamma(i_l), \Gamma(i_r)]) :: r$}
 \end{prooftree}
 
 \begin{prooftree}
  \AxiomC{$s_r \neq \mathul{\cdot}$}
- \AxiomC{$s_r \neq Ord!(\cdot)$}
+ \AxiomC{$s_r \neq \OrdConflict(\cdot)$}
  \AxiomC{$\Gamma, \Delta \vdash r_l \merge (s_r :: r_r) = r$}
  \RightLabel{\textsc{OrdConflBefore}}
- \TrinaryInfC{$\Gamma, \Delta \vdash (Ord!(i_l) :: r_l) \merge (s_r :: r_r) = Ord!(\Gamma(i_l)) :: r$}
+ \TrinaryInfC{$\Gamma, \Delta \vdash (\OrdConflict(i_l) :: r_l) \merge (s_r :: r_r) = \OrdConflict(\Gamma(i_l)) :: r$}
 \end{prooftree}
 
 \begin{prooftree}
  \AxiomC{$\Gamma, \Delta \vdash r_l \merge r_r = r$}
  \RightLabel{\textsc{OrdConflPush}}
- \UnaryInfC{$\Gamma, \Delta \vdash (\mathul{i_l} :: r_l) \merge (Ord!(i_r) :: r_r) = Ord!(\Gamma(i_l) :: \Gamma(i_r)) :: r$}
+ \UnaryInfC{$\Gamma, \Delta \vdash (\mathul{i_l} :: r_l) \merge (\OrdConflict(i_r) :: r_r) = \OrdConflict(\Gamma(i_l) :: \Gamma(i_r)) :: r$}
 \end{prooftree}
 
 \begin{prooftree}
  \AxiomC{$\Gamma, \Delta \vdash r_l \merge r_r = r$}
  \RightLabel{\textsc{OrdConflMerge}}
- \UnaryInfC{$\Gamma, \Delta \vdash (Ord!(i_l) :: r_l) \merge (Ord!(i_r) :: r_r) = Ord!(\Gamma(i_l) @ \Gamma(i_r)) :: r$}
+ \UnaryInfC{$\Gamma, \Delta \vdash (\OrdConflict(i_l) :: r_l) \merge (\OrdConflict(i_r) :: r_r) = \OrdConflict(\Gamma(i_l) \mathbin{@} \Gamma(i_r)) :: r$}
 \end{prooftree}
 
 \paragraph{Inclusion of insertion inside a deletion}\phantom{ }
@@ -849,13 +853,13 @@ The difference merging algorithm is defined modulo two replacement functions $\G
 \begin{prooftree}
  \AxiomC{$\Gamma(\alpha) = \top$}
  \RightLabel{\textsc{MvConfl}}
- \UnaryInfC{$\Gamma \vdash i \subset \alpha = Mv!(\alpha, \alpha, i)$}
+ \UnaryInfC{$\Gamma \vdash i \subset \alpha = \MvConflict(\alpha, \alpha, i)$}
 \end{prooftree}
 
 \begin{prooftree}
  \AxiomC{$\Gamma(\alpha) = \top$}
  \RightLabel{\textsc{MvConflPush}}
- \UnaryInfC{$\Gamma \vdash i \subset Mv!(\alpha, d, i') = Mv!(\alpha, d, i \vee i')$}
+ \UnaryInfC{$\Gamma \vdash i \subset \MvConflict(\alpha, d, i') = \MvConflict(\alpha, d, i \vee i')$}
 \end{prooftree}
 
 \paragraph{Coherence with $\Gamma$ of kept deletion trees}\phantom{ }
@@ -872,7 +876,7 @@ The difference merging algorithm is defined modulo two replacement functions $\G
  \AxiomC{$\Gamma(\alpha) = \top$}
  \AxiomC{$\Gamma \vdash d$}
  \RightLabel{\textsc{KeptMvConfl}}
- \BinaryInfC{$\Gamma \vdash Mv!(\alpha, d, i)$}
+ \BinaryInfC{$\Gamma \vdash \MvConflict(\alpha, d, i)$}
 \end{prooftree}
 \end{minipage}
 
@@ -882,7 +886,7 @@ The difference merging algorithm is defined modulo two replacement functions $\G
  \UnaryInfC{$\Gamma \vdash \alpha$}
 \end{prooftree}
 
-Where $\oplus$ is a function transposing a deletion tree to an insertion tree by passing through each meta-variable conflict so that $\oplus(Mv!(\alpha, d, i)) = \oplus(d)$.
+Where $\oplus$ is a function transposing a deletion tree to an insertion tree by passing through each meta-variable conflict so that $\oplus(\MvConflict(\alpha, d, i)) = \oplus(d)$.
 
 \paragraph{Deletion intersection}\phantom{ }
 
@@ -916,13 +920,13 @@ Where $\oplus$ is a function transposing a deletion tree to an insertion tree by
 \begin{prooftree}
  \AxiomC{$\Delta \vdash d_l \wedge d_r = d$}
  \RightLabel{\textsc{MvConflLeft}}
- \UnaryInfC{$\Delta \vdash Mv!(\alpha, d_l, i) \wedge d_r = Mv!(\alpha, d, \Gamma(i))$}
+ \UnaryInfC{$\Delta \vdash \MvConflict(\alpha, d_l, i) \wedge d_r = \MvConflict(\alpha, d, \Gamma(i))$}
 \end{prooftree}
 
 \begin{prooftree}
  \AxiomC{$\Delta \vdash d_l \wedge d_r = d$}
  \RightLabel{\textsc{MvConflRight}}
- \UnaryInfC{$\Delta \vdash d_l \wedge Mv!(\alpha, d_r, i) = Mv!(\alpha, d, \Gamma(i))$}
+ \UnaryInfC{$\Delta \vdash d_l \wedge \MvConflict(\alpha, d_r, i) = \MvConflict(\alpha, d, \Gamma(i))$}
 \end{prooftree}
 
 \paragraph{Simplification of insertion union}
@@ -942,7 +946,7 @@ Where $\oplus$ is a function transposing a deletion tree to an insertion tree by
 \begin{prooftree}
  \AxiomC{}
  \RightLabel{\textsc{InsConfl}}
- \UnaryInfC{$\Gamma \vdash i_l \vee i_r = Ins!(\Gamma(i_l), \Gamma(i_r))$}
+ \UnaryInfC{$\Gamma \vdash i_l \vee i_r = \InsConflict(\Gamma(i_l), \Gamma(i_r))$}
 \end{prooftree}
 
 \subsubsection{Algorithm for merging differences}
@@ -959,12 +963,33 @@ From a high level point of view, the merging algorithm follows these steps:
 
 If we want to merge more than two differences, we can reapply the same algorithm on already merged trees, thus accumulating modifications but also conflicts.
 
+\subsection{Properties of the generated merged difference tree}
+Despite the rather arbitrary choice of doing this specific syntactic merge, our algorithm provides some good properties.
+
+\paragraph{Preserve common spine} All the nodes that are inside the spine of both commits are preserved.
+
+\paragraph{Deletion tree intersection} If some code is deleted in one of the commits, it must also be deleted in the merged result colored with at least as many tints. Moreover, if two commits delete the same code, the result pushes meta-variables as far as possible down the tree.
+
+\paragraph{Domain} First, we can notice that in absence of conflicts, the domain of the merged difference is the intersection of the domains of both inputs. Mathematically, we have: $\dom(t_1 \merge t_2) = \dom(t_1) \cap \dom(t_2)$. This comes from spine preservation combined with deletion tree intersection.
+
+\paragraph{Commutativity} $t_1 \merge t_2 = t_2 \merge t_1$, it comes from the symmetry in rules and shows that we cannot treat differently the left and the right commits, thus never favoring one side against the other. There is a little limitation though, we must consider that the order inside conflicts does not matter: $\InsConflict(i_1, i_2) = \InsConflict(i_2, i_1)$, $\OrdConflict([\overrightarrow{i}]) = \OrdConflict(\sigma[\overrightarrow{i}])$  for any permutation $\sigma$ and $\MvConflict(\alpha, \MvConflict(\beta, d, i_\beta), i_\alpha) = \MvConflict(\beta, \MvConflict(\alpha, d, i_\alpha), i_\beta)$.
+
+\paragraph{Preserve introduced nodes} For all nodes that are introduced in one of the commits, we know that it will be found at least once in the merged result colored with at least as many tints. However, we cannot say anything about location of these introduced nodes because their code might have been displaced by metavariable inlining.
+
+\paragraph{Compatible with composition} If $d \in \dom(t_1 \circ t_2)$, then if $t_1 \circ t_2 = t_2 \circ t_1$, we have $(t_1 \merge t_2)(d) = (t_1 \circ t_2)(d)$. \gb{Argh, maybe more complicated and need some proof}
+
 \section{Semantic merge}
 \label{sec:semantic-merge}
 
 Having two commits syntactically merged do not mean that the result is a valid semantic combination that respect the intentions of all original committers.
 
-\todo{Example du double +1 syntaxiquement valide mais sémantiquement incorrect}
+\begin{lstlisting}[label=lst:double-incr, caption={Double fix of the same function by different commits. The syntactic fusion does not create a conflict be semantically we can create a new bug here.}]
+fn compute_something(x: i32) -> i32 {
+    let mut a = x * x;
+    @\color{blue}\ul{a += 1;}@
+    @\setstcolor{orange}\st{a} $\rightarrow$ {\color{orange}\ul{a + 1}}@
+}
+\end{lstlisting}
 
 That's why after the syntax merging step, we also want to check the semantic of the fusion.
 
@@ -1132,12 +1157,32 @@ The projection of a state to its equivalent in the original program $\pi_{del}$ 
 
 For $S$ a store, we denote $S_{del} = \pi_{del} \circ S$, $S_{ins} = \pi_{ins} \circ S$ and $S_{c}$ the projection on the color of the value of $S$.
 
-To describe how interleaving is done, we can also give operational semantic reductions. All the rules from the underlying language can be reused for instructions that simply expand inside the continuation. In this case we preserve the deleted/inserted/preserved status and the color on the expansion. For the rest, we have the following rules:
+To describe how interleaving is done, we can also give operational semantic reductions.
+
+In all the rules, if an instruction in the continuation should be both inserted and deleted according to the rules, it is simply discarded. If it should be deleted or inserted twice with different colors, we take the intersection of these colors.
+
+\paragraph{Reusing rules from underlying language}
+The rules from the underlying language can be reused for instructions that simply expand inside the continuation. In this case we preserve the deleted/inserted/preserved status and the color on the expansion.
+
+For instance this gives the following reduction rules (non-exhaustive list):
+\newbox\boxoverarrow
+\sbox\boxoverarrow{$\overrightarrow{stmt;}$}
 \begin{align*}
-\langle \kappa, (v_d, v_i, \bot), S\rangle &\not\rightarrow\\
-\langle x = \square \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \kappa, (), S[x \leftarrow (v_d, v_i, c)]\rangle\\
-\langle \mathst{x = \square}^k \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \kappa, (), S[x \leftarrow (v_d, S_{ins}(x), S_c(x) \cap k)]\rangle\\
-\langle \mathul{x = \square}^k \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \kappa, (), S[x \leftarrow (S_{del}(x), v_i, c \cap k)]\rangle\\
+\langle\mathst{\{{\usebox\boxoverarrow}\ expr\}}^k \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \overrightarrow{\mathst{stmt}}^k\cdot \mathst{expr}^k \cdot \kappa, ((), v_i, c), S\rangle\\
+\langle \mathul{x = e}^k \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \mathul{e}^k \cdot \mathul{x = \square}^k \cdot \kappa, (v_d, (), \top), S\rangle\\
+\langle e_1 \diamond e_2 \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle e_1 \cdot \square \diamond e_2 \cdot \kappa, ((), (), \top), S\rangle\\
+\end{align*}
+
+\paragraph{Instruction producing value}
+For instructions that change the current value, we need to be careful of the color of the result. There is three cases:
+\begin{itemize}
+  \item If the instruction is preserved, the output color is the intersection of the input colors
+  \item If the instruction is deleted, the color of the value is tainted by the color of the deletion. However, the input values do not taint the result.
+  \item If the instruction is inserted, the output color is the intersection of the input colors and the color of the insertion.
+\end{itemize}
+
+This leads to the following reduction rules:
+\begin{align*}
 \langle x \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \kappa, S(x), S\rangle\\
 \langle \mathst{x}^k \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \kappa, (S_{del}(x), v_i, c \cap k), S\rangle\\
 \langle \mathul{x}^k \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \kappa, (v_d, S_{ins}(x), S_c(x) \cap k), S\rangle\\
@@ -1145,25 +1190,55 @@ To describe how interleaving is done, we can also give operational semantic redu
 \langle \mathst{literal}^k \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \kappa, (literal, v_i, c \cap k), S\rangle\\
 \langle \mathul{literal}^k \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \kappa, (v_d, literal, k), S\rangle\\
 \langle \star \square \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \kappa, (\star v_d, \star v_i, c), S\rangle\\
-\langle (v_d^1, v_i^1, c^1) \diamond \square \cdot \kappa, (v_d^2, v_i^2, c^2), S\rangle &\rightarrow \langle \kappa, (v_d^1 \diamond v_d^2, v_i^1 \diamond v_i^2, c^1 \cap c^2), S\rangle\\
+\langle \mathst{\star \square}^k \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \kappa, (\star v_d, v_i, c \cap k), S\rangle\\
+\langle \mathul{\star \square}^k \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \kappa, (v_d, \star v_i, c \cap k), S\rangle\\
+\langle (v_d', v_i', c') \diamond \square \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \kappa, (v_d' \diamond v_d, v_i' \diamond v_i, c' \cap c), S\rangle\\
+\langle \mathst{(v_d', v_i', c') \diamond \square}^k \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \kappa, (v_d' \diamond v_d, v_i, c \cap k), S\rangle\\
+\langle \mathul{(v_d', v_i', c') \diamond \square}^k \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \kappa, (v_d, v_i' \diamond v_i, c \cap c' \cap k), S\rangle\\
+\end{align*}
+
+\paragraph{Assignment instructions}
+With the same ideas as instruction producing a value, assignment instructions are treated as follows:
+\begin{align*}
+\langle x = \square \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \kappa, (), S[x \leftarrow (v_d, v_i, c)]\rangle\\
+\langle \mathst{x = \square}^k \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \kappa, (), S[x \leftarrow (v_d, S_{ins}(x), S_c(x) \cap k)]\rangle\\
+\langle \mathul{x = \square}^k \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \kappa, (), S[x \leftarrow (S_{del}(x), v_i, c \cap k)]\rangle\\
+\end{align*}
+
+\paragraph{Function calls}
+\begin{align*}
 \langle f(\overrightarrow{(v_d^a, v_i^a, c^a)}) \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \mathbb{G}(f) \cdot \mathbf{eof} \cdot \kappa, (), \{\overrightarrow{a \leftarrow (v_d^a, v_i^a, c^a)}\} :: S\rangle\\
-% \langle C(\overrightarrow{(v_d^a, v_i^a, c^a)}) \cdot \kappa, (v_d, v_i)^c, S\rangle &\rightarrow \langle \kappa, C(\overrightarrow{v_a}), S\rangle\\
+\end{align*}
+
+\paragraph{Conditionals instructions}
+\begin{align*}
 \langle \mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false} \cdot  \kappa, (\mathbf{true}, \mathbf{true}, \top), S\rangle &\rightarrow \langle b_{true} \cdot \kappa, (), S\rangle\\
 \langle \mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false} \cdot  \kappa, (\mathbf{false}, \mathbf{false}, \top), S\rangle &\rightarrow \langle b_{false} \cdot \kappa, (), S\rangle\\
-\langle \mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false} \cdot  \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \mathst{\mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false}}^c \cdot \mathul{\mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false}}^c \cdot \kappa, (v_d, v_i, c), S\rangle\\
-\langle \mathst{\mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false}}^k \cdot  \kappa, (\mathbf{true}, v_i, c), S\rangle &\rightarrow \langle \mathst{b_{true}}^k \cdot \kappa, ((), v_i, c), S\rangle \qquad \text{(also works with \textbf{false})}\\
-\langle \mathul{\mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false}}^k \cdot \kappa, (v_d, \mathbf{true}, c), S\rangle &\rightarrow \mathul{b_{true}}^{k \cap c} \cdot \kappa, (v_d, (), c), S\rangle \qquad \text{(also works with \textbf{false})}\\
-% \langle \mathbf{match}\ \square\ \{ \overrightarrow{C(\overrightarrow{x_C,}) \Rightarrow e_C,} \} \cdot \kappa, D(\overrightarrow{v_D}), S\rangle &\rightarrow \langle e_D \cdot \kappa, (), S[\overrightarrow{x_D \leftarrow v_D}]\rangle\\
-\langle \mathst{\mathbf{continue}}^k \cdot \overrightarrow{\kappa_{\neg while}} \cdot \mathbf{while}\ e_{cond}\ b \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \overrightarrow{\mathul{\kappa_{\neg while}}}^k \cdot \mathbf{while}\ e_{cond}\ b \cdot \kappa, ((), v_i, c), S\rangle\\
-\langle \mathul{\mathbf{continue}}^k \cdot \overrightarrow{\kappa_{\neg while}} \cdot \mathbf{while}\ e_{cond}\ b \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \overrightarrow{\mathst{\kappa_{\neg while}}}^k \cdot \mathbf{while}\ e_{cond}\ b \cdot \kappa, (v_d, (), c), S\rangle\\
-\langle \mathst{\mathbf{break}}^k \cdot \overrightarrow{\kappa_{\neg while}} \cdot \mathbf{while}\ e_{cond}\ b \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \overrightarrow{\mathul{\kappa_{\neg while}}}^k \cdot \mathul{\mathbf{while}\ e_{cond}\ b}^k \cdot \kappa, ((), v_i, c), S\rangle\\
-\langle \mathul{\mathbf{break}}^k \cdot \overrightarrow{\kappa_{\neg while}} \cdot \mathbf{while}\ e_{cond}\ b \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \overrightarrow{\mathst{\kappa_{\neg while}}}^k \cdot \mathst{\mathbf{while}\ e_{cond}\ b}^k \cdot \kappa, (v_d, (), c), S\rangle\\
+\langle \mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false} \cdot \kappa, (v_d, v_i, c), S\rangle {}&\rightarrow\\
+&\hspace{-2cm}\langle \mathst{\mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false}}^c \cdot \mathul{\mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false}}^c \cdot \kappa, (v_d, v_i, c), S\rangle\\
+\langle \mathst{\mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false}}^k \cdot  \kappa, (\mathbf{true}, v_i, c), S\rangle &\rightarrow \langle \mathst{b_{true}}^k \cdot \kappa, ((), v_i, c), S\rangle\\
+\langle \mathul{\mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false}}^k \cdot \kappa, (v_d, \mathbf{true}, c), S\rangle &\rightarrow \mathul{b_{true}}^{k \cap c} \cdot \kappa, (v_d, (), c), S\rangle\\
+\end{align*}
+
+\paragraph{Control flow breaking instructions}
+\begin{align*}
+\langle \mathst{\mathbf{continue}}^k \cdot \overrightarrow{\kappa_{\neg while}} \cdot \mathbf{while}\ e\ b \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \overrightarrow{\mathul{\kappa_{\neg while}}}^k \cdot \mathbf{while}\ e\ b \cdot \kappa, ((), v_i, c), S\rangle\\
+\langle \mathul{\mathbf{continue}}^k \cdot \overrightarrow{\kappa_{\neg while}} \cdot \mathbf{while}\ e\ b \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \overrightarrow{\mathst{\kappa_{\neg while}}}^k \cdot \mathbf{while}\ e\ b \cdot \kappa, (v_d, (), c), S\rangle\\
+\langle \mathst{\mathbf{break}}^k \cdot \overrightarrow{\kappa_{\neg while}} \cdot \mathbf{while}\ e\ b \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \overrightarrow{\mathul{\kappa_{\neg while}}}^k \cdot \mathul{\mathbf{while}\ e\ b}^k \cdot \kappa, ((), v_i, c), S\rangle\\
+\langle \mathul{\mathbf{break}}^k \cdot \overrightarrow{\kappa_{\neg while}} \cdot \mathbf{while}\ e\ b \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \overrightarrow{\mathst{\kappa_{\neg while}}}^k \cdot \mathst{\mathbf{while}\ e\ b}^k \cdot \kappa, (v_d, (), c), S\rangle\\
 \langle \mathst{\mathbf{return}\ \square}^k \cdot \overrightarrow{\kappa_{\neg eof}} \cdot \mathbf{eof} \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \overrightarrow{\mathul{\kappa_{\neg eof}}}^k \cdot \mathbf{eof} \cdot \kappa, (v_d, v_i, c), S\rangle\\
 \langle \mathul{\mathbf{return}\ \square}^k \cdot \overrightarrow{\kappa_{\neg eof}} \cdot \mathbf{eof} \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \overrightarrow{\mathst{\kappa_{\neg eof}}}^k \cdot \mathbf{eof} \cdot \kappa, (v_d, v_i, c), S\rangle\\
 \end{align*}
 
-\todo{Add match and enum constructors to these rules}
+\paragraph{Enum related instructions}
+\begin{align*}
+\langle C(\overrightarrow{(v_d^a, v_i^a, c^a)}) \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \kappa, C(\overrightarrow{v_a}), S\rangle\\
+\langle \mathbf{match}\ \square\ \{ \overrightarrow{C(\overrightarrow{x_C,}) \Rightarrow e_C,} \} \cdot \kappa, D(\overrightarrow{v_D}), S\rangle &\rightarrow \langle e_D \cdot \kappa, (), S[\overrightarrow{x_D \leftarrow v_D}]\rangle\\
+\end{align*}
+\todo{Write this section and adapt the rules above}
 
-If an instruction in the continuation should be both inserted and deleted according to the rules, it is simply discarded. If it should be deleted or inserted twice with different colors, we take the intersection of these colors.
+\section{Related work}
+\label{sec:related-work}
+\todo{Write this section}
 
 \end{document}
