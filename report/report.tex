@@ -52,6 +52,8 @@
 \DeclareMathOperator\OrdConflict{Ord!}
 \DeclareMathOperator\MvConflict{Mv!}
 \DeclareMathOperator\dom{dom}
+\newcommand\rtstate[3]{\langle #1, #2, #3\rangle}
+\newcommand\vrtstate[3]{\left\langle\begin{matrix}#1,\\#2,\\#3\end{matrix}\right\rangle}
 \allowdisplaybreaks
 
 \usepackage{hyperref}
@@ -1015,37 +1017,37 @@ expr &::= \ident \typsep literal \typsep \star expr \typsep expr \diamond expr \
 literal &::= () \typsep \mathbf{true} \typsep \mathbf {false} \typsep \mathbb{Z}
 \end{align*}
 
-To define the semantics, we give the program state as a tuple $\langle\kappa, v, S\rangle$ where $\kappa$ is the continuation, $v$ the value of the last computed expression and $S$ the local store stack. For function calls, we can push a new store on the previous one, only the topmost store can be used and updated as it correspond to the current function.
+To define the semantics, we give the program state as a tuple $\rtstate{\kappa}{v}{S}$ where $\kappa$ is the continuation, $v$ the value of the last computed expression and $S$ the local store stack. For function calls, we can push a new store on the previous one, only the topmost store can be used and updated as it correspond to the current function.
 
-We also keep the set of constructors, and the set of function as a global state. We denote $\mathbb{G}(f)$ the body of function $f$ taken from global state. Types do not play any role in reduction rules, but we will assume that programs are already well typed. The initial state is given by the call of the entry point function $f$ with its arguments $\overrightarrow{x_a}$: $\langle\mathbb{G}(f), (), \{\overrightarrow{x_a \leftarrow v_a}\}\rangle$.
+We also keep the set of constructors, and the set of function as a global state. We denote $\mathbb{G}(f)$ the body of function $f$ taken from global state. Types do not play any role in reduction rules, but we will assume that programs are already well typed. The initial state is given by the call of the entry point function $f$ with its arguments $\overrightarrow{x_a}$: $\rtstate{\mathbb{G}(f)}{()}{\{\overrightarrow{x_a \leftarrow v_a}\}}$.
 
 Then the program follows the reduction rules below:
 \begin{align*}
-\langle\{\overrightarrow{stmt;}\ expr\} \cdot \kappa, v, S\rangle &\rightarrow \langle \overrightarrow{stmt}\cdot expr \cdot \kappa, (), S\rangle\\
-\langle x = e \cdot \kappa, v, S\rangle &\rightarrow \langle e \cdot x = \square \cdot \kappa, (), S\rangle\\
-\langle x = \square \cdot \kappa, v, S\rangle &\rightarrow \langle \kappa, (), S[x \leftarrow v]\rangle\\
-\langle x \cdot \kappa, v, S\rangle &\rightarrow \langle \kappa, S(x), S\rangle\\
-\langle literal \cdot \kappa, v, S\rangle &\rightarrow \langle \kappa, literal, S\rangle\\
-\langle \star e \cdot \kappa, v, S\rangle &\rightarrow \langle e \cdot \star \square \cdot \kappa, (), S\rangle\\
-\langle \star \square \cdot \kappa, v, S\rangle &\rightarrow \langle \kappa, \star v, S\rangle\\
-\langle e_1 \diamond e_2 \cdot \kappa, v, S\rangle &\rightarrow \langle e_1 \cdot \square \diamond e_2 \cdot \kappa, (), S\rangle\\
-\langle \square \diamond e_2 \cdot \kappa, v, S\rangle &\rightarrow \langle e_2 \cdot v \diamond \square \cdot \kappa, (), S\rangle\\
-\langle v_1 \diamond \square \cdot \kappa, v_2, S\rangle &\rightarrow \langle \kappa, v_1 \diamond v_2, S\rangle\\
-\langle \varphi(\overrightarrow{v_a}, e, \overrightarrow{e_r}) \cdot \kappa, v, S\rangle &\rightarrow \langle e \cdot \varphi(\overrightarrow{v_a}, \square, \overrightarrow{e_r}) \cdot \kappa, (), S\rangle\\
-\langle \varphi(\overrightarrow{v_a}, \square, \overrightarrow{e_r}) \cdot \kappa, v, S\rangle &\rightarrow \langle \varphi(\overrightarrow{v_a}, v, \overrightarrow{e_r}) \cdot \kappa, (), S\rangle\\
-\langle f(\overrightarrow{v_a}) \cdot \kappa, v, S\rangle &\rightarrow \langle \mathbb{G}(f) \cdot \mathbf{eof} \cdot \kappa, (), \{\overrightarrow{a \leftarrow v_a}\} :: S\rangle\\
-\langle C(\overrightarrow{v_a}) \cdot \kappa, v, S\rangle &\rightarrow \langle \kappa, C(\overrightarrow{v_a}), S\rangle\\
-\langle \mathbf{if}\ e_{cond}\ b_{true}\ \mathbf{else}\ b_{false} \cdot  \kappa, v, S\rangle &\rightarrow \langle e_{cond} \cdot \mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false} \cdot \kappa, (), S\rangle\\
-\langle \mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false} \cdot  \kappa, \mathbf{true}, S\rangle &\rightarrow \langle b_{true} \cdot \kappa, (), S\rangle\\
-\langle \mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false} \cdot  \kappa, \mathbf{false}, S\rangle &\rightarrow \langle b_{false} \cdot \kappa, (), S\rangle\\
-\langle \mathbf{while}\ e_{cond}\ b \cdot \kappa, v, S\rangle &\rightarrow \langle \mathbf{if}\ e_{cond}\ \{ b;\ \mathbf{while}\ e_{cond}\ b \}\  \mathbf{else}\ \{\} \cdot \kappa, (), S\rangle\\
-\langle \mathbf{match}\ e_{scrut}\ \{ \overrightarrow{C(\overrightarrow{x_C,}) \Rightarrow e_C,} \} \cdot \kappa, v, S\rangle &\rightarrow \langle e_{scrut} \cdot \mathbf{match}\ \square\ \{ \overrightarrow{C(\overrightarrow{x_C,}) \Rightarrow e_C,} \} \cdot \kappa, (), S\rangle\\
-\langle \mathbf{match}\ \square\ \{ \overrightarrow{C(\overrightarrow{x_C,}) \Rightarrow e_C,} \} \cdot \kappa, D(\overrightarrow{v_D}), S\rangle &\rightarrow \langle e_D \cdot \kappa, (), S[\overrightarrow{x_D \leftarrow v_D}]\rangle\\
-\langle \mathbf{continue} \cdot \overrightarrow{\kappa_{\neg while}} \cdot \textbf{while}\ e_{cond}\ b \cdot \kappa, v, S\rangle &\rightarrow \langle \textbf{while}\ e_{cond}\ b \cdot \kappa, (), S\rangle\\
-\langle \mathbf{break} \cdot \overrightarrow{\kappa_{\neg while}} \cdot \textbf{while}\ e_{cond}\ b \cdot \kappa, v, S\rangle &\rightarrow \langle \kappa, (), S\rangle\\
-\langle \mathbf{return}\ e \cdot \kappa, v, S\rangle &\rightarrow \langle e \cdot \mathbf{return}\ \square \cdot \kappa, (), S\rangle\\
-\langle \mathbf{return}\ \square \cdot \overrightarrow{\kappa_{\neg eof}} \cdot \textbf{eof} \cdot \kappa, v, S\rangle &\rightarrow \langle \textbf{eof} \cdot \kappa, v, S\rangle\\
-\langle \textbf{eof} \cdot \kappa, v, S_f :: S\rangle &\rightarrow \langle \kappa, v, S\rangle\\
+\rtstate{\{\overrightarrow{stmt;}\ expr\} \cdot \kappa}{v}{S} &\rightarrow \rtstate{\overrightarrow{stmt} \cdot expr \cdot \kappa}{()}{S}\\
+\rtstate{x = e \cdot \kappa}{v}{S} &\rightarrow \rtstate{e \cdot x = \square \cdot \kappa}{()}{S}\\
+\rtstate{x = \square \cdot \kappa}{v}{S} &\rightarrow \rtstate{\kappa}{()}{S[x \leftarrow v]}\\
+\rtstate{x \cdot \kappa}{v}{S} &\rightarrow \rtstate{\kappa}{S(x)}{S}\\
+\rtstate{literal \cdot \kappa}{v}{S} &\rightarrow \rtstate{\kappa}{literal}{S}\\
+\rtstate{\star e \cdot \kappa}{v}{S} &\rightarrow \rtstate{e \cdot \star \square \cdot \kappa}{()}{S}\\
+\rtstate{\star \square \cdot \kappa}{v}{S} &\rightarrow \rtstate{\kappa}{\star v}{S}\\
+\rtstate{e_1 \diamond e_2 \cdot \kappa}{v}{S} &\rightarrow \rtstate{e_1 \cdot \square \diamond e_2 \cdot \kappa}{()}{S}\\
+\rtstate{\square \diamond e_2 \cdot \kappa}{v}{S} &\rightarrow \rtstate{e_2 \cdot v \diamond \square \cdot \kappa}{()}{S}\\
+\rtstate{v_1 \diamond \square \cdot \kappa}{v_2}{S} &\rightarrow \rtstate{\kappa}{v_1 \diamond v_2}{S}\\
+\rtstate{\varphi(\overrightarrow{v_a}, e, \overrightarrow{e_r}) \cdot \kappa}{v}{S} &\rightarrow \rtstate{e \cdot \varphi(\overrightarrow{v_a}, \square, \overrightarrow{e_r}) \cdot \kappa}{()}{S}\\
+\rtstate{\varphi(\overrightarrow{v_a}, \square, \overrightarrow{e_r}) \cdot \kappa}{v}{S} &\rightarrow \rtstate{\varphi(\overrightarrow{v_a}, v, \overrightarrow{e_r}) \cdot \kappa}{()}{S}\\
+\rtstate{f(\overrightarrow{v_a}) \cdot \kappa}{v}{S} &\rightarrow \rtstate{\mathbb{G}(f) \cdot \mathbf{eof} \cdot \kappa}{()}{\{\overrightarrow{a \leftarrow v_a}\} :: S}\\
+\rtstate{C(\overrightarrow{v_a}) \cdot \kappa}{v}{S} &\rightarrow \rtstate{\kappa}{C(\overrightarrow{v_a})}{S}\\
+\rtstate{\mathbf{if}\ e_{cond}\ b_{true}\ \mathbf{else}\ b_{false} \cdot  \kappa}{v}{S} &\rightarrow \rtstate{e_{cond} \cdot \mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false} \cdot \kappa}{()}{S}\\
+\rtstate{\mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false} \cdot  \kappa}{\mathbf{true}}{S} &\rightarrow \rtstate{b_{true} \cdot \kappa}{()}{S}\\
+\rtstate{\mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false} \cdot  \kappa}{\mathbf{false}}{S} &\rightarrow \rtstate{b_{false} \cdot \kappa}{()}{S}\\
+\rtstate{\mathbf{while}\ e_{cond}\ b \cdot \kappa}{v}{S} &\rightarrow \rtstate{\mathbf{if}\ e_{cond}\ \{ b;\ \mathbf{while}\ e_{cond}\ b \}\  \mathbf{else}\ \{\} \cdot \kappa}{()}{S}\\
+\rtstate{\mathbf{match}\ e_{scrut}\ \{ \overrightarrow{C(\overrightarrow{x_C,}) \Rightarrow e_C,} \} \cdot \kappa}{v}{S} &\rightarrow \rtstate{e_{scrut} \cdot \mathbf{match}\ \square\ \{ \overrightarrow{C(\overrightarrow{x_C,}) \Rightarrow e_C,} \} \cdot \kappa}{()}{S}\\
+\rtstate{\mathbf{match}\ \square\ \{ \overrightarrow{C(\overrightarrow{x_C,}) \Rightarrow e_C,} \} \cdot \kappa}{D(\overrightarrow{v_D})}{S} &\rightarrow \rtstate{e_D \cdot \kappa}{()}{S[\overrightarrow{x_D \leftarrow v_D}]}\\
+\rtstate{\mathbf{continue} \cdot \overrightarrow{\kappa_{\neg while}} \cdot \textbf{while}\ e_{cond}\ b \cdot \kappa}{v}{S} &\rightarrow \rtstate{\textbf{while}\ e_{cond}\ b \cdot \kappa}{()}{S}\\
+\rtstate{\mathbf{break} \cdot \overrightarrow{\kappa_{\neg while}} \cdot \textbf{while}\ e_{cond}\ b \cdot \kappa}{v}{S} &\rightarrow \rtstate{\kappa}{()}{S}\\
+\rtstate{\mathbf{return}\ e \cdot \kappa}{v}{S} &\rightarrow \rtstate{e \cdot \mathbf{return}\ \square \cdot \kappa}{()}{S}\\
+\rtstate{\mathbf{return}\ \square \cdot \overrightarrow{\kappa_{\neg eof}} \cdot \textbf{eof} \cdot \kappa}{v}{S} &\rightarrow \rtstate{\textbf{eof} \cdot \kappa}{v}{S}\\
+\rtstate{\textbf{eof} \cdot \kappa}{v}{S_f :: S} &\rightarrow \rtstate{\kappa}{v}{S}\\
 \end{align*}
 
 \subsection{Definition of a correlation oracle}
@@ -1151,7 +1153,7 @@ fn f(c: bool) -> i32 {
 
 Formally, the correlation oracle is defined as a program with a states that can be projected on either of the correlated programs. Moreover, it carries information about the co-execution of both programs.
 
-Here we keep states as tuples $\langle\kappa, v, S\rangle$ but all the individual components are slightly more complex: $\kappa$ is the continuation but its elements can be either deleted (\st{$instr$}$^c$), inserted (\ul{$instr$}$^c$), or preserved ($instr$), depending on whether they occur on the original only, the merged candidate only or both. Deleted and inserted instructions carry a color with them. For each value $v$ or element of the store $S(x)$, they are replaced by a pair of values associated with a color $(v_{del}, v_{ins}, c)$.
+Here we keep states as tuples $\rtstate{\kappa}{v}{S}$ but all the individual components are slightly more complex: $\kappa$ is the continuation but its elements can be either deleted (\st{$instr$}$^c$), inserted (\ul{$instr$}$^c$), or preserved ($instr$), depending on whether they occur on the original only, the merged candidate only or both. Deleted and inserted instructions carry a color with them. For each value $v$ or element of the store $S(x)$, they are replaced by a pair of values associated with a color $(v_{del}, v_{ins}, c)$.
 
 The projection of a state to its equivalent in the original program $\pi_{del}$ removes all the inserted instructions in the continuation, and takes first elements of pairs of values, always ignoring colors. Same for the projection on the merge candidate $\pi_{ins}$, but removing deleted instructions, and taking second element inside pair of values.
 
@@ -1168,9 +1170,9 @@ For instance this gives the following reduction rules (non-exhaustive list):
 \newbox\boxoverarrow
 \sbox\boxoverarrow{$\overrightarrow{stmt;}$}
 \begin{align*}
-\langle\mathst{\{{\usebox\boxoverarrow}\ expr\}}^k \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \overrightarrow{\mathst{stmt}}^k\cdot \mathst{expr}^k \cdot \kappa, ((), v_i, c), S\rangle\\
-\langle \mathul{x = e}^k \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \mathul{e}^k \cdot \mathul{x = \square}^k \cdot \kappa, (v_d, (), \top), S\rangle\\
-\langle e_1 \diamond e_2 \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle e_1 \cdot \square \diamond e_2 \cdot \kappa, ((), (), \top), S\rangle\\
+\rtstate{\mathst{\{{\usebox\boxoverarrow}\ expr\}}^k \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{\overrightarrow{\mathst{stmt}}^k\cdot \mathst{expr}^k \cdot \kappa}{((), v^+, c)}{S}\\
+\rtstate{\mathul{x = e}^k \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{\mathul{e}^k \cdot \mathul{x = \square}^k \cdot \kappa}{(v^-, (), \top)}{S}\\
+\rtstate{e_1 \diamond e_2 \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{e_1 \cdot \square \diamond e_2 \cdot \kappa}{((), (), \top)}{S}\\
 \end{align*}
 
 \paragraph{Instruction producing value}
@@ -1183,59 +1185,88 @@ For instructions that change the current value, we need to be careful of the col
 
 This leads to the following reduction rules:
 \begin{align*}
-\langle x \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \kappa, S(x), S\rangle\\
-\langle \mathst{x}^k \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \kappa, (S_{del}(x), v_i, c \cap k), S\rangle\\
-\langle \mathul{x}^k \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \kappa, (v_d, S_{ins}(x), S_c(x) \cap k), S\rangle\\
-\langle literal \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \kappa, (literal, literal, \top), S\rangle\\
-\langle \mathst{literal}^k \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \kappa, (literal, v_i, c \cap k), S\rangle\\
-\langle \mathul{literal}^k \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \kappa, (v_d, literal, k), S\rangle\\
-\langle \star \square \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \kappa, (\star v_d, \star v_i, c), S\rangle\\
-\langle \mathst{\star \square}^k \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \kappa, (\star v_d, v_i, c \cap k), S\rangle\\
-\langle \mathul{\star \square}^k \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \kappa, (v_d, \star v_i, c \cap k), S\rangle\\
-\langle (v_d', v_i', c') \diamond \square \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \kappa, (v_d' \diamond v_d, v_i' \diamond v_i, c' \cap c), S\rangle\\
-\langle \mathst{(v_d', v_i', c') \diamond \square}^k \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \kappa, (v_d' \diamond v_d, v_i, c \cap k), S\rangle\\
-\langle \mathul{(v_d', v_i', c') \diamond \square}^k \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \kappa, (v_d, v_i' \diamond v_i, c \cap c' \cap k), S\rangle\\
+\rtstate{x \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{\kappa}{S(x)}{S}\\
+\rtstate{\mathst{x}^k \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{\kappa}{(S_{del}(x), v^+, c \cap k)}{S}\\
+\rtstate{\mathul{x}^k \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{\kappa}{(v^-, S_{ins}(x), S_c(x) \cap k)}{S}\\
+\rtstate{literal \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{\kappa}{(literal, literal, \top)}{S}\\
+\rtstate{\mathst{literal}^k \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{\kappa}{(literal, v^+, c \cap k)}{S}\\
+\rtstate{\mathul{literal}^k \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{\kappa}{(v^-, literal, k)}{S}\\
+\rtstate{\star \square \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{\kappa}{(\star v^-, \star v^+, c)}{S}\\
+\rtstate{\mathst{\star \square}^k \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{\kappa}{(\star v^-, v^+, c \cap k)}{S}\\
+\rtstate{\mathul{\star \square}^k \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{\kappa}{(v^-, \star v^+, c \cap k)}{S}\\
+\rtstate{(v_l^-, v_l^+, c_l) \diamond \square \cdot \kappa}{(v_r^-, v_r^+, c_r)}{S} &\rightarrow \rtstate{\kappa}{(v_l^- \diamond v_r^-, v_l^+ \diamond v_r^+, c_l \cap c_r)}{S}\\
+\rtstate{\mathst{(v_l^-, v_l^+, c_l) \diamond \square}^k \cdot \kappa}{(v_r^-, v^+, c)}{S} &\rightarrow \rtstate{\kappa}{(v_l^- \diamond v_r^-, v^+, c \cap k)}{S}\\
+\rtstate{\mathul{(v_l^-, v_l^+, c_l) \diamond \square}^k \cdot \kappa}{(v^-, v_r^+, c_r)}{S} &\rightarrow \rtstate{\kappa}{(v^-, v_l^+ \diamond v_r^+, c_l \cap c_r \cap k)}{S}\\
 \end{align*}
 
 \paragraph{Assignment instructions}
 With the same ideas as instruction producing a value, assignment instructions are treated as follows:
 \begin{align*}
-\langle x = \square \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \kappa, (), S[x \leftarrow (v_d, v_i, c)]\rangle\\
-\langle \mathst{x = \square}^k \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \kappa, (), S[x \leftarrow (v_d, S_{ins}(x), S_c(x) \cap k)]\rangle\\
-\langle \mathul{x = \square}^k \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \kappa, (), S[x \leftarrow (S_{del}(x), v_i, c \cap k)]\rangle\\
+\rtstate{x = \square \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{\kappa}{((), (), \top)}{S[x \leftarrow (v^-, v^+, c)]}\\
+\rtstate{\mathst{x = \square}^k \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{\kappa}{((), v^+, c \cap k)}{S[x \leftarrow (v^-, S_{ins}(x), S_c(x) \cap k)]}\\
+\rtstate{\mathul{x = \square}^k \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{\kappa}{(v^-, (), k)}{S[x \leftarrow (S_{del}(x), v^+, c \cap k)]}\\
 \end{align*}
 
-\paragraph{Function calls}
+\paragraph{Function calls} Function calls do not need any special treatment, they can be considered as instructions simply expanding the function body into the continuation. The arguments keep their colors at the call point.
+However note that $\mathbb{G}(f)$ potentially contains code that is either deleted or inserted.
+\newbox\boxargs
+\sbox\boxargs{$\overrightarrow{(v_a^-, v_a^+, c_a)}$}
 \begin{align*}
-\langle f(\overrightarrow{(v_d^a, v_i^a, c^a)}) \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \mathbb{G}(f) \cdot \mathbf{eof} \cdot \kappa, (), \{\overrightarrow{a \leftarrow (v_d^a, v_i^a, c^a)}\} :: S\rangle\\
+\rtstate{f(\usebox\boxargs) \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{\mathbb{G}(f) \cdot \mathbf{eof} \cdot \kappa}{((), (), \top)}{\{\overrightarrow{a \leftarrow (v_a^-, v_a^+, c_a)}\} :: S}\\
+\rtstate{\mathst{f(\usebox\boxargs)}^k \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{\mathst{\mathbb{G}(f)}^k \cdot \mathst{\mathbf{eof}}^k \cdot \kappa}{((), v^+, c \cap k)}{\{\overrightarrow{a \leftarrow (v_a^-, v_a^+, c_a)}\} :: S}\\
+\rtstate{\mathul{f(\usebox\boxargs)}^k \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{\mathul{\mathbb{G}(f)}^k \cdot \mathul{\mathbf{eof}}^k \cdot \kappa}{(v^-, (), k)}{\{\overrightarrow{a \leftarrow (v_a^-, v_a^+, c_a)}\} :: S}\\
+\end{align*}
+To make a static analysis, this function inlining approach might become too expansive and it might be replaced by some intraprocedural analysis.
+
+\paragraph{Conditionals instructions} Conditional instruction are a bit harder to handle because they can split the execution between the correlated programs even when the branches themselves are totally in the spine. Indeed, both programs can show different value for the condition, and therefore take different paths. Also they could take the same value but only by chance and still be under the influence of some non-white color. In both case, we choose to split the execution and resyncronize only at the end of the branches.
+\begin{align*}
+\vrtstate{\mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false} \cdot  \kappa}{(\mathbf{true}, \mathbf{true}, \top)}{S} &\rightarrow \vrtstate{b_{true} \cdot \kappa}{((), (), \top)}{S}\\
+\vrtstate{\mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false} \cdot  \kappa}{(\mathbf{false}, \mathbf{false}, \top)}{S} &\rightarrow \vrtstate{b_{false} \cdot \kappa}{((), (), \top)}{S}\\
+\vrtstate{\mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false} \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \vrtstate{\mathst{\mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false}}^c \cdot \mathul{\mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false}}^c \cdot \kappa}{((), (), \top)}{S}\\
 \end{align*}
 
-\paragraph{Conditionals instructions}
+To reduce a conditional that is deleted, we can simply take the matching branch, but if it is inserted, we need to also take into account the color of the condition. This leads to these rules:
 \begin{align*}
-\langle \mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false} \cdot  \kappa, (\mathbf{true}, \mathbf{true}, \top), S\rangle &\rightarrow \langle b_{true} \cdot \kappa, (), S\rangle\\
-\langle \mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false} \cdot  \kappa, (\mathbf{false}, \mathbf{false}, \top), S\rangle &\rightarrow \langle b_{false} \cdot \kappa, (), S\rangle\\
-\langle \mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false} \cdot \kappa, (v_d, v_i, c), S\rangle {}&\rightarrow\\
-&\hspace{-2cm}\langle \mathst{\mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false}}^c \cdot \mathul{\mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false}}^c \cdot \kappa, (v_d, v_i, c), S\rangle\\
-\langle \mathst{\mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false}}^k \cdot  \kappa, (\mathbf{true}, v_i, c), S\rangle &\rightarrow \langle \mathst{b_{true}}^k \cdot \kappa, ((), v_i, c), S\rangle\\
-\langle \mathul{\mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false}}^k \cdot \kappa, (v_d, \mathbf{true}, c), S\rangle &\rightarrow \mathul{b_{true}}^{k \cap c} \cdot \kappa, (v_d, (), c), S\rangle\\
+\rtstate{\mathst{\mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false}}^k \cdot  \kappa}{(\mathbf{true}, v^+, c)}{S} &\rightarrow \rtstate{\mathst{b_{true}}^k \cdot \kappa}{((), v^+, c)}{S}\\
+\rtstate{\mathst{\mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false}}^k \cdot  \kappa}{(\mathbf{false}, v^+, c)}{S} &\rightarrow \rtstate{\mathst{b_{false}}^k \cdot \kappa}{((), v^+, c)}{S}\\
+\rtstate{\mathul{\mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false}}^k \cdot \kappa}{(v^-, \mathbf{true}, c)}{S} &\rightarrow \rtstate{\mathul{b_{true}}^{k \cap c} \cdot \kappa}{(v^-, (), k)}{S}\\
+\rtstate{\mathul{\mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false}}^k \cdot \kappa}{(v^-, \mathbf{false}, c)}{S} &\rightarrow \rtstate{\mathul{b_{false}}^{k \cap c} \cdot \kappa}{(v^-, (), k)}{S}\\
 \end{align*}
 
-\paragraph{Control flow breaking instructions}
+\paragraph{Control flow breaking instructions} For control flow breaking instructions (ie. \textbf{continue}, \textbf{break} and \textbf{return}), they are completely unchanged in their preserved mode. However, if they are either deleted or inserted, we cannot simply skip instructions as only one program does this. Therefore, we keep the skipped instructions but mark them as only executed by the opposite program. This leads to the following rules:
 \begin{align*}
-\langle \mathst{\mathbf{continue}}^k \cdot \overrightarrow{\kappa_{\neg while}} \cdot \mathbf{while}\ e\ b \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \overrightarrow{\mathul{\kappa_{\neg while}}}^k \cdot \mathbf{while}\ e\ b \cdot \kappa, ((), v_i, c), S\rangle\\
-\langle \mathul{\mathbf{continue}}^k \cdot \overrightarrow{\kappa_{\neg while}} \cdot \mathbf{while}\ e\ b \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \overrightarrow{\mathst{\kappa_{\neg while}}}^k \cdot \mathbf{while}\ e\ b \cdot \kappa, (v_d, (), c), S\rangle\\
-\langle \mathst{\mathbf{break}}^k \cdot \overrightarrow{\kappa_{\neg while}} \cdot \mathbf{while}\ e\ b \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \overrightarrow{\mathul{\kappa_{\neg while}}}^k \cdot \mathul{\mathbf{while}\ e\ b}^k \cdot \kappa, ((), v_i, c), S\rangle\\
-\langle \mathul{\mathbf{break}}^k \cdot \overrightarrow{\kappa_{\neg while}} \cdot \mathbf{while}\ e\ b \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \overrightarrow{\mathst{\kappa_{\neg while}}}^k \cdot \mathst{\mathbf{while}\ e\ b}^k \cdot \kappa, (v_d, (), c), S\rangle\\
-\langle \mathst{\mathbf{return}\ \square}^k \cdot \overrightarrow{\kappa_{\neg eof}} \cdot \mathbf{eof} \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \overrightarrow{\mathul{\kappa_{\neg eof}}}^k \cdot \mathbf{eof} \cdot \kappa, (v_d, v_i, c), S\rangle\\
-\langle \mathul{\mathbf{return}\ \square}^k \cdot \overrightarrow{\kappa_{\neg eof}} \cdot \mathbf{eof} \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \overrightarrow{\mathst{\kappa_{\neg eof}}}^k \cdot \mathbf{eof} \cdot \kappa, (v_d, v_i, c), S\rangle\\
+\rtstate{\mathst{\mathbf{continue}}^k \cdot \overrightarrow{\kappa_{\neg while}} \cdot \mathbf{while}\ e\ b \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{\overrightarrow{\mathul{\kappa_{\neg while}}}^k \cdot \mathbf{while}\ e\ b \cdot \kappa}{((), v^+, c)}{S}\\
+\rtstate{\mathul{\mathbf{continue}}^k \cdot \overrightarrow{\kappa_{\neg while}} \cdot \mathbf{while}\ e\ b \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{\overrightarrow{\mathst{\kappa_{\neg while}}}^k \cdot \mathbf{while}\ e\ b \cdot \kappa}{(v^-, (), c)}{S}\\
+\rtstate{\mathst{\mathbf{break}}^k \cdot \overrightarrow{\kappa_{\neg while}} \cdot \mathbf{while}\ e\ b \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{\overrightarrow{\mathul{\kappa_{\neg while}}}^k \cdot \mathul{\mathbf{while}\ e\ b}^k \cdot \kappa}{((), v^+, c)}{S}\\
+\rtstate{\mathul{\mathbf{break}}^k \cdot \overrightarrow{\kappa_{\neg while}} \cdot \mathbf{while}\ e\ b \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{\overrightarrow{\mathst{\kappa_{\neg while}}}^k \cdot \mathst{\mathbf{while}\ e\ b}^k \cdot \kappa}{(v^-, (), c)}{S}\\
+\rtstate{\mathst{\mathbf{return}\ \square}^k \cdot \overrightarrow{\kappa_{\neg eof}} \cdot \mathbf{eof} \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{\overrightarrow{\mathul{\kappa_{\neg eof}}}^k \cdot \mathbf{eof} \cdot \kappa}{(v^-, v^+, c)}{S}\\
+\rtstate{\mathul{\mathbf{return}\ \square}^k \cdot \overrightarrow{\kappa_{\neg eof}} \cdot \mathbf{eof} \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{\overrightarrow{\mathst{\kappa_{\neg eof}}}^k \cdot \mathbf{eof} \cdot \kappa}{(v^-, v^+, c)}{S}\\
 \end{align*}
 
-\paragraph{Enum related instructions}
+The case where we are skipping code that was already executed by only one program is managed because we systematically skip instructions that are both deleted and inserted, and merge colors appropriately.
+
+\paragraph{Enum related instructions} We could treat the enum values normally but we think it is a bad idea. Indeed when constructing an enum value, the color should normally be the intersection of all individual colors at the constructor call.
+For a simple enum encoding pairs with constructor $P$, it means for instance that $P({\color{blue}v_1}, {\color{orange}v_2})$ would create a black value, while there is currently no ambiguity (yet).
+
+To fix this problem, we introduce composite runtime colors. Runtime colors can be more complex than a single color. When the insertion value has an enum type, we store a color for the constructor and (potentially composite) colors for each of its arguments. It obeys the following rules:
 \begin{align*}
-\langle C(\overrightarrow{(v_d^a, v_i^a, c^a)}) \cdot \kappa, (v_d, v_i, c), S\rangle &\rightarrow \langle \kappa, C(\overrightarrow{v_a}), S\rangle\\
-\langle \mathbf{match}\ \square\ \{ \overrightarrow{C(\overrightarrow{x_C,}) \Rightarrow e_C,} \} \cdot \kappa, D(\overrightarrow{v_D}), S\rangle &\rightarrow \langle e_D \cdot \kappa, (), S[\overrightarrow{x_D \leftarrow v_D}]\rangle\\
+\rtstate{C(\usebox\boxargs) \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{\kappa}{(C(\overrightarrow{v_a^-}), C(\overrightarrow{v_a^+}), \top(\overrightarrow{c_a}))}{S}\\
+\rtstate{\mathst{C(\usebox\boxargs)}^k \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{\kappa}{(C(\overrightarrow{v_a^-}), v_+, c \cap k)}{S}\\
+\rtstate{\mathul{C(\usebox\boxargs)}^k \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{\kappa}{(v^-, C(\overrightarrow{v_a^+}), k(\overrightarrow{c_a \cap k}))}{S}\\
 \end{align*}
-\todo{Write this section and adapt the rules above}
+
+Now when we encounter a \textbf{match}, that is destructuring an enum value, we apply the same strategy as with \textbf{if}s on the constructor and we recover the colors of the arguments in their destructured pattern variable. This corresponds to the rules below:
+\newbox\boxmatch
+\sbox\boxmatch{$\mathbf{match}\ \square\ \{ \overrightarrow{C(\overrightarrow{x_C,}) \Rightarrow e_C,} \}$}
+\begin{align*}
+\vrtstate{\usebox\boxmatch \cdot \kappa}{(D(\overrightarrow{v_D^-}), D(\overrightarrow{v_D^+}), \top(\overrightarrow{c_D}))}{S} &\rightarrow \rtstate{e_D \cdot \kappa}{((), (), \top)}{S\left[\overrightarrow{x_D \leftarrow (v_D^-, v_D^+, c_D)}\right]}\\
+\vrtstate{\usebox\boxmatch \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \vrtstate{\mathst{\usebox\boxmatch}^c \cdot \mathul{\usebox\boxmatch}^c \cdot \kappa}{((), (), \top)}{S}\\
+\vrtstate{\mathst{\usebox\boxmatch}^k \cdot \kappa}{(D(\overrightarrow{v_D^-}), v^+, c)}{S} &\rightarrow \rtstate{\mathst{e_D}^k \cdot \kappa}{((), v^+, c \cap k)}{S\left[\overrightarrow{x_D \leftarrow (v_D^-, S_{ins}(x_D), S_c(x_D))}\right]}\\
+\vrtstate{\mathul{\usebox\boxmatch}^k \cdot \kappa}{(v^-, D(\overrightarrow{v_D^+}), c(\overrightarrow{c_D}))}{S} &\rightarrow \rtstate{\mathul{e_D}^{c \cap k} \cdot \kappa}{(v^-, (), k)}{S\left[\overrightarrow{x_D \leftarrow (S_{del}(x_D), v_D^+, c_D)}\right]}\\
+\end{align*}
+
+\subsection{Resolving conflicts}
+\todo{Write this section: introduire une nouvelle instruction ``override color''}
 
 \section{Related work}
 \label{sec:related-work}
