@@ -3,7 +3,7 @@
 \usepackage[T1]{fontenc}
 \usepackage[top=2.5cm, bottom=2.5cm, left=2.5cm, right=2.5cm]{geometry}
 
-\title{Intention preserving source code fusion: a syntactic approach checked semantically}
+\title{Intention preserving source code merge: a syntactic approach checked semantically}
 \author{Guillaume Bertholon, supervised by Yann Régis Gianas, IRIF -- Université de Paris}
 
 \usepackage{listings-rust}
@@ -632,6 +632,73 @@ s &::= t \typsep \mathst{d} \typsep \DelConflict(d, i) \typsep \mathul{i} \typse
 When dealing with meta-variables, that represent a multi-source multi-target code move, our merging algorithm will try to push changes toward the destination of the code movement.
 This is done in a two-phase way. First, if we have two changes facing each other we try to inline one of them inside the deletion tree of the other, by allowing differences wherever we have a meta-variable. To avoid making any arbitrary choice, this is ignored if both changes could be inlined in the other. Then, we check that these inlined changes are consistent for each meta-variable, and if they are, we replace all occurrences of the meta-variable by the obtained insertion.
 
+\begin{figure}[ht]
+\begin{minipage}{0.49\textwidth}
+\centering\begin{tikzpicture}
+    \node[varnode, color=blue] (adel_plus) {$\color{black}+$};
+    \node[varnode, color=blue] (adel_three) at ($(adel_plus)+(-0.75,-1)$) {$\color{black}3$};
+    \node[mvnode, color=blue] (adel_alpha) at ($(adel_plus)+(0.75,-1)$) {$\color{black}\alpha$};
+    \draw (adel_plus) -- (adel_three);
+    \draw (adel_plus) -- (adel_alpha);
+
+    \node[varnode, colorA] (ains_minus) at ($(adel_plus)+(3.5,0)$) {$-$};
+    \node[varnode, colorA] (ains_two) at ($(ains_minus)+(-0.75,-1)$) {$2$};
+    \node[mvnode] (ains_alpha) at ($(ains_minus)+(0.75,-1)$) {$\alpha$};
+    \draw (ains_minus) -- (ains_two);
+    \draw (ains_minus) -- (ains_alpha);
+
+    \node (aarrow) at ($($(adel_alpha)!0.5!(adel_plus)$)!0.5!($(ains_two)!0.5!(ains_minus)$)$) {$\rightarrow$};
+    
+    \node[varnode] (bdel_plus) at ($(adel_plus)+(0,-2.5)$) {$+$};
+    \node[varnode] (bdel_three) at ($(bdel_plus)+(-0.75,-1)$) {$3$};
+    \node[varnode, color=orange] (bdel_x) at ($(bdel_plus)+(0.75,-1)$) {$\color{black}x$};
+    \draw (bdel_plus) -- (bdel_three);
+    \draw (bdel_plus) -- (bdel_x);
+
+    \node[varnode] (bins_plus) at ($(bdel_plus)+(3.5,0)$) {$+$};
+    \node[varnode] (bins_three) at ($(bins_plus)+(-0.75,-1)$) {$3$};
+    \node[varnode, colorB] (bins_times) at ($(bins_plus)+(0.75,-1)$) {$*$};
+    \node[varnode, colorB] (bins_four) at ($(bins_times)+(-0.5,-1)$) {$4$};
+    \node[mvnode] (bins_beta) at ($(bins_times)+(0.5,-1)$) {$\beta$};
+    \node[mvnode, dashed, minimum size=3.5cm] (bins_alpha) at ($(bins_times)+(0,-0.75)$) {};
+    \draw (bins_plus) -- (bins_three);
+    \draw (bins_plus) -- (bins_times);
+    \draw (bins_times) -- (bins_four);
+    \draw (bins_times) -- (bins_beta);
+    
+    \node (barrow) at ($($(bdel_x)!0.5!(bdel_plus)$)!0.5!($(bins_three)!0.5!(bins_plus)$)$) {$\rightarrow$};
+    
+    \draw[>=latex,->] ($(bins_plus)+(-0.75, 0.25)$) -- ($(adel_alpha)+(0, -0.5)$);
+    \draw[->,dotted] ($(ains_two)+(0, -0.5)$) -- ($(bdel_plus)+(0.75, 0.25)$);
+\end{tikzpicture}
+\end{minipage}\hfill
+\begin{minipage}{0.49\textwidth}
+\centering\begin{tikzpicture}
+    \node[varnode, color=blue] (del_plus) {$\color{black}+$};
+    \node[varnode, color=blue] (del_three) at ($(del_plus)+(-0.75,-1)$) {$\color{black}3$};
+    \node[varnode, color=orange] (del_x) at ($(del_plus)+(0.75,-1)$) {$\color{black}x$};
+    \node[varnode, color=blue] (del_x_out) at (del_x) {\phantom{M}};
+    \draw (del_plus) -- (del_three);
+    \draw (del_plus) -- (del_x_out);
+
+    \node[varnode, colorA] (ins_minus) at ($(del_plus)+(3.5,0)$) {$-$};
+    \node[varnode, colorA] (ins_two) at ($(ins_minus)+(-0.75,-1)$) {$2$};
+    \node[varnode, colorB] (ins_times) at ($(ins_minus)+(0.75,-1)$) {$*$};
+    \node[varnode, colorB] (ins_four) at ($(ins_times)+(-0.5,-1)$) {$4$};
+    \node[mvnode] (ins_beta) at ($(ins_times)+(0.5,-1)$) {$\beta$};
+    \node[mvnode, dashed, minimum size=3.5cm] (ins_alpha) at ($(ins_times)+(0,-0.75)$) {};
+    \draw (ins_minus) -- (ins_two);
+    \draw (ins_minus) -- (ins_times);
+    \draw (ins_times) -- (ins_four);
+    \draw (ins_times) -- (ins_beta);
+
+    \node (arrow) at ($($(del_x)!0.5!(del_plus)$)!0.5!($(ins_two)!0.5!(ins_minus)$)$) {$\rightarrow$};
+\end{tikzpicture}
+\end{minipage}
+\label{fig:metavar_inlining}
+\caption{Meta-variable inlining}
+\end{figure}
+
 In absence of conflicts, merged differences have the same semantics as simple difference trees.
 
 Conflict represent parts that couldn't be merged and therefore prevent application of the difference on any tree. They can come from four different sources:
@@ -641,9 +708,6 @@ Conflict represent parts that couldn't be merged and therefore prevent applicati
   \item Insert order conflict ($\OrdConflict$) is caused by two insertions taking place at the same location. As the merge operation is never performing any choice, it cannot arbitrarily order them.
   \item Meta-variable conflict ($\MvConflict$) is triggered when a meta-variable appears more than once in deletion tree, and the inlined insertions in each occurrences differ, therefore not giving a consistent replacement.
 \end{itemize}
-
-The application domain of the merged difference $t_1 \merge t_2$ is the intersection of the domains of $t_1$ and $t_2$ in absence of conflicts.
-Also we ensure that $t \merge t = t$.
 
 \subsubsection{Specification of the difference merging algorithm}
 The difference merging algorithm is defined modulo two replacement functions $\Gamma$ and $\Delta$ from meta-variable to respectively insertion and deletion trees, that are heavily constrained and in practice inferred during the merge.
@@ -899,53 +963,53 @@ Where $\oplus$ is a function transposing a deletion tree to an insertion tree by
 \begin{prooftree}
  \AxiomC{$\overrightarrow{\Delta \vdash d_l \wedge d_r = d}$}
  \RightLabel{\textsc{SameSyn}}
- \UnaryInfC{$\Delta \vdash S(\overrightarrow{d_l}) \wedge S(\overrightarrow{d_r}) = S(\overrightarrow{d})$}
+ \UnaryInfC{$\Delta \vdash S^{c_l}(\overrightarrow{d_l}) \wedge S^{c_r}(\overrightarrow{d_r}) = S^{c_l \cup c_r}(\overrightarrow{d})$}
 \end{prooftree}
 
 \begin{prooftree}
  \AxiomC{}
  \RightLabel{\textsc{SameMv}}
- \UnaryInfC{$\Delta \vdash \alpha \wedge \alpha = \Delta(\alpha)$}
+ \UnaryInfC{$\Delta \vdash \alpha^{c_l} \wedge \alpha^{c_r} = \Delta(\alpha)^{c_l \cup c_r}$}
 \end{prooftree}
 \end{minipage}\hfill
 \begin{minipage}{0.49\textwidth}
 \begin{prooftree}
  \AxiomC{$\Delta \vdash \Delta(\alpha) \wedge d_r = \Delta(\alpha)$}
  \RightLabel{\textsc{MvLeft}}
- \UnaryInfC{$\Delta \vdash \alpha \wedge d_r = \Delta(\alpha)$}
+ \UnaryInfC{$\Delta \vdash \alpha^{c_l} \wedge d_r^{c_r} = \Delta(\alpha)^{c_l \cup c_r}$}
 \end{prooftree}
 
 \begin{prooftree}
  \AxiomC{$\Delta \vdash \Delta(\alpha) \wedge d_l = \Delta(\alpha)$}
  \RightLabel{\textsc{MvRight}}
- \UnaryInfC{$\Delta \vdash d_l \wedge \alpha = \Delta(\alpha)$}
+ \UnaryInfC{$\Delta \vdash d_l^{c_l} \wedge \alpha^{c_r} = \Delta(\alpha)^{c_l \cup c_r}$}
 \end{prooftree}
 \end{minipage}
 
 \begin{prooftree}
  \AxiomC{$\Delta \vdash d_l \wedge d_r = d$}
  \RightLabel{\textsc{MvConflLeft}}
- \UnaryInfC{$\Delta \vdash \MvConflict(\alpha, d_l, i) \wedge d_r = \MvConflict(\alpha, d, \Gamma(i))$}
+ \UnaryInfC{$\Delta \vdash \MvConflict(\alpha, d_l^{c_l}, i) \wedge d_r^{c_r} = \MvConflict(\alpha, d^{c_l \cup c_r}, \Gamma(i))$}
 \end{prooftree}
 
 \begin{prooftree}
  \AxiomC{$\Delta \vdash d_l \wedge d_r = d$}
  \RightLabel{\textsc{MvConflRight}}
- \UnaryInfC{$\Delta \vdash d_l \wedge \MvConflict(\alpha, d_r, i) = \MvConflict(\alpha, d, \Gamma(i))$}
+ \UnaryInfC{$\Delta \vdash d_l^{c_l} \wedge \MvConflict(\alpha, d_r^{c_r}, i) = \MvConflict(\alpha, d^{c_l \cup c_r}, \Gamma(i))$}
 \end{prooftree}
 
 \paragraph{Simplification of insertion union}
 
 \begin{prooftree}
- \AxiomC{$\Gamma(i_l) = \Gamma(i_r) = i$}
+ \AxiomC{$\Gamma(i_l)^{c_l} = \Gamma(i_r)^{c_r} = i$}
  \RightLabel{\textsc{SameIns}}
- \UnaryInfC{$\Gamma \vdash i_l \vee i_r = i$}
+ \UnaryInfC{$\Gamma \vdash i_l \vee i_r = i^{c_l \cup c_r}$}
 \end{prooftree}
 
 \begin{prooftree}
  \AxiomC{$\overrightarrow{\Gamma \vdash i_l \vee i_r = i}$}
  \RightLabel{\textsc{InsSyn}}
- \UnaryInfC{$\Gamma \vdash S(\overrightarrow{i_l}) \vee S(\overrightarrow{i_r}) = S(\overrightarrow{i})$}
+ \UnaryInfC{$\Gamma \vdash S^{c_l}(\overrightarrow{i_l}) \vee S^{c_r}(\overrightarrow{i_r}) = S^{c_l \cup c_r}(\overrightarrow{i})$}
 \end{prooftree}
 
 \begin{prooftree}
@@ -960,7 +1024,70 @@ The above specification is telling what a merged version must look like but does
 From a high level point of view, the merging algorithm follows these steps:
 \begin{itemize}
  \item Ensure that all the meta-variables used in both programs are disjoint by alpha-renaming whenever necessary.
- \item Align the spines of both difference trees. This requires unrolling whenever one of the difference tree still has a spine node while the other has a difference at the same place. This step also aligns the sequences and detect insert order conflicts. \todo{Figure here?}
+ \item Align the spines of both difference trees. This requires unrolling whenever one of the difference tree still has a spine node while the other has a difference at the same place. This step also aligns the sequences and detect insert order conflicts.
+ \begin{figure}[ht]
+\begin{minipage}{0.33\textwidth}
+\centering\begin{tikzpicture}
+\node[varnode] (plus) {$+$};
+\node[varnode] (x) at ($(plus)+(-0.75,-1)$) {$x$};
+\node[changenode, color=blue] (change) at ($(plus)+(2,-1.4)$) {\tikz[color=black]{
+    \node[varnode, color=blue] (del_times) {$\color{black}*$};
+    \node[varnode, color=blue] (del_y) at ($(del_times)+(-0.75,-1)$) {$\color{black}y$};
+    \node[mvnode, color=blue] (del_alpha) at ($(del_times)+(0.75,-1)$) {$\color{black}\alpha$};
+    \draw (del_times) -- (del_y);
+    \draw (del_times) -- (del_alpha);
+    
+    \node[mvnode] (ins_alpha) at ($(del_times)!0.5!(del_alpha)+(2.5, 0)$) {$\alpha$};
+    \node (arrow) at ($(del_times)!0.5!(del_alpha)!0.5!(ins_alpha)$) {$\rightarrow$};
+}};
+\draw (plus) -- (x);
+\draw (plus) -- (change);
+\end{tikzpicture}
+\end{minipage}\hfill
+\begin{minipage}{0.33\textwidth}
+\centering\begin{tikzpicture}
+\node[varnode] (plus) {$+$};
+\node[varnode] (x) at ($(plus)+(-0.75,-1)$) {$x$};
+\node[varnode] (times) at ($(plus)+(0.75,-1)$) {$*$};
+\node[varnode] (y) at ($(times)+(-0.75,-1)$) {$y$};
+\node[changenode] (change) at ($(times)+(1,-1)$) {\tikz{
+    \node[varnode, color=orange] (two) {$\color{black}2$};
+    \node[varnode, colorB] (z) at ($(two)+(1.5, 0)$) {$z$};
+    \node (arrow) at ($(two)!0.5!(z)$) {$\rightarrow$};
+}};
+\draw (plus) -- (x);
+\draw (plus) -- (times);
+\draw (times) -- (y);
+\draw (times) -- (change);
+\end{tikzpicture}
+\end{minipage}
+\hfill
+\begin{minipage}{0.33\textwidth}
+\centering\begin{tikzpicture}
+\node[varnode] (plus) {$+$};
+\node[varnode] (x) at ($(plus)+(-0.75,-1)$) {$x$};
+\node[changenode] (change) at ($(plus)+(2,-1.4)$) {\tikz{
+    \node[varnode] (del_times) {$\color{black}*$};
+    \node[varnode] (del_y) at ($(del_times)+(-0.5,-1)$) {$\color{black}y$};
+    \node[varnode, color=orange] (del_two) at ($(del_times)+(0.5,-1)$) {$\color{black}2$};
+    \draw (del_times) -- (del_y);
+    \draw (del_times) -- (del_two);
+    
+    \node[varnode] (ins_times) at ($(del_times)+(2.5, 0)$) {$*$};
+    \node[varnode] (ins_y) at ($(ins_times)+(-0.5,-1)$) {$y$};
+    \node[varnode, colorB] (ins_z) at ($(ins_times)+(0.5,-1)$) {$z$};
+    \draw (ins_times) -- (ins_y);
+    \draw (ins_times) -- (ins_z);
+    
+    \node (arrow) at ($($(del_times)!0.5!(del_two)$)!0.5!($(ins_times)!0.5!(ins_y)$)$) {$\rightarrow$};
+}};
+\draw (plus) -- (x);
+\draw (plus) -- (change);
+\end{tikzpicture}
+\end{minipage}
+\label{fig:spine-alignment}
+\caption{Spine alignment: We unwind the spine of the second tree producing the third in order to be aligned with first.}
+\end{figure}
  \item Merge the insertion trees together. For each insertion we try to inline it inside the facing deletion tree first. If only one inlining could succeed, then we perform it, else we try to merge together the insertion trees. This take the union of tints as resulting color and create conflicts whenever both insertion do not match. By performing inlinings, we can remember $\Gamma^*$ a map form meta-variables to a list of the trees that were inlined on the metavariable.
  \item Merge the deletion trees together. For that, we build $\Delta$ as we merge the sub-trees.
  \item Then we perform all the substitutions wherever there are meta-variables with a replacement in $\Delta$ for deletion trees, and in $\Gamma$ for insertion trees.
@@ -977,13 +1104,16 @@ Despite the rather arbitrary choice of doing this specific syntactic merge, our 
 
 \paragraph{Domain} First, we can notice that in absence of conflicts, the domain of the merged difference is the intersection of the domains of both inputs. Mathematically, we have: $\dom(t_1 \merge t_2) = \dom(t_1) \cap \dom(t_2)$. This comes from spine preservation combined with deletion tree intersection.
 
+\paragraph{Idempotence} $t \merge t = t$. This comes from the fact that we do not let conflicts happen when both tree aggree on a common value. The property can be extended to differently colored tree as: $t^{c_1} \merge t^{c_2} = t^{c_1 \cup c_2}$.
+
 \paragraph{Commutativity} $t_1 \merge t_2 = t_2 \merge t_1$, it comes from the symmetry in rules and shows that we cannot treat differently the left and the right commits, thus never favoring one side against the other. There is a little limitation though, we must consider that the order inside conflicts does not matter: $\InsConflict(i_1, i_2) = \InsConflict(i_2, i_1)$, $\OrdConflict([\overrightarrow{i}]) = \OrdConflict(\sigma[\overrightarrow{i}])$  for any permutation $\sigma$ and $\MvConflict(\alpha, \MvConflict(\beta, d, i_\beta), i_\alpha) = \MvConflict(\beta, \MvConflict(\alpha, d, i_\alpha), i_\beta)$.
 
 \paragraph{Preserve introduced nodes} For all nodes that are introduced in one of the commits, we know that it will be found at least once in the merged result colored with at least as many tints. However, we cannot say anything about location of these introduced nodes because their code might have been displaced by metavariable inlining.
 
-\paragraph{Compatible with composition} If $d \in \dom(t_1 \circ t_2)$, then if $t_1 \circ t_2 = t_2 \circ t_1$, we have $(t_1 \merge t_2)(d) = (t_1 \circ t_2)(d)$. \gb{Argh, maybe more complicated and need some proof}
+\paragraph{Compatible with composition} If $d \in \dom(t_1 \circ t_2)$, then if $t_1 \circ t_2 = t_2 \circ t_1$, we have $(t_1 \merge t_2)(d) = (t_1 \circ t_2)(d)$. Here the precondition will be true for differences without code moves. This means that on orthogonal changes, the merge operation is the same as the composition where they are both defined. \todo{Check that we cannot remove the domain assumption}
 
-\paragraph{Compatible with inverse} If $d \in \dom(t_1^{-1} \circ (t_1 \merge t_2))$, then $(t_1^{-1} \circ (t_1 \merge t_2))(d) = t_2(d)$
+\paragraph{Compatible with inverse} If $d \in \dom(t_1^{-1} \circ (t_1 \merge t_2))$, then $(t_1^{-1} \circ (t_1 \merge t_2))(d) = t_2(d)$. Note here that inverse is defined for differences without colors, so the equality holds only after removing all colors from $t_1$ and $t_2$.
+
 
 \section{Semantic merge}
 \label{sec:semantic-merge}
