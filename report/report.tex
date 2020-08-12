@@ -433,8 +433,9 @@ Lines~$2$ to~$5$ and~$14$ to~$18$, blue has done only semantic
 preserving changes and would manually replace the blue color by white
 in each of these lines. Then, an ambiguity on Line~$11$ will still
 remain but it could be resolved by overriding the expression in the
-merged commit by a new one like for instance \lstinline$if y == 0 { 0
-} else { x / y }$.  Therefore, given this information, the two commits
+merged commit by a new one like for instance%
+\lstinline$if y == 0 { 0 } else { x / y }$.
+Therefore, given this information, the two commits
 can be safely merged with the guarantee that no unintended
 behavior\footnote{Side channel attack vectors might still be silently
   introduced unless we also model them into the analysis.} will be
@@ -443,26 +444,66 @@ silently introduced by the fusion itself.
 \section{Syntactic merge}
 \label{sec:syntactic-merge}
 
-In this step we want two things: first get a procedure that takes concurrent commits and merge them together. Secondly, keep provenance annotations on the merged program to make an analysis possible later.
+In this section, we present two contributions: first a procedure that
+takes concurrent commits and merge them together ; second, a
+provenance annotation mechanism on the merged program to allow for a
+subsequent semantic aware analysis of ambiguity.
 
-Standard tools (like diff or git) are using a line based merge. This make their algorithms be language insensitive (as long as it is textual) but in most programming languages, a line do not have any defined semantic. Therefore, we have taken the approach that concurrent commits should be merged in a syntax driven way.
+Standard tools (like diff or git) are using a textual line based
+merge. This choice makes their algorithms be language insensitive (as
+long as it is textual) but in most programming languages, a line do
+not have any defined semantic. Therefore, we have taken the approach
+that concurrent commits should be merged in a syntax driven way.
 
-The high level approach to this syntactic merge is to first compute individual differences from the common ancestor to each commit, and then merge the differences trees into a singe one. Finally, we can apply the merged difference tree to the common ancestor and obtain a syntactically valid merge candidate. This one may not be the desired final merged code, and is not even necessarily free from conflicts or compile-time errors, but it is a synthesis of all the modifications, and should be a good base for manual refinement.
+From a bird-eye view, this syntactic merge first computes individual
+differences from the common ancestor to each commit, and then merges
+the differences trees into a singe one. Finally, we can apply the
+merged difference tree to the common ancestor and obtain a
+syntactically valid merge candidate. This program may not be the
+desired final merged code~\yrg{Why?}, and is not even necessarily free
+from conflicts or compile-time errors, but it is a synthesis of all
+the modifications, and should be a good base for manual resolution of
+conflicts.
 
 \subsection{Syntax tree difference}
-We want a rather rich way of describing differences to prevent as much as possible useless syntactic conflicts.
-Therefore our syntax tree difference structure will encode local tree modification, list insertion and deletion and a notion of typed multi-source, multi-target code move.
+We want a rather rich way of describing differences to prevent as much
+as possible useless syntactic conflicts.~\yrg{I do not understand
+this sentence.}
+%
+Therefore our syntax tree difference structure will encode local tree
+modifications, list insertions and deletions and a notion of typed
+multi-source, multi-target code moves. \yrg{I do not understand
+the logical implication here.}
 
 \subsubsection{Type for syntax tree differences}
-We encode program differences as a new kind of syntax tree that follows the constructors from the target language and add new ones.
+As said earlier, we encode program differences as a new kind of syntax
+tree that follows the constructors from the target language and add
+new ones.
 
-Basically, a difference can be viewed as two syntax trees, a deleted one, and an inserted one. Therefore the simplest valid difference from code $d$ to code $i$ is simply the change $\change{d}{i}$.
+Basically, a difference can be viewed as two syntax trees, a deleted
+one, and an inserted one. Therefore the simplest valid difference from
+code $d$ to code $i$ is simply the change $\change{d}{i}$.
 
-However, to ease fusion, produce better output and remove redundancy we change two things.
-First, we elide identical sub-trees that are present in both $d$ and $i$.
-Secondly, we merge together identical constructions between the deletion and insertion tree starting from the root.
+However, to ease fusion, produce better output and remove redundancy
+we change two things.~\yrg{With respect to what?}  First, we elide
+identical sub-trees that are present in both $d$ and $i$. Secondly,
+we merge together identical constructions between the deletion and
+insertion tree starting from the root.
 
-The elisions can be seen as code moved from a location in $d$ into another location in $i$, but the actual content is temporarily forgotten inside what we call a meta-variable. In this paper, we will denote these elisions by Greek letters. As a given meta-variable can occur more that twice (at least once in deletion and once in insertion but maybe more), these code displacements have multiple sources and multiple targets, but a given meta-variable will always represent an identical code sub-tree.
+The elisions can be seen as code moved from a location in~$d$ into
+another location in~$i$, but the actual content is temporarily
+forgotten inside what we call a meta-variable. In this paper, we will
+denote these elisions by Greek letters. As a given meta-variable can
+occur more that twice (at least once in deletion and once in insertion
+but maybe more), these code displacements have multiple sources and
+multiple targets, but a given meta-variable will always represent an
+identical code sub-tree.
+
+Figure~\ref{fig:metavar_elision} illustrates the syntax for tree
+differences. \yrg{Please complete with a precise description of
+the figure contents.}
+
+\yrg{Notice that the figure does not illustrate ``context sharing''.}
 
 \begin{figure}[ht]
 \begin{minipage}{0.49\textwidth}
@@ -511,7 +552,14 @@ The elisions can be seen as code moved from a location in $d$ into another locat
 \caption{The change $\change{(2*x)+x}{(2*x)-x}$ becomes $\change{\alpha+\beta} {\alpha-\beta}$ after meta-variable elision.}
 \end{figure}
 
-Trying to merge together two nodes in the AST is easy, we simply need to check if they use the same root constructor, recursively merge if it is the case, and fail otherwise. However, this approach is really bad with sequences (eg. sequences of functions or sequences of statements). We do not want to fully split a list if only one element has been inserted, removed or changed. Therefore, we use list edit scripts instead as the output of a merge operation on two sequences. We call the merged part of the difference tree its spine.
+Trying to merge together two nodes in the AST is easy, we simply need
+to check if they use the same root constructor, recursively merge if
+it is the case, and fail otherwise. However, this approach is really
+bad with sequences (eg. sequences of functions or sequences of
+statements). We do not want to fully split a list if only one element
+has been inserted, removed or changed. Therefore, we use list edit
+scripts instead as the output of a merge operation on two
+sequences. We call the merged part of the difference tree its spine.
 
 \begin{figure}[ht]
 \begin{minipage}{0.49\textwidth}
