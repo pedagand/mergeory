@@ -1034,10 +1034,15 @@ Conflict represent parts that couldn't be merged and therefore prevent applicati
 The difference merging algorithm is defined modulo two replacement
 functions $\Gamma$ and $\Delta$ from meta-variables to respectively
 insertion and deletion trees, that are heavily constrained and in
-practice inferred during the merge.~\yrg{You should have forward
+practice inferred during the merge.~\yrg{You should have a forward
 pointer to a section that precisely explains how this inference work.
 You should also explain that this presentation (with oracles) simplifies
 the formalization.}
+
+\yrg{This will take you some time but it is mandatory to:
+(i) enumerate and explain each judgment and how it is read ;
+(ii) give some informal explanation for each rule.
+}
 
 \begin{prooftree}
  \AxiomC{$\Gamma, \Delta \vdash t_r \merge t_l = t$}
