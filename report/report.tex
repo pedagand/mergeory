@@ -1351,12 +1351,31 @@ Where $\oplus$ is a function transposing a deletion tree to an insertion tree by
 \end{prooftree}
 
 \subsubsection{Algorithm for merging differences}
-The above specification is telling what a merged version must look like but doesn't tell how to compute this merged version. Simply following the rules is not enough, because we have two global variables $\Gamma$ and $\Delta$ to infer. Moreover, for $\Gamma$ there is a priori several possibilities. Hopefully, we can easily distinguish one that will minimize the number of conflicts generated. We want a valid $\Gamma$ that minimize the number of meta-variables associated to $\top$.
+
+The above specification is telling what a merged version must look
+like but does not tell us how to compute this merged version. Simply
+following the rules is not enough, because we have two oracles
+$\Gamma$ and $\Delta$ to infer. Moreover, for $\Gamma$ there is a
+priori several possibilities \yrg{Why? Give examples.}. Hopefully, we
+can easily distinguish one that will minimize the number of conflicts
+generated.~\yrg{Are you sure? Can you explain why? Since there is no
+  proof of this fact, you should probably weaken a little bit your
+  assertions.} We want a valid $\Gamma$ that minimize the number of
+meta-variables associated to $\top$.~\yrg{Why?}
 
 From a high level point of view, the merging algorithm follows these steps:
 \begin{itemize}
- \item Ensure that all the meta-variables used in both programs are disjoint by alpha-renaming whenever necessary.
- \item Align the spines of both difference trees. This requires unrolling whenever one of the difference tree still has a spine node while the other has a difference at the same place. This step also aligns the sequences and detect insert order conflicts.
+
+ \item Ensure that all the meta-variables used in both programs are
+   disjoint by alpha-renaming whenever necessary.~\yrg{Why?}
+
+ \item Align the spines of both difference trees. This requires
+   unrolling whenever one of the difference tree still has a spine
+   node while the other has a difference at the same place. This step
+   also aligns the sequences and detects inserted order conflicts.
+   ~\yrg{I do not understand this. Why is this case not handled by
+   the declarative specification?}
+
  \begin{figure}[ht]
 \begin{minipage}{0.33\textwidth}
 \centering\begin{tikzpicture}
@@ -1420,32 +1439,101 @@ From a high level point of view, the merging algorithm follows these steps:
 \label{fig:spine-alignment}
 \caption{Spine alignment: We unwind the spine of the second tree producing the third in order to be aligned with first.}
 \end{figure}
- \item Merge the insertion trees together. For each insertion we try to inline it inside the facing deletion tree first. If only one inlining could succeed, then we perform it, else we try to merge together the insertion trees. This take the union of tints as resulting color and create conflicts whenever both insertion do not match. By performing inlinings, we can remember $\Gamma^*$ a map form meta-variables to a list of the trees that were inlined on the metavariable.
- \item Merge the deletion trees together. For that, we build $\Delta$ as we merge the sub-trees.
- \item Then we perform all the substitutions wherever there are meta-variables with a replacement in $\Delta$ for deletion trees, and in $\Gamma$ for insertion trees.
+ \yrg{Take the time to explain the figure.}
+
+ \item Merge the insertion trees together. For each insertion we try
+   to inline it inside the facing deletion tree first~\yrg{Why?}. If
+   only one inlining could succeed, then we perform it, else we try to
+   merge together the insertion trees. This take the union of tints as
+   resulting color and create conflicts whenever both insertion do not
+   match. By performing inlinings, we can remember $\Gamma^*$ a map
+   form meta-variables to a list of the trees that were inlined on the
+   metavariable.
+   \yrg{This is really technical and difficult to follow...}
+
+ \item Merge the deletion trees together. For that, we build $\Delta$
+   as we merge the sub-trees.
+   \yrg{Too succint to be understandable...}
+
+ \item Then we perform all the substitutions wherever there are
+   meta-variables with a replacement in $\Delta$ for deletion trees,
+   and in $\Gamma$ for insertion trees.
+   \yrg{Again, you should give more explanations.}
 \end{itemize}
 
-If we want to merge more than two differences, we can reapply the same algorithm on already merged trees, thus accumulating modifications but also conflicts.
+If we want to merge more than two differences, we can reapply the same
+algorithm on already merged trees, thus accumulating modifications but
+also conflicts.
+\yrg{This section is already technical enough. This remark should probably
+be done in a discussion section.}
+
+\yrg{You should say that the algorithm is not totally formalized yet,
+  and its proof of correctness is still far from being
+  reachable. Hence, you can also provide informal arguments, which is
+  already something.}
 
 \subsection{Properties of the generated merged difference tree}
-Despite the rather arbitrary choice of doing this specific syntactic merge, our algorithm provides some good properties.
 
-\paragraph{Preserve common spine} All the nodes that are inside the spine of both commits are preserved.
+Despite the rather arbitrary choice of doing this specific syntactic
+merge, our algorithm \yrg{should eventually?} provides some good
+properties.
 
-\paragraph{Deletion tree intersection} If some code is deleted in one of the commits, it must also be deleted in the merged result colored with at least as many tints. Moreover, if two commits delete the same code, the result pushes meta-variables as far as possible down the tree.
+\paragraph{Preserve common spine}
+All the nodes that are inside the spine of both commits are preserved.
 
-\paragraph{Domain} First, we can notice that in absence of conflicts, the domain of the merged difference is the intersection of the domains of both inputs. Mathematically, we have: $\dom(t_1 \merge t_2) = \dom(t_1) \cap \dom(t_2)$. This comes from spine preservation combined with deletion tree intersection.
+\paragraph{Deletion tree intersection}
+If some code is deleted in one of the commits, it must also be deleted
+in the merged result colored with at least as many tints \yrg{as
+  what?}. Moreover, if two commits delete the same code, the result
+pushes meta-variables as far as possible down the tree\yrg{ of the
+  deleted code?}.
 
-\paragraph{Idempotence} $t \merge t = t$. This comes from the fact that we do not let conflicts happen when both tree aggree on a common value. The property can be extended to differently colored tree as: $t^{c_1} \merge t^{c_2} = t^{c_1 \cup c_2}$.
+\paragraph{Domain}
+First, we can notice that in absence of conflicts, the domain of the
+merged difference is the intersection of the domains of both
+inputs. Mathematically, we have: $\dom(t_1 \merge t_2) = \dom(t_1)
+\cap \dom(t_2)$. This comes from spine preservation combined with
+deletion tree intersection.
+\yrg{Notice that you never formally defined the domain of the
+merged difference.}
 
-\paragraph{Commutativity} $t_1 \merge t_2 = t_2 \merge t_1$, it comes from the symmetry in rules and shows that we cannot treat differently the left and the right commits, thus never favoring one side against the other. There is a little limitation though, we must consider that the order inside conflicts does not matter: $\InsConflict(i_1, i_2) = \InsConflict(i_2, i_1)$, $\OrdConflict([\overrightarrow{i}]) = \OrdConflict(\sigma[\overrightarrow{i}])$  for any permutation $\sigma$ and $\MvConflict(\alpha, \MvConflict(\beta, d, i_\beta), i_\alpha) = \MvConflict(\beta, \MvConflict(\alpha, d, i_\alpha), i_\beta)$.
+\paragraph{Idempotence}
+$t \merge t = t$. This comes from the fact that we do not let
+conflicts happen when both tree agree on a common value. The property
+can be extended to differently colored tree as: $t^{c_1} \merge
+t^{c_2} = t^{c_1 \cup c_2}$.
 
-\paragraph{Preserve introduced nodes} For all nodes that are introduced in one of the commits, we know that it will be found at least once in the merged result colored with at least as many tints. However, we cannot say anything about location of these introduced nodes because their code might have been displaced by metavariable inlining.
+\paragraph{Commutativity}
+$t_1 \merge t_2 = t_2 \merge t_1$, it comes from the symmetry in rules
+and shows that we cannot treat differently the left and the right
+commits, thus never favoring one side against the other. There is a
+little limitation though, we must consider that the order inside
+conflicts does not matter: $\InsConflict(i_1, i_2) = \InsConflict(i_2,
+i_1)$, $\OrdConflict([\overrightarrow{i}]) =
+\OrdConflict(\sigma[\overrightarrow{i}])$ for any permutation $\sigma$
+and $\MvConflict(\alpha, \MvConflict(\beta, d, i_\beta), i_\alpha) =
+\MvConflict(\beta, \MvConflict(\alpha, d, i_\alpha), i_\beta)$.
 
-\paragraph{Compatible with composition} If $d \in \dom(t_1 \circ t_2)$, then if $t_1 \circ t_2 = t_2 \circ t_1$, we have $(t_1 \merge t_2)(d) = (t_1 \circ t_2)(d)$. Here the precondition will be true for differences without code moves. This means that on orthogonal changes, the merge operation is the same as the composition where they are both defined. \todo{Check that we cannot remove the domain assumption}
+\paragraph{Preserve introduced nodes}
+For all nodes that are introduced in one of the commits, we know that
+it will be found at least once in the merged result colored with at
+least as many tints. However, we cannot say anything about location of
+these introduced nodes because their code might have been displaced by
+metavariable inlining.
 
-\paragraph{Compatible with inverse} If $d \in \dom(t_1^{-1} \circ (t_1 \merge t_2))$, then $(t_1^{-1} \circ (t_1 \merge t_2))(d) = t_2(d)$. Note here that inverse is defined for differences without colors, so the equality holds only after removing all colors from $t_1$ and $t_2$.
+\paragraph{Compatible with composition}
+If $d \in \dom(t_1 \circ t_2)$, then if $t_1 \circ t_2 = t_2 \circ
+t_1$, we have $(t_1 \merge t_2)(d) = (t_1 \circ t_2)(d)$. Here the
+precondition will be true for differences without code moves. This
+means that on orthogonal changes, the merge operation is the same as
+the composition where they are both defined. \todo{Check that we
+  cannot remove the domain assumption}
 
+\paragraph{Compatible with inverse}
+If $d \in \dom(t_1^{-1} \circ (t_1 \merge t_2))$, then $(t_1^{-1}
+\circ (t_1 \merge t_2))(d) = t_2(d)$. Note here that inverse is
+defined for differences without colors, so the equality holds only
+after removing all colors from $t_1$ and $t_2$.
 
 \section{Semantic merge}
 \label{sec:semantic-merge}
