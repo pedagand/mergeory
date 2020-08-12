@@ -839,31 +839,83 @@ code. But this is left for future work as a pure engineering problem.
 
 \subsection{Awareness colors}
 
-Before merging differences together, we want to define a way of keeping track of which commit introduced each modification. For that we use a notion of awareness colors.
+Before merging differences together, we want to define a way of
+keeping track of which commit introduced each modification. For that
+we use a notion of awareness colors.
 
-Each commit in a fusion get an associated tint. If we denote by $\mathbb{T}$ the set of all tints considered, we can define the color set as $\mathbb{C} = \mathcal{P}(\mathbb{T})$. This forms the complete lattice $(\mathbb{C}, \cup, \cap, \subset)$. We name the maximum in this lattice white (equal to $\mathbb{T}$, denoted $\top$) and the minimum black (equal to $\emptyset$, denoted $\bot$).
+Each commit in a fusion gets an associated tint. If we denote by
+$\mathbb{T}$ the set of all tints considered, we can define the color
+set as $\mathbb{C} = \mathcal{P}(\mathbb{T})$. This forms the complete
+lattice $(\mathbb{C}, \cup, \cap, \subset)$. We name the maximum in
+this lattice white (equal to $\mathbb{T}$, denoted by $\top$) and the
+minimum black (equal to $\emptyset$, denoted by $\bot$).
 
-A modification gets the color $c \in \mathbb{C}$, if for all tint in $c$, the associated commit is aware of the presence of the colored source code.
+A modification~\yrg{Is ``modification'' as synonymous for ``commit''?
+  for ``difference''?} gets the color $c \in \mathbb{C}$, if for all
+tint in $c$, the associated commit is aware of the presence of the
+colored source code.~\yrg{Presence where?} \yrg{You already
+used $c$ in the syntax for differences!}
 
-The white color having all the tints, it represent a consensus of all the commits. On the other side, black represent the fact that no single commit can claim responsibility for a given value. This makes the white color the good choice for everything already present in the original file, and black a color that we want to track and avoid.
+The white color having all the tints, it represents a consensus of all
+the commits. On the other side, black represents the fact that no
+single commit can claim responsibility for a given value. This makes
+the white color the good choice for everything already present in the
+original program, and black a color that we want to track and
+avoid.\yrg{that is, a good color for conflitcs?}
 
-Both code and modification can carry colors. Code has the color of the commits that introduced it, or is white if it comes from the original file. The same code can be introduced twice if the exact same insertion has been done by multiple commits. In this case it will have the union of both tints as its color. Similarly, insertions and deletions have the color of all the commits that made them.
+Both code and modification can carry colors. Code has the color of the
+commits that introduced it, or is white if it comes from the original
+program. The same code can be introduced twice if the exact same
+insertion has been done by multiple commits. In this case it will have
+the union of both tints as its color. Similarly, insertions and
+deletions have the color of all the commits that made them.
 
-Before merging, we apply the singleton color corresponding to the commit on the difference tree recursively as follows:
+Before merging, we apply the singleton color corresponding to the
+commit on the difference tree, recursively as follows:
 \begin{align*}
 {\color{red}c} &= {\color{red}S(\overrightarrow{c}, \overrightarrow{c})} \typsep \alpha\\
 {\color{red}t} &= S(\overrightarrow{\color{red}t}, \overrightarrow{\color{red}s}) \typsep \id \typsep {\setstcolor{red}\setulcolor{red}\change{c}{\color{red}c}}\\
 {\color{red}s} &= {\color{red}t} \typsep {\setstcolor{red}\mathst{c}} \typsep {\color{red}\mathul{c}}\\
 \end{align*}
 
-Note that meta-variables and holes are never colored, and that AST structures are not colored in the spine but are in the inserted sub-trees. This reflects the fact that in the spine and inside holes, code comes from the original source code, while elsewhere it is introduced by the commit.
+\yrg{Hmm, what is the formal meaning of these red terms? That's not
+  standard to use colored terms. You should take some time to explain
+  these colored notations. In my opinion, they are elegant but it
+  takes some time to understand how to interpret them. In particular,
+  it is not clear how a term can have several colors using that
+  notation.}
+
+Note that meta-variables and holes are never colored, and that AST
+structures are not colored in the spine but are in the inserted
+sub-trees. This reflects the fact that in the spine and inside holes,
+code comes from the original source code, while elsewhere it is
+introduced by the commit. \yrg{You should add a footnote saying that
+the terms are not written in white for obvious practical reasons.
+This raises the question: how do you write black (conflicted) terms?
+I am wondering if you should not use the background color to colorize
+terms...
+}
 
 \subsection{Merging differences}
-Now that we have difference trees for each individual concurrent change, we can try to merge them in a way that keeps track of the origin of each piece of code.
+Now that we have difference trees for each individual concurrent
+change, we can try to merge them in a way that keeps track of the
+origin of each piece of code.
 
-However, as with line based merge, this merging operation can and will regularly fail if someone wants to merge syntactically incompatible changes.
+\yrg{At this point, you must discuss what a merging algorithm is, why
+  it is necessarily arbitrary (semantically speaking), and what are
+  the design principles that guided your work to get a form of
+  syntactical merge which seems to take no arbitrary choice at the
+  level of syntax...}
 
-We therefore break the symmetry between deletion and insertion trees as there will be only one deletion and multiple insertions, and we need to extend our difference types to accumulate potential conflicts.
+However, as with line based merge, this merging operation can and will
+regularly fail if someone wants to merge syntactically incompatible
+changes.
+
+We therefore break the symmetry between deletion and insertion trees
+as there will be only one deletion and multiple insertions, and we
+need to extend our difference types to accumulate potential conflicts.
+\yrg{The logical implication is mysterious. You should explain in
+more depth why we need to break the symmetry here.}
 
 \begin{align*}
 d &::= S(\overrightarrow{d}, \overrightarrow{d}) \typsep \alpha \typsep \MvConflict(\alpha, d, i) \\
@@ -873,8 +925,25 @@ t &::= S(\overrightarrow{t}, \overrightarrow{s}) \typsep \id \typsep  \change{d}
 s &::= t \typsep \mathst{d} \typsep \DelConflict(d, i) \typsep \mathul{i} \typsep \OrdConflict(\overrightarrow{\overrightarrow{i}})\\
 \end{align*}
 
-When dealing with meta-variables, that represent a multi-source multi-target code move, our merging algorithm will try to push changes toward the destination of the code movement.
-This is done in a two-phase way. First, if we have two changes facing each other we try to inline one of them inside the deletion tree of the other, by allowing differences wherever we have a meta-variable. To avoid making any arbitrary choice, this is ignored if both changes could be inlined in the other. Then, we check that these inlined changes are consistent for each meta-variable, and if they are, we replace all occurrences of the meta-variable by the obtained insertion.
+\yrg{Take the time to explain the role of each nonterminal of this
+grammar and to give an informal description of each syntactic
+construction. It is impossible for a reader (and even for me) to
+magically infer the semantics of all these constructions. You must
+also explain how these types compare and interact with the previous types
+for syntax differences.}
+
+When dealing with meta-variables, that represent a multi-source
+multi-target code move, our merging algorithm will try to push changes
+toward the destination of the code movement.  This is done in a
+two-phase way. First, if we have two changes facing each other we try
+to inline one of them inside the deletion tree of the other, by
+allowing differences wherever we have a meta-variable. To avoid making
+any arbitrary choice, this is ignored if both changes could be inlined
+in the other. Then, we check that these inlined changes are consistent
+for each meta-variable, and if they are, we replace all occurrences of
+the meta-variable by the obtained insertion.  \yrg{This paragraph is
+  highly technical! You should probably start your explanations with
+  simple cases and introduce these subtle situations afterwards.}
 
 \begin{figure}[ht]
 \begin{minipage}{0.49\textwidth}
@@ -943,7 +1012,14 @@ This is done in a two-phase way. First, if we have two changes facing each other
 \caption{Meta-variable inlining}
 \end{figure}
 
-In absence of conflicts, merged differences have the same semantics as simple difference trees.
+\yrg{The next paragraphs should probably come earlier, right after the
+  syntax definitions... You should add a bit more structure to this
+  section. I suggest: (a) what is a merging algorithm? (b) what is its
+  high-level specification (input/output types, pre/post-conditions)?
+  (c) what are the main design principles of your implementation?}
+
+In absence of conflicts, merged differences have the same semantics as
+simple difference trees.
 
 Conflict represent parts that couldn't be merged and therefore prevent application of the difference on any tree. They can come from four different sources:
 \begin{itemize}
@@ -954,7 +1030,14 @@ Conflict represent parts that couldn't be merged and therefore prevent applicati
 \end{itemize}
 
 \subsubsection{Specification of the difference merging algorithm}
-The difference merging algorithm is defined modulo two replacement functions $\Gamma$ and $\Delta$ from meta-variable to respectively insertion and deletion trees, that are heavily constrained and in practice inferred during the merge.
+
+The difference merging algorithm is defined modulo two replacement
+functions $\Gamma$ and $\Delta$ from meta-variables to respectively
+insertion and deletion trees, that are heavily constrained and in
+practice inferred during the merge.~\yrg{You should have forward
+pointer to a section that precisely explains how this inference work.
+You should also explain that this presentation (with oracles) simplifies
+the formalization.}
 
 \begin{prooftree}
  \AxiomC{$\Gamma, \Delta \vdash t_r \merge t_l = t$}
