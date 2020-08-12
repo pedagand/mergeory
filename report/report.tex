@@ -554,12 +554,19 @@ the figure contents.}
 
 Trying to merge together two nodes in the AST is easy, we simply need
 to check if they use the same root constructor, recursively merge if
-it is the case, and fail otherwise. However, this approach is really
-bad with sequences (eg. sequences of functions or sequences of
-statements). We do not want to fully split a list if only one element
-has been inserted, removed or changed. Therefore, we use list edit
-scripts instead as the output of a merge operation on two
-sequences. We call the merged part of the difference tree its spine.
+it is the case, and fail otherwise. \yrg{Do you really ``fail''? I
+  guess that you are just stopping the merging process when the two
+  constructors differ.}
+
+However, this approach is really bad with sequences ({\it e.g.}
+sequences of functions or sequences of statements). Indeed, we do not
+want to fully split a list~\yrg{You should explain what you mean by
+  ``splitting'' a list.}  if only one element has been inserted,
+removed or changed. Therefore, we use \yrg{...a refinement of
+  standard...}  sequence edit scripts \yrg{ref?} instead as the output
+of a merge operation on two sequences. We call ``spine'' the merged
+part of the difference tree. Figure~\ref{fig:spine_seq_align} gives
+an example of such spine.
 
 \begin{figure}[ht]
 \begin{minipage}{0.49\textwidth}
@@ -630,35 +637,99 @@ sequences. We call the merged part of the difference tree its spine.
 \caption{The change $\change{\{ \mathbf{let}\ x=3; y=x\}}{\{ y=5; z=9 \}}$ becomes $\{\mathst{\mathbf{let}\ x=3;}\ y = \change{x}{5}; \mathul{z = 9}\}$ after spine merging and sequence alignment.}
 \end{figure}
 
-We denote by $S(\overrightarrow{t}, \overrightarrow{s})$ a constructor from the target language AST, with an arbitrary but fixed arity of trees ($t$) and sequences ($s$). For instance one of the possible $S$ could be the language construction \lstinline[mathescape]|if $t_{cond}$ { $\overrightarrow{s_{true}}$ } else { $\overrightarrow{s_{false}}$ }| with one expression sub-tree and two nested sequences of instructions.
+The notion of syntactic differences and common spine are generic with
+respect to the actual syntax of the source language. For this reason,
+our formal definition for the difference language is parameterized
+with respect to the source language grammar.  Therefore, we write
+$S(\overrightarrow{t}, \overrightarrow{s})$ for a constructor from the
+source language AST, with an arbitrary but fixed number of subtrees
+($t$) and subsequences ($s$). For instance, one of the possible $S$
+could be the language construction for conditional expression
+%
+\lstinline[mathescape]|if $t_{cond}$ { $\overrightarrow{s_{true}}$ } else { $\overrightarrow{s_{false}}$ }|%
+with one expression sub-tree and two nested sequences of instructions.
 
-This gives the following types for difference trees:
+This gives the following grammar for difference trees:
 \begin{align*}
 c &::= S(\overrightarrow{c}, \overrightarrow{c}) \typsep \alpha\\
 t &::= S(\overrightarrow{t}, \overrightarrow{s}) \typsep \id \typsep \change{c}{c}\\
 s &::= t \typsep \mathst{c} \typsep \mathul{c}\\
 \end{align*}
 
-Here $\id$ represent a hole for unchanged sub-tree, \st{strike through} represent deleted code, and \ul{underlines} represent insertions.
+\yrg{You must explain which language is supposed to be represented
+by each nonterminal: $c$ is for code? $t$ for difference? $s$ for ?
+It is not even clear to me...
+}
+
+Here $\id$ represents a hole for unchanged sub-tree, \st{strike
+  through} represents deleted code, and \ul{underline} represents
+inserted code.~\yrg{Notice that you already used this notation
+before its introduction...}
 
 \subsubsection{Computing a syntactic difference}
-To compute a syntactic difference, we take ASTs of both the original and the modified program and we run the following algorithm:
-\begin{itemize}
-  \item Compute a hash for each node of each AST.
-  \item Take the subset of hashes occurring both in original and modified AST.
-  \item Elide the nodes with a hash in the subset to remember just their hash.
-  \item If an elided node does not match an elision with the same hash in the other tree, replace it by the original sub-tree.
-  \item Merge both AST into a common spine where possible, else keep changes as two separate elided trees. Always try to align sequences using recursively a dynamic algorithm minimizing the number of nodes of the resulting tree.
-  \item Replace each hash by a meta-variable letter (just an index in code), and replace changes $\change{\alpha}{\alpha}$ by $\id$ when $\alpha$ does not occur elsewhere.
-\end{itemize}
 
-This algorithm is in $O(nm)$ where $n$ (resp. $m$) is the number of node of the original (resp. modified) tree. The most computationally expansive part of the algorithm is computing sequence alignments, all the rest is linear.
+To compute a syntactic difference, we take ASTs of both the original
+program and the modified program and we run the following algorithm:
+
+\begin{enumerate}
+  \item Compute a hash for each node of each AST.
+
+  \item Take the subset of hashes occurring both in original and
+    modified AST.
+
+  \item Elide the nodes with a hash in the subset to remember just
+    their hash.
+
+  \item If an elided node does not match an elision with the same hash
+    in the other tree, replace it by the original sub-tree.
+
+  \item Merge both AST into a common spine where possible, else keep
+    changes as two separate elided trees. Always try to align
+    sequences using recursively a dynamic algorithm minimizing the
+    number of nodes of the resulting tree.
+
+  \item Replace each hash by a meta-variable letter (just an index in
+    code), and replace changes $\change{\alpha}{\alpha}$ by $\id$ when
+    $\alpha$ does not occur elsewhere.
+\end{enumerate}
+
+This algorithm is in $O(nm)$ where $n$ (resp. $m$) is the number of
+node of the original (resp. modified) tree. The most computationally
+expansive part of the algorithm is computing sequence alignments, all
+the rest is linear.
+
+\yrg{This description is too short given that this algorithm is one of
+  your contributions. You should at least comment each step to explain
+  its purpose and give (informal) arguments to convince the reader of
+  the algorithm correctness.}
 
 \subsubsection{Applying syntactic differences}
-We can see syntactic differences as partial functions turning a syntax tree into another syntax tree.
-The difference between $d$ and $i$ is therefore a function that is at least mapping $d$ into $i$, but it is also defined on some other trees sharing all the relevant structure with $d$.
 
-The implied function of a difference tree is defined as follows: let's suppose that we have $\Gamma$ a function from meta-variable inside the difference tree, to syntax trees, given by an oracle. In practice, $\Gamma$ is constrained enough to be inferred. Then apply the following syntax driven rules:
+We can see syntactic differences as partial functions turning a syntax
+tree into another syntax tree.  The difference between $d$ and $i$ is
+therefore a function that is at least mapping $d$ to $i$, but it is
+also defined on some other trees sharing all the relevant structure
+with $d$.
+
+The implied function of a difference tree is defined as follows: let
+us suppose that we have $\Gamma$ a function from meta-variable
+(occurring in the difference tree) to syntax trees, given by an
+oracle. In practice, $\Gamma$ is constrained enough to be
+inferred. \yrg{The previous points about $\Gamma$ really need
+more explanations, otherwise the function seems a bit too ``magic''. You must
+at least provide a forward pointer to a section describing how
+you compute $\Gamma$.}
+Then apply the following syntax-driven rules:
+\yrg{Before the rules, we need a description of the judgment
+and how to read it. As far as I understand the rules, there are
+several judgments here... Besides, the syntax $... :: ...$ is
+undefined if I am following correctly. Finally, it would be
+more pedagogical to take each rule, to read it for the
+reader and to comment them to convey an intuition about its
+role. Notice that the notation with the vector of judgments
+is not standard and will probably make the reviewers a bit
+puzzled... You should probably use indices and universal
+quantifications instead.}
 
 \noindent
 \begin{minipage}{.49\textwidth}
@@ -717,11 +788,25 @@ The implied function of a difference tree is defined as follows: let's suppose t
 \end{minipage}
 
 \subsubsection{Practical considerations: how to extend a syntax tree}
-Implementing an algorithm that requires extending a syntax tree can be tidious in practice because we want to attach new information and/or create holes on a fixed structure while keeping the typedness of the tree.
+Implementing an algorithm that requires extending a syntax tree can be
+tidious in practice because we want to attach new information and/or
+create holes on a fixed structure while keeping the typedness of the
+tree.
 
-Along this paper, I give a Rust implementation for the syntax difference and merging algorithm of Rust codes. The parser used (the syn crate) uses more than 180 types in its syntax trees, so manual extension was not an option.
+Along this paper, I give a Rust implementation for the syntax
+difference and merging algorithm of Rust programs. The parser used
+(the syn\yrg{Ref?} crate) uses more than 180 types in its syntax
+trees, so manual extension was not an option.
 
-The solution I give is based on a somehow generic code generation system (implemented as procedural macro). The idea is that we want to add the ability to extend a type family of mutually recursive sum of products (nested enums and structs in Rust terminology) by changing systematically some types by others inside it, thus generating a new family variant. Then, we also make a code generator to browse through or convert between variants of the same family. After generation, manual code is only required for the new structures of the trees.
+The solution I give is based on a somehow generic code generation
+system (implemented as a procedural macro). The idea is that we want
+to add the ability to extend a type family of mutually recursive sum
+of products (nested enums and structs in Rust terminology) by
+systematically changing some types with others, thus generating a new
+family variant. Then, we also make a code generator to traverse or
+convert between variants of the same family. After generation, manual
+code is only required for the new structures of the trees. \yrg{What
+  do you mean by ``the new structures of the trees''?}
 
 \begin{lstlisting}[label=lst:codegen, caption={Usage example of the code generator for creating the hash-tagged family variant}]
 syn_codegen! {
@@ -744,8 +829,13 @@ syn_codegen! {
 }
 \end{lstlisting}
 
+\yrg{Please explain/comment this code snippet!}
 
-Note that for having a production ready tool, the current parser is not adapted, as it systematically forgets the comments inside source code. But this is left for future work as a pure engeneering problem.
+\yrg{Please give an URL to get this crate.}
+
+Note that for having a production ready tool, the current parser is
+not adapted, as it systematically forgets the comments inside source
+code. But this is left for future work as a pure engineering problem.
 
 \subsection{Awareness colors}
 
