@@ -3,7 +3,7 @@
 \usepackage[T1]{fontenc}
 \usepackage[top=2.5cm, bottom=2.5cm, left=2.5cm, right=2.5cm]{geometry}
 
-\title{Intention preserving source code merge: a syntactic approach checked semantically}
+\title{Semantically checked source code merge}
 \author{Guillaume Bertholon, supervised by Yann Régis Gianas, IRIF -- Université de Paris}
 
 \usepackage{listings-rust}
@@ -71,7 +71,7 @@
 
 \subsection*{The general context}
 
-\todo{What is it about ? Where does it come from ? What is the state of the art in this area ?}
+% \todo{What is it about ? Where does it come from ? What is the state of the art in this area ?}
 
 In software engineering, people rarely work alone on large
 projects. Therefore, quite often they want to merge their work with
@@ -94,33 +94,32 @@ the final code\footnote{Modern coding techniques involve continuous
 
 \subsection*{The research problem}
 
-\todo{What is the question that you studied ?
-Why is it important, what are the applications/consequences ?
-Is it a new problem ?
-If so, why are you the first researcher in the universe who consider it ?
-If not, why did you think that you could bring an original contribution ?}
+% \todo{What is the question that you studied ?
+% Why is it important, what are the applications/consequences ?
+% Is it a new problem ?
+% If so, why are you the first researcher in the universe who consider it ?
+% If not, why did you think that you could bring an original contribution ?}
 
 The current tools merging concurrent changes to source code are
 purely textual: as long as two modifications modify distinct lines of
-code, a system like Git accepts to merge them
-automatically. Unfortunately, even if two modifications are physically
+code, a system like Git accepts to merge them automatically.
+Unfortunately, even if two modifications are physically
 separated they may interact, especially when one modification breaks
-the assumptions on top of which the other has been conceived. In this
-work, we want to give a semantically sound notion of commits merge which
+the assumptions on top of which the other has been conceived.
+
+In this work, we want to give a semantically sound notion of commits merge which
 captures that kind of unforeseen interactions between concurrent
 modifications.
 
 This can help programmers to make software with less bugs, as they will be able to trust that a merge operation will not silently introduce unwanted behaviours.
 
-Semantic checks are increasingly common on single programs. The study of the semantics of differences is not new\todo{refs?}, but some work has been done recently to introduce the notion of correlation oracle\todo{ref} that we use here. However, to my knowledge it was never applied to the specific problem of giving semantic guarantees for the merging operation in version control systems.
+The study of the semantics of differences between two programs is not new\todo{refs?}, but some work has been done recently to introduce the notion of correlation oracle\todo{ref} that we use here. However, to my knowledge it was never applied to the specific problem of giving semantic guarantees for the merging operation in version control systems.
 
 \subsection*{Your contribution}
 
-\todo{What is your solution to the question described in the last paragraph ?
-
-Be careful, do \emph{not} give technical details, only rough ideas !
-
-Pay a special attention to the description  of the \emph{scientific} approach.}
+% \todo{What is your solution to the question described in the last paragraph ?
+% Be careful, do \emph{not} give technical details, only rough ideas !
+% Pay a special attention to the description  of the \emph{scientific} approach.}
 
 In Section~\ref{sec:overview}, we show on a running example how a
 purely textual merge of modifications may introduce bugs. We
@@ -128,18 +127,19 @@ illustrate how our tool capture this bug as semantic conflicts between
 the commits. We also explain its architecture which is based on two
 main components, which also are the two main contributions of this
 work: (i) an algorithm which implements a principled notion of
-syntactic merge at the level of syntax trees (Section~\ref{sec:syntactic-merge}) ; (ii) a semantic notion of merge
+syntactic merge at the level of syntax trees (Section~\ref{sec:syntactic-merge}) ; (ii) a semantic notion of unambiguous merge
 at the level of execution traces (Section~\ref{sec:semantic-merge}).
-As we shall discuss in Section~\ref{sec:related-work}, our work
-improves on existing approaches of syntactic merge and it offers a
-practical, expressive, and original notion of semantic merge.
 
 \subsection*{Arguments supporting its validity}
 
-\todo{What is the evidence that your solution is a good solution ?
-Experiments ? Proofs ?
+% \todo{What is the evidence that your solution is a good solution ?
+% Experiments ? Proofs ?
+% Comment the robustness of your solution: how does it rely/depend on the working assumptions ?}
 
-Comment the robustness of your solution: how does it rely/depend on the working assumptions ?}
+As we shall discuss in Section~\ref{sec:related-work}, our work
+improves on existing approaches of syntactic merge. The syntactic merge algorithm works on any language that can be parsed into a syntax tree, provide good fusion in presence of refactorings, and does never favor a commit over another. Moreover, we were able to provide a working implementation that runs in quadratic time (same as optimal line-based merge).
+
+For semantic guarantees, we offer a practical, expressive, and original notion of unambiguous merge. This part is specific to a particular programming language, but we demonstrate how it works for languages that feature both functionnal and imperative features, to make it easily adaptable.
 
 \subsection*{Summary and future work}
 
@@ -151,9 +151,11 @@ What is the good \emph{next} question ?}
 \section{Overview}
 \label{sec:overview}
 
-\paragraph{Problems with line-based approach} Merging changes while preserving the original intent of the developers is non trivial. The usual method used in version control systems takes a line-based approach. In a merge operation the input files consist of a common base and at least two modified versions. The usual algorithm compare the base against each modification to create a line to line alignment minimizing changes. Then it tries to merge these changes. If the same line in the base is modified twice, it declares a conflict, else it applies the single change. This method works on any kind of textual data, but is mainly used for code. However, it fails to capture any semantic, and this can cause undesired conflicts or worse create bugs.
+\subsection{Problems with line-based approach}
+Merging changes while preserving the original intent of the developers is non trivial. The usual method used in version control systems takes a line-based approach. In a merge operation the input files consist of a common base and at least two modified versions. The usual algorithm compare the base against each modification to create a line to line alignment minimizing changes. Then it tries to merge these changes. If the same line in the base is modified twice, it declares a conflict, else it applies the single change. This method works on any kind of textual data, but is mainly used for code. However, it fails to capture any semantic, and this can cause undesired conflicts or worse create bugs.
 
 \noindent
+\begin{minipage}{\textwidth}
 \begin{minipage}{.32\textwidth}
 \begin{lstlisting}[rulecolor=\color{blue!20}]
 // Blue commit
@@ -182,7 +184,11 @@ fn f(c: bool) -> i32 {
     let b = 40;
     let x = a + b;
 
-    let y = if c { 2 } else { x };
+    let y = if c {
+        2
+    } else {
+        x
+    };
     x * y
 }
 \end{lstlisting}
@@ -195,7 +201,11 @@ fn f(c: bool) -> i32 {
     let b = 41;
     let x = a + b;
 
-    let y = if c { 0 } else { x };
+    let y = if c {
+        0
+    } else {
+        x
+    };
     x * y
 }
 \end{lstlisting}
@@ -203,6 +213,7 @@ fn f(c: bool) -> i32 {
 \vspace{-.4cm}
 \begin{lstlisting}[label=lst:overview_commits, caption={A source code and two concurrent commits on it}]
 \end{lstlisting}
+\end{minipage}
 
 \begin{lstlisting}[label=lst:overview_git_merge, caption={Output of git merge with the two commits above}]
  fn f(c: bool) -> i32 {
@@ -231,18 +242,21 @@ fn f(c: bool) -> i32 {
 
 On the example above, we show two problems with the line-based approach. First, the refactoring in blue does not compose with value changes in orange. This creates the conflict shown above. Secondly, the fusion of both codes creates a runtime bug at line 15: the implicit assumption that y is non null is broken by orange at line 11, but this is silently accepted. We say that when $c$ is true, $x / y$ is an ambiguous expression because its result comes only from the fusion itself. Moreover, we can notice that the absence of conflict on lines 10 to 14 is only due to the code formatting style, if the same if-expression was written on a single line, there would be a conflict there. Globally, the example shows that by not knowing anything about how a program is executed, textual merge creates conflicts both too often to accept refactorings and not enough to avoid introducing bugs.
 
-\paragraph{A new merging algorithm} In this paper, we present a new merging process that tries to preserve the semantic intentions of the parallel committers.
-Directly merging programs changes semantically is hard to do and a result would be hard to retranscribe into source code. So we adopt here a two phase approach. We first syntactically merge both commits, and then we run a semantic analysis on it to deduce which expressions are ambiguous. An expression is semantically ambiguous if nobody from the original committers was fully aware of its value ; or said differently, if it has a value that comes from the fusion operation itself. These ambiguity points, should then be manually reviewed, and resolved.
+\subsection{A new merging algorithm}
 
-I will there quickly present on an example the ideas of this new
-merging procedure, the full description being given later.
+In this paper, we try to fix the problems exposed above with a new merging process.
+This section reuses the previous example (listing \ref{lst:overview_commits}) to expose the key ideas, the full description being given later.
 
-Take again the example in listing \ref{lst:overview_commits} with two simultaneous commits.
+\paragraph{Two phase approach} Directly merging programs changes semantically is hard to do and a result would be hard to retranscribe into source code. So we adopt here a two phase approach. We first syntactically merge both commits, and then we run a semantic analysis on it to deduce which program states are ambiguous. A program state is semantically ambiguous if it comes from a modification whose invariants may have been broken by another modification. Initially, as the fusion algorithm is not aware of the invariants, any value that comes from none of the commits in particular but only their combination will generate an ambiguity.
+These ambiguity points, should then be manually reviewed, and resolved.
+
+\paragraph{Syntactic merge}
 Similarly to what line-based merge do, we first want to compute individual differences between the common base and each of the commits. However here, differences are not based on lines of code but on the syntax tree itself. This means that differences are syntax trees of an extended language. In addition to normal code, they can have insertions, deletions, local replacement, unchanged holes (depicted as $\id$ below), or multi-source multi-target code moves (depicted as Greek letters) to abstract away sub-trees that are irrelevant for the commit and ease fusion later.
 
-To take into account the knowledge of a commit of some modification we use awareness colors. Each commit is associated with a tint. If a piece of code has a given tint, then it is known by the corresponding commit. The color that we call white is given to the source program and is considered as having all the tints at once. In the example, left commit has blue tint, and right commit has orange tint. We can see in their diff that they taint the code they introduced and the modification they made.
+To keep track of which commit introduced which modification we use colors. Each commit is associated with a tint. In the example, left commit has blue tint, and right commit has orange tint. We can see in their diff that they taint the code they introduced and the modification they made.
 
 \noindent
+\begin{minipage}{\textwidth}
 \begin{minipage}{.32\textwidth}
 \setstcolor{blue}
 \setulcolor{blue}
@@ -322,12 +336,14 @@ fn f(c: bool) -> i32 {
 \vspace{-.4cm}
 \begin{lstlisting}[label=lst:overview_diffs, caption={Left (resp. right) represent the difference between original source code and blue commit (resp. orange commit). Center is the syntactic fusion of these two differences.}]
 \end{lstlisting}
+\end{minipage}
 
-After having generated individual syntactic differences, we can merge them and remove holes by reusing the original program, producing the code above in the middle. This process is designed such that it never makes any arbitrary choices, and can sometimes generate conflicts. However, it tries whenever possible to push the changes following moved code to ease refactoring fusions (see lines 15 and 1). Note that this process propagates awareness colors.
+After having generated individual syntactic differences, we can merge them and remove holes by reusing the original program, producing the code above in the middle. This process is designed such that it never makes any arbitrary choices, and can sometimes generate conflicts. However, it tries whenever possible to push the changes following moved code to ease refactoring fusions (see lines 15 and 1).
 
-If stopping there, we capture refactorings based on code moves transparently, make syntactic conflicts happen less often and enforce some code structure in the changes. However, we lose the ability to commit files that do not parse (or we need to fallback to another merge method in that case), and we still do not provide any guarantee about ambiguities.
+At this point, we capture refactorings based on code moves transparently, make syntactic conflicts happen less often and enforce some code structure in the changes. However, we lose the ability to commit files that do not parse (or we need to fallback to another merge method in that case), and we still do not provide any guarantee about ambiguities.
 
-Then we can enter in the semantic check phase. The key idea here is to interpret a difference as an interleaving of the merged program to the original base. On this interleaving, we derive an analysis that checks the absence of behavior that depends on an ambiguous value. Ambiguity can be linked to the color black (i.e. without any tint), because it means that nobody is aware of the value. The necessity of doing this analysis on an interleaving and not directly on the resulting program comes from the fact that deleted instructions must be taken into account. \gb{Too technical? Should I remove the mention of interleaving here?}
+\paragraph{Semantic check}
+The key idea of the semantic check is to interpret a difference as an interleaving of the merged program to the original base. On this interleaving, we derive an analysis that checks the absence of ambiguous program state. Ambiguity can be linked to the color black (i.e. without any tint), because it means that nobody is aware of the value. The necessity of doing this analysis on an interleaving and not directly on the resulting program comes from the fact that deleted instructions must be taken into account. \gb{Too technical? Should I remove the mention of interleaving here?}
 
 In our example the color black appears for instance at line 11 when $c$ is true, because variable $x$ gets a blue color at line 4, and variable $y$ gets an orange color at line 7, therefore value at line 11 is not known by any commit. It also appears at line 16 and 17 as orange is not aware that its code has been moved, and blue could theoretically have reordered instructions.
 
@@ -1103,7 +1119,7 @@ From a high level point of view, the merging algorithm follows these steps:
  \item Then we perform all the substitutions wherever there are meta-variables with a replacement in $\Delta$ for deletion trees, and in $\Gamma$ for insertion trees.
 \end{itemize}
 
-If we want to merge more than two differences, we can reapply the same algorithm on already merged trees, thus accumulating modifications but also conflicts.
+If we want to merge more than two differences, we can reapply the same algorithm on already merged trees, thus accumulating modifications but also conflicts. Before moving on to the semantic analysis, we can replace all the meta-variables and holes that are left with their associated code in the original file to produce a self-contained file.
 
 \subsection{Properties of the generated merged difference tree}
 Despite the rather arbitrary choice of doing this specific syntactic merge, our algorithm provides some good properties.
@@ -1125,7 +1141,7 @@ Despite the rather arbitrary choice of doing this specific syntactic merge, our 
 \paragraph{Compatible with inverse} If $d \in \dom(t_1^{-1} \circ (t_1 \merge t_2))$, then $(t_1^{-1} \circ (t_1 \merge t_2))(d) = t_2(d)$. Note here that inverse is defined for differences without colors, so the equality holds only after removing all colors from $t_1$ and $t_2$.
 
 
-\section{Semantic merge}
+\section{Checking and restoring the semantic of merged program}
 \label{sec:semantic-merge}
 
 Having two commits syntactically merged do not mean that the result is a valid semantic combination that respect the intentions of all original committers.
@@ -1140,7 +1156,7 @@ fn compute_something(x: i32) -> i32 {
 
 That's why after the syntax merging step, we also want to check the semantic of the fusion.
 
-In this section we will show that first non-conflicting difference trees can be interpreted as correlation oracles between the original code and a merged candidate. And secondly that we can derive a runtime analysis that ensures that there is no unresolved ambiguity introduced by the fusion operation. In future works, this runtime analysis could be refined into a static analysis.
+In this section we will show that first self-contained non-conflicting difference trees can be interpreted as correlation oracles between the original code and a merged candidate. And secondly that we can derive a runtime analysis that ensures that there is no unresolved ambiguity introduced by the fusion operation. In future works, this runtime analysis could be refined into a static analysis.
 
 If we combine this invariant with the fact that the fusion never lose any introduced change, we obtain the certainty that the intentions inside all original commits are respected, because both changes and implicit environment assumptions are preserved.
 
@@ -1195,9 +1211,6 @@ Then the program follows the reduction rules below:
 \rtstate{\textbf{eof} \cdot \kappa}{v}{S_f :: S} &\rightarrow \rtstate{\kappa}{v}{S}\\
 \end{align*}
 
-\subsection{Definition of a correlation oracle}
-\todo{Write this or maybe just quote T. Girka thesis}
-
 \subsection{The colored difference oracle}
 \label{sec:colored-diff-oracle}
 From this language and its semantics, we define what can be a correlation oracle that will be able to tell if a program trace exhibit an ambiguity created by the fusion.
@@ -1215,7 +1228,7 @@ Therefore, in order to take into account the deleted code, we reason on both the
 
 In general, synchronization between different programs is really hard but here we already have a good syntactic description of the differences between them. We can directly deduce the interleaving from the merged difference tree because it gives implicit correlation points. Indeed, each time there is a spine node that does not depend on the control flow decisions, we know for sure that both programs will at some point execute the same code, and we can synchronize this execution. Moreover, for each change, or divergent control flow decision, we know precisely  where it is located in the spine allowing to resynchronize easily when programs start to behave similarly again.
 
-To express the interleaving between two programs, and compute the colors of the expressions, we use the correlation oracle framework defined above \todo{Check that it is indeed above}.
+To express the interleaving between two programs, and compute the colors of the expressions, we use the correlation oracle framework developed by T. Girka\todo{ref}.
 
 \begin{figure}[ht]
 \begin{minipage}{.34\textwidth}
@@ -1307,7 +1320,7 @@ For $S$ a store, we denote $S_{del} = \pi_{del} \circ S$, $S_{ins} = \pi_{ins} \
 
 To describe how interleaving is done, we can also give operational semantic reductions.
 
-In all the rules, if an instruction in the continuation should be both inserted and deleted according to the rules, it is simply discarded. If it should be deleted or inserted twice with different colors, we take the intersection of these colors.
+In all the rules, if an instruction in the continuation should be both inserted and deleted according to the rules, it is simply discarded. If it should be inserted (resp. deleted) twice with different colors, we take the intersection (resp. union) of these colors to follow the color composition rules.
 
 \paragraph{Reusing rules from underlying language}
 The rules from the underlying language can be reused for instructions that simply expand inside the continuation. In this case we preserve the deleted/inserted/preserved status and the color on the expansion.
@@ -1411,13 +1424,33 @@ Now when we encounter a \textbf{match}, that is destructuring an enum value, we 
 \vrtstate{\mathul{\usebox\boxmatch}^k \cdot \kappa}{(v^-, D(\overrightarrow{v_D^+}), c(\overrightarrow{c_D}))}{S} &\rightarrow \rtstate{\mathul{e_D}^{c \cap k} \cdot \kappa}{(v^-, (), k)}{S\left[\overrightarrow{x_D \leftarrow (S_{del}(x_D), v_D^+, c_D)}\right]}\\
 \end{align*}
 
-\paragraph{Ambiguity detection} During the execution of the correlation oracle, ambiguities can be detected whenever the black color is found in the value. To avoid stopping at the first ambiguity and be able to warn the user about more than one problem at the same time, we can continue the execution on a black value and locally replace it with white, signalling an error to be manually resolved later in the process.
+\paragraph{Ambiguity detection} During the execution of the correlation oracle, ambiguities are detected whenever the black color is found in the value. To avoid stopping at the first ambiguity and be able to warn the user about more than one problem at the same time, we can continue the execution on a black value and locally replace it with white, signalling an error to be manually resolved later. A merge is valid if it never create such black value.
 \begin{align*}
  \rtstate{\kappa}{(v^-, v^+, \bot)}{S} &\overset{!}{\rightarrow} \rtstate{\kappa}{(v^-, v^+, \top)}{S}
 \end{align*}
 
-\subsection{Resolving conflicts}
-\todo{Write this section: introduire une nouvelle instruction ``override color''}
+\subsection{Resolving conflicts and ambiguities}
+The colored difference oracle reports a list of ambiguity points, that must be resolved before having a valid merge. For our tool to be practical, the manual ambiguity resolution should be easy and rather quick as soon as the programmer who initiated the merge understand how the commits interact at each ambiguity point. In this internship, I propose resolution tactics that let a programer alter the merge candidate to progressively remove conflicts and ambiguities. As for the semantic check, this part is purely theoretical as I had no time for implementing it.
+
+After each tactic application, our intended tool would recheck the semantics for potential remaining ambiguities, until there is none left. At the end of the process, we  simply keep the projection on the last merged candidate as the final merged program.
+
+Currently we only have few resolution tactics but I think that they are powerful enough for resolving all conflicts. However they trust the programer to ensure invariants and are quite low level so more automated tactics could be added by later works.
+
+\paragraph{Declare preserving semantic change} Some changes are refactorings that do not modify the semantics, or are bugfixes that do not change the intended semantics that rest of the program rely on.
+The automatic ambiguity detection will be triggered by these changes because it is unable to notice the constant implicit semantic preservation. To mark these ambiguity as false positive, we can use the \textit{preserving} tactic, that replace the color of a change with constant semantic by white (the change can be the whole commit or only some modifications). It represent the fact that beeing aware or not of the modification is irrelevant as the user told us that it does not change the meaning of the code, and it will effectively remove the ambiguity.
+
+\paragraph{Reviewed interaction block} Sometimes, even if changes do not globally preserve semantics, after manual check, their interaction does not cause any real problem. In that case, the tactic \textit{reviewed} mark a block of code as still keeping its intended semantic even if several modifications interact inside. When the correlation oracle execute a reviewed block, the color of the value is reset to white between each evaluation step. Therefore both final value, and variables assigned inside the block are white after the block execution.
+% \begin{align*}
+% \rtstate{\mathbf{reviewed}\ e \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{e \cdot \mathbf{eor} \cdot \kappa}{(v^-, v^+, \top^*)}{S}\\
+% \rtstate{\mathbf{eor} \cdot \kappa}{(v^-, v^+, \top^*)}{S} &\rightarrow \rtstate{\kappa}{(v^-, v^+, \top)}{S}\\
+% \end{align*}
+% $\top^*$ is the color $\top$ but for any program step, no matter the rule used (except $\mathbf{eor}$), the output state color stays $\top^*$.
+
+\paragraph{Revert a change} Some changes will not compose well and with global knowledge reverting them is simply the thing to do. The \textit{revert} tactic take a position in the difference tree and either remove inserted code, restore deleted code or both.
+
+\paragraph{Introduce a new change} Similarly, in order to do some manual adjustments it could be necessary to use a tactic that manually add a change somewhere after the automatic syntax merge. As it is done in order to restore some semantics after all the modifications are known, we can directly mark this new change as \textit{reviewed}.
+
+\paragraph{Resolve syntactic conflicts} We can also use this tactic system to resolve the syntactic conflicts that prevent the colored difference oracle to run. To do so we add tactics that resolve conflicts, locally reverting one change to keep only the other, fix the insertion order, or force a meta-variable replacement.
 
 \section{Related work}
 \label{sec:related-work}
