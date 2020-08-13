@@ -1477,7 +1477,9 @@ after removing all colors from $t_1$ and $t_2$.
 \section{Checking and restoring the semantic of merged program}
 \label{sec:semantic-merge}
 
-Having two commits syntactically merged do not mean that the result is a valid semantic combination that respect the intentions of all original committers.
+Having two commits syntactically merged do not mean that the result is
+a valid semantic combination that respect the intentions of all
+original committers.
 
 \begin{lstlisting}[label=lst:double-incr, caption={Double fix of the same function by different commits. The syntactic fusion does not create a conflict be semantically we can create a new bug here.}]
 fn compute_something(x: i32) -> i32 {
