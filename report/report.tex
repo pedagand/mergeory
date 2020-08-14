@@ -1520,7 +1520,7 @@ understand for a reader without any Rust background.
 Syntactically, with $\ident$ the set of variable and function
 identifiers, $\typ$ the set of type identifiers and $\diamond$
 (resp. $\star$) the set of primitive binary (resp. unary) functions,
-it is defined by:
+the syntax for our toy language is defined by the following grammar:
 
 \begin{align*}
 program &::= \boxed{item}^*\\
@@ -1534,9 +1534,35 @@ expr &::= \ident \typsep literal \typsep \star expr \typsep expr \diamond expr \
 literal &::= () \typsep \mathbf{true} \typsep \mathbf {false} \typsep \mathbb{Z}
 \end{align*}
 
-To define the semantics, we give the program state as a tuple $\rtstate{\kappa}{v}{S}$ where $\kappa$ is the continuation, $v$ the value of the last computed expression and $S$ the local store stack. For function calls, we can push a new store on the previous one, only the topmost store can be used and updated as it correspond to the current function.
+\yrg{What do the boxes mean? Is that a standard format? If so, could
+  you give a reference for its specification?}
 
-We also keep the set of constructors, and the set of function as a global state. We denote $\mathbb{G}(f)$ the body of function $f$ taken from global state. Types do not play any role in reduction rules, but we will assume that programs are already well typed. The initial state is given by the call of the entry point function $f$ with its arguments $\overrightarrow{x_a}$: $\rtstate{\mathbb{G}(f)}{()}{\{\overrightarrow{x_a \leftarrow v_a}\}}$.
+To define the semantics, we define the program state as a tuple
+$\rtstate{\kappa}{v}{S}$ where $\kappa$ is the continuation, $v$ the
+value of the last computed expression and $S$ the local store
+stack. \yrg{You should informally explain why the value of the last
+  computed expression is needed and why local stores follow a
+  discipline of stack. In particular, one could wonder why there is no
+  heap in this program state.}
+
+For function calls, we can push a new store on top of the previous
+one~\yrg{Is it optional to push a new store? When executing a function
+  call?}, only the topmost store can be used and updated as it
+corresponds to the current function.
+
+We also keep the set of constructors, and the set of functions as a
+global state.~\yrg{That global environment is hardly compatible with a
+  higher-order language, right? That's fine because your language is
+  first order (no anonymous lambda abstraction). Yet, the introduction
+  emphasizes that you chose a sublanguage of Rust to play with
+  functional programs: this looks a bit contradictory.} We denote
+$\mathbb{G}(f)$ the body of function $f$ taken from global
+state. Types do not play any role in reduction rules, but we will
+assume that programs are already well typed. The initial state is
+given by the call of the entry point function $f$ with its arguments
+$\overrightarrow{x_a}$:
+$\rtstate{\mathbb{G}(f)}{()}{\{\overrightarrow{x_a \leftarrow
+    v_a}\}}$.
 
 Then the program follows the reduction rules below:
 \begin{align*}
