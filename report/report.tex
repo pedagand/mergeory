@@ -1477,9 +1477,9 @@ after removing all colors from $t_1$ and $t_2$.
 \section{Checking and restoring the semantic of merged program}
 \label{sec:semantic-merge}
 
-Having two commits syntactically merged do not mean that the result is
-a valid semantic combination that respect the intentions of all
-original committers.
+Having two commits syntactically merged does not mean that the result
+is a valid semantic combination that respect the intentions of all
+original committers. \yrg{Give an example.}
 
 \begin{lstlisting}[label=lst:double-incr, caption={Double fix of the same function by different commits. The syntactic fusion does not create a conflict be semantically we can create a new bug here.}]
 fn compute_something(x: i32) -> i32 {
@@ -1489,18 +1489,39 @@ fn compute_something(x: i32) -> i32 {
 }
 \end{lstlisting}
 
-That's why after the syntax merging step, we also want to check the semantic of the fusion.
+That is why after the syntax merging step, we also want to check the
+semantic of the fusion for remaining ambiguities.
 
-In this section we will show that first self-contained non-conflicting difference trees can be interpreted as correlation oracles between the original code and a merged candidate. And secondly that we can derive a runtime analysis that ensures that there is no unresolved ambiguity introduced by the fusion operation. In future works, this runtime analysis could be refined into a static analysis.
+In this section, we first will show that self-contained
+non-conflicting difference trees can be interpreted as correlation
+oracles~\yrg{Ref} between the original code and a merged candidate,
+that is specific relation between the two programs' execution
+traces. Secondly, we show that we can derive a runtime analysis that
+ensures that there is no unresolved ambiguity introduced by the fusion
+operation. In future work, this runtime analysis could be refined into
+a static analysis.
 
-If we combine this invariant with the fact that the fusion never lose any introduced change, we obtain the certainty that the intentions inside all original commits are respected, because both changes and implicit environment assumptions are preserved.
+If we combine this invariant with the fact that the fusion never lose
+any introduced change, we obtain the certainty that the intents of all
+original commits are respected, because both changes and implicit
+environment assumptions are preserved.
 
 \subsection{Operational semantics of the studied language}
-In this paper, we will use the following programming language, a simplified version of Rust. It has been chosen because it allows us to explore both functional and imperative coding styles, and we stripped all the borrowing and trait systems that could be difficult to understand for a reader without any Rust background.
+
+In this paper, we will use a simplified version of the Rust
+programming language~\yrg{Ref}. We chose this language because it
+allows us to explore both functional and imperative coding styles.  We
+ignore all the borrowing and trait systems that could be difficult to
+understand for a reader without any Rust background.
 
 \newcommand{\ident}{\mathbb{I}}
 \newcommand{\typ}{\mathbb{T}}
-Syntactically, with $\ident$ the set of variable and function identifiers, $\typ$ the set of type identifiers and $\diamond$ (resp. $\star$) the set of primitive binary (resp. unary) functions, it is defined by:
+
+Syntactically, with $\ident$ the set of variable and function
+identifiers, $\typ$ the set of type identifiers and $\diamond$
+(resp. $\star$) the set of primitive binary (resp. unary) functions,
+it is defined by:
+
 \begin{align*}
 program &::= \boxed{item}^*\\
 item &::= func \typsep enum\\
