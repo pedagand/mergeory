@@ -1892,36 +1892,106 @@ Now when we encounter a \textbf{match}, that is destructuring an enum value, we 
 \vrtstate{\mathul{\usebox\boxmatch}^k \cdot \kappa}{(v^-, D(\overrightarrow{v_D^+}), c(\overrightarrow{c_D}))}{S} &\rightarrow \rtstate{\mathul{e_D}^{c \cap k} \cdot \kappa}{(v^-, (), k)}{S\left[\overrightarrow{x_D \leftarrow (S_{del}(x_D), v_D^+, c_D)}\right]}\\
 \end{align*}
 
-\paragraph{Ambiguity detection} During the execution of the correlation oracle, ambiguities are detected whenever the black color is found in the value. To avoid stopping at the first ambiguity and be able to warn the user about more than one problem at the same time, we can continue the execution on a black value and locally replace it with white, signalling an error to be manually resolved later. A merge is valid if it never create such black value.
+\yrg{At this point, you should state the theorem corresponding to the
+  soundness of these reduction rules. It does not matter that you did
+  not prove them correct as long as you convince us that the target
+  properties is indeed a valid oracle.}
+
+\paragraph{Ambiguity detection}
+
+During the execution of the correlation oracle, ambiguities are
+detected whenever the black color is found in the value. To avoid
+stopping at the first ambiguity and be able to warn the user about
+more than one problem at the same time, we can continue the execution
+on a black value and locally replace it with white, signalling an
+error to be manually resolved later. A merge is valid if it never
+create such black value.
 \begin{align*}
  \rtstate{\kappa}{(v^-, v^+, \bot)}{S} &\overset{!}{\rightarrow} \rtstate{\kappa}{(v^-, v^+, \top)}{S}
 \end{align*}
 
+\yrg{What is the meaning of the ! here?}
+
 \subsection{Resolving conflicts and ambiguities}
-The colored difference oracle reports a list of ambiguity points, that must be resolved before having a valid merge. For our tool to be practical, the manual ambiguity resolution should be easy and rather quick as soon as the programmer who initiated the merge understand how the commits interact at each ambiguity point. In this internship, I propose resolution tactics that let a programer alter the merge candidate to progressively remove conflicts and ambiguities. As for the semantic check, this part is purely theoretical as I had no time for implementing it.
+The colored difference oracle reports a list of ambiguity points, that
+must be resolved before having a valid merge. For our tool to be
+practical, the manual ambiguity resolution should be easy and rather
+quick as soon as the programmer who initiated the merge understand how
+the commits interact at each ambiguity point. In this internship, I
+propose resolution tactics that let a programer alter the merge
+candidate to progressively remove conflicts and ambiguities. As for
+the semantic check, this part is purely theoretical as I had no time
+for implementing it.
 
-After each tactic application, our intended tool would recheck the semantics for potential remaining ambiguities, until there is none left. At the end of the process, we  simply keep the projection on the last merged candidate as the final merged program.
+After each tactic application, our intended tool would recheck the
+semantics for potential remaining ambiguities, until there is none
+left. At the end of the process, we simply keep the projection on the
+last merged candidate as the final merged program.
 
-Currently we only have few resolution tactics but I think that they are powerful enough for resolving all conflicts. However they trust the programer to ensure invariants and are quite low level so more automated tactics could be added by later works.
+Currently we only have few resolution tactics but I think that they
+are powerful enough for resolving all conflicts. However they trust
+the programer to ensure invariants and are quite low level so more
+automated tactics could be added in future work.
 
-\paragraph{Declare preserving semantic change} Some changes are refactorings that do not modify the semantics, or are bugfixes that do not change the intended semantics that rest of the program rely on.
-The automatic ambiguity detection will be triggered by these changes because it is unable to notice the constant implicit semantic preservation. To mark these ambiguity as false positive, we can use the \textit{preserving} tactic, that replace the color of a change with constant semantic by white (the change can be the whole commit or only some modifications). It represent the fact that beeing aware or not of the modification is irrelevant as the user told us that it does not change the meaning of the code, and it will effectively remove the ambiguity.
+\paragraph{Declare preserving semantic change}
+%
+Some changes are refactorings that do not modify the semantics, or are
+bugfixes that do not change the intended semantics that rest of the
+program rely on.  The automatic ambiguity detection will be triggered
+by these changes because it is unable to notice the constant implicit
+semantic preservation. To mark these ambiguity as false positive, we
+can use the \textit{preserving} tactic, that replace the color of a
+change with constant semantic by white (the change can be the whole
+commit or only some modifications). It represents the fact that being
+aware or not of the modification is irrelevant as the user told us
+that it does not change the meaning of the code, and it will
+effectively remove the ambiguity.
 
-\paragraph{Reviewed interaction block} Sometimes, even if changes do not globally preserve semantics, after manual check, their interaction does not cause any real problem. In that case, the tactic \textit{reviewed} mark a block of code as still keeping its intended semantic even if several modifications interact inside. When the correlation oracle execute a reviewed block, the color of the value is reset to white between each evaluation step. Therefore both final value, and variables assigned inside the block are white after the block execution.
+\paragraph{Reviewed interaction block}
+%
+Sometimes, even if changes do not globally preserve semantics, after
+manual check, their interaction does not cause any real problem. In
+that case, the tactic \textit{reviewed} mark a block of code as still
+keeping its intended semantic even if several modifications interact
+inside. When the correlation oracle executes a reviewed block, the
+color of the value is reset to white between each evaluation
+step. Therefore, both final value, and variables assigned inside the
+block are white after the block execution.
 % \begin{align*}
 % \rtstate{\mathbf{reviewed}\ e \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{e \cdot \mathbf{eor} \cdot \kappa}{(v^-, v^+, \top^*)}{S}\\
 % \rtstate{\mathbf{eor} \cdot \kappa}{(v^-, v^+, \top^*)}{S} &\rightarrow \rtstate{\kappa}{(v^-, v^+, \top)}{S}\\
 % \end{align*}
 % $\top^*$ is the color $\top$ but for any program step, no matter the rule used (except $\mathbf{eor}$), the output state color stays $\top^*$.
 
-\paragraph{Revert a change} Some changes will not compose well and with global knowledge reverting them is simply the thing to do. The \textit{revert} tactic take a position in the difference tree and either remove inserted code, restore deleted code or both.
+\paragraph{Revert a change}
+%
+Some changes will not compose well and with global knowledge reverting
+them is simply the thing to do. The \textit{revert} tactic takes a
+position in the difference tree and either removes inserted code,
+restores deleted code or both.
 
-\paragraph{Introduce a new change} Similarly, in order to do some manual adjustments it could be necessary to use a tactic that manually add a change somewhere after the automatic syntax merge. As it is done in order to restore some semantics after all the modifications are known, we can directly mark this new change as \textit{reviewed}.
+\paragraph{Introduce a new change}
+%
+Similarly, in order to do some manual adjustments it could be
+necessary to use a tactic that manually adds a change somewhere after
+the automatic syntactic merge. As it is done in order to restore some
+semantics after all the modifications are known, we can directly mark
+this new change as \textit{reviewed}.
 
-\paragraph{Resolve syntactic conflicts} We can also use this tactic system to resolve the syntactic conflicts that prevent the colored difference oracle to run. To do so we add tactics that resolve conflicts, locally reverting one change to keep only the other, fix the insertion order, or force a meta-variable replacement.
+\paragraph{Resolve syntactic conflicts}
+%
+We can also use this tactic system to resolve the syntactic conflicts
+that prevent the colored difference oracle to run. To do so, we add
+tactics that resolve conflicts, locally reverting one change to keep
+only the other, fix the insertion order, or force a meta-variable
+replacement.
 
 \section{Related work}
 \label{sec:related-work}
 \todo{Write this section}
+
+\yrg{You should add a section about the implementation, or at the very least,
+a reference to the tool's git repository with a clear description of what it
+does.}
 
 \end{document}
