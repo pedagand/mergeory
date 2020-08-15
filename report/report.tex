@@ -1735,7 +1735,8 @@ fn f(c: bool) -> i32 {
 
 Formally, the correlation oracle is defined as a program with a state
 that can be projected on either of the correlated programs. Moreover,
-it carries information about the simultaneous executions of both programs.
+it carries extra information to track the simultaneous executions of
+both programs and the next synchronization point.
 
 Here we keep states as tuples $\rtstate{\kappa}{v}{S}$ but all the
 individual components are slightly more complex: $\kappa$ is the
@@ -1745,20 +1746,37 @@ continuation but its elements can be either deleted
 merged candidate only or both. Deleted and inserted instructions carry
 a color with them. For each value $v$ or element of the store $S(x)$,
 they are replaced by a pair of values associated with a color
-$(v_{del}, v_{ins}, c)$.
+$(v_{del}, v_{ins}, c)$. \yrg{You should explain this definition more
+  clearly, and also justify it. For the moment, this paragraph is
+  unfortunately quite obscure and technical...}
 
-The projection of a state to its equivalent in the original program $\pi_{del}$ removes all the inserted instructions in the continuation, and takes first elements of pairs of values, always ignoring colors. Same for the projection on the merge candidate $\pi_{ins}$, but removing deleted instructions, and taking second element inside pair of values.
+The projection of a state to its equivalent in the original program
+$\pi_{del}$ removes all the inserted instructions in the continuation,
+and takes first elements of pairs of values, always ignoring
+colors. The projection on the merge candidate $\pi_{ins}$ is similar,
+except that it removes deleted instructions, and that it takes the
+second element inside each pair of values.
 
-For $S$ a store, we denote $S_{del} = \pi_{del} \circ S$, $S_{ins} = \pi_{ins} \circ S$ and $S_{c}$ the projection on the color of the value of $S$.
+For a store~$S$, we write $S_{del}$ for $\pi_{del} \circ S$, $S_{ins}$
+for $\pi_{ins} \circ S$, and $S_{c}$ for the projection on the color
+of the value of $S$. \yrg{I am not sure that you have defined the
+color of a store.}
 
-To describe how interleaving is done, we can also give operational semantic reductions.
+To describe how interleaving is done, we can also give operational
+semantic reductions. \yrg{Where?}
 
-In all the rules, if an instruction in the continuation should be both inserted and deleted according to the rules, it is simply discarded. If it should be inserted (resp. deleted) twice with different colors, we take the intersection (resp. union) of these colors to follow the color composition rules.
+In all the rules, if an instruction in the continuation should be both
+inserted and deleted according to the rules, it is simply
+discarded. If it should be inserted (resp. deleted) twice with
+different colors, we take the intersection (resp. union) of these
+colors to follow the color composition rules. \yrg{Justify!}
 
 \paragraph{Reusing rules from underlying language}
-The rules from the underlying language can be reused for instructions that simply expand inside the continuation. In this case we preserve the deleted/inserted/preserved status and the color on the expansion.
+The rules from the underlying language can be reused for instructions
+that simply expand inside the continuation. In this case, we preserve
+the deleted/inserted/preserved status and the color on the expansion.
 
-For instance this gives the following reduction rules (non-exhaustive list):
+For instance, this gives the following reduction rules (non-exhaustive list):
 \newbox\boxoverarrow
 \sbox\boxoverarrow{$\overrightarrow{stmt;}$}
 \begin{align*}
@@ -1768,7 +1786,10 @@ For instance this gives the following reduction rules (non-exhaustive list):
 \end{align*}
 
 \paragraph{Instruction producing value}
-For instructions that change the current value, we need to be careful of the color of the result. There is three cases:
+
+For instructions that change the current value, we need to be careful
+regarding the color of the result. There are three cases:
+
 \begin{itemize}
   \item If the instruction is preserved, the output color is the intersection of the input colors
   \item If the instruction is deleted, the color of the value is tainted by the color of the deletion. However, the input values do not taint the result.
