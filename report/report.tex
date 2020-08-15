@@ -123,7 +123,7 @@ The study of the semantics of differences between two programs is not new\todo{r
 
 In Section~\ref{sec:overview}, we show on a running example how a
 purely textual merge of modifications may introduce bugs. We
-illustrate how our tool capture this bug as semantic conflicts between
+illustrate how our tool capture these bugs as semantic conflicts (called ambiguities) between
 the commits. We also explain its architecture which is based on two
 main components, which also are the two main contributions of this
 work: (i) an algorithm which implements a principled notion of
@@ -137,7 +137,7 @@ at the level of execution traces (Section~\ref{sec:semantic-merge}).
 % Comment the robustness of your solution: how does it rely/depend on the working assumptions ?}
 
 As we shall discuss in Section~\ref{sec:related-work}, our work
-improves on existing approaches of syntactic merge. The syntactic merge algorithm works on any language that can be parsed into a syntax tree, provide good fusion in presence of refactorings, and does never favor a commit over another. Moreover, we were able to provide a working implementation that runs in quadratic time (same as optimal line-based merge).
+improves on existing approaches of syntactic merge. The syntactic merge algorithm works on any language that can be parsed into a syntax tree, provide good fusion in presence of refactorings, and does never favor a commit over another. Moreover, we were able to provide a working implementation.
 
 For semantic guarantees, we offer a practical, expressive, and original notion of unambiguous merge. This part is specific to a particular programming language, but we demonstrate how it should work for languages that feature both functionnal and imperative features, to make it easily adaptable.
 
@@ -252,8 +252,7 @@ fn f(c: bool) -> i32 {
 
 On the example above, we show two problems with the line-based
 approach. First, the refactoring in blue does not compose with value
-changes in orange. This creates the conflict shown above \yrg{Explain
-  where, the reviewer might not know diff3.}. Secondly, the fusion of
+changes in orange. This creates the conflict shown between Lines~$2$ and~$9$. Secondly, the fusion of
 both codes creates a runtime bug on Line~$15$: the implicit assumption
 that $y$ is non null is broken by orange on Line~11, but this is
 silently accepted. We say that when $c$ is true, $x / y$ is an
@@ -268,26 +267,30 @@ avoid introducing bugs.
 
 \subsection{A new merging algorithm}
 In this paper, we try to fix the problems exposed above with a new merging process.
-This section reuses the previous example (listing \ref{lst:overview_commits}) to expose the key ideas, the full description being given later.
+This section reuses the previous example (Listing~\ref{lst:overview_commits}) to expose the key ideas, the full description being given later.
 
-\paragraph{Two phase approach} Directly merging programs changes semantically is hard to do~\yrg{Why?} and a result would be hard to retranscribe into source code~\yrg{Why?}. So we adopt here a two phase approach~\yrg{It is difficult to understand why this is implied by the preceding sentences...}. We first syntactically merge both commits, and then we run a semantic analysis on it to deduce which program states are ambiguous. A program state is semantically ambiguous if it comes from a modification whose invariants may have been broken by another modification. Initially, as the fusion algorithm is not aware of the invariants, any value that comes from none of the commits in particular but only their combination will generate an ambiguity.
+\paragraph{Two phase approach}
+In order to compare program semantics, the standard approach requires to align executions (or just codes), and deduce properties on similarities and differences. In a merge process we also need such alignment between concurrent versions to tell how to interleave the changes and when they interact. This alignment must therefore be given by something, and for practical reasons, it should be automated. In this work, I chose to try to use a syntax driven alignment of changes. This choice should feel quite natural for programmers because syntax is already their way of communicating the semantic of the program. Furthermore, syntax can be used as the input of subsequent semantic analysis to detect bad interactions.
+
+This splits our merge procedure into two distinct phases. We first syntactically merge both commits. This solves the change alignment problem but does not prevent creating bugs when merging. These new bugs come from the fact that each commit assumes some invariants about the program that can be broken by another concurrent commit.
+That is why we run as a second phase a semantic analysis on the merged syntax tree to deduce which program states are ambiguous. A program state is semantically ambiguous if it comes from a modification whose invariants may have been broken by another modification. Initially, as the fusion algorithm is not aware of the precise invariants, any value that comes from none of the commits in particular but only their combination will be considered ambiguous.
 These ambiguity points, should then be manually reviewed, and resolved.
 \yrg{I think that this paragraph is important and could be made clearer.
 You should try to justify a little bit more the approach and the
 problem it solves.
 }
+\gb{J'ai réécrit une bonne partie du paragraphe pour essayer d'améliorer l'explication de la coupure du problème en deux et de l'existance de la phase de vérification sémantique.}
 
 \paragraph{Syntactic merge}
 Similarly to what line-based merge do, we first want to compute individual differences between the common base and each of the commits. However here, differences are not based on lines of code but on the syntax tree itself. This means that differences are structural,
 represented as syntax trees of an extension of the source
 language. Indeed, in addition to normal code, differences can have
-insertions, deletions, local replacements, unchanged holes (depicted
-as $\id$ below), or multi-source multi-target code moves (depicted as
+\ul{insertions}, \st{deletions}, local replacements, unchanged holes (depicted
+as $\id$), or multi-source multi-target code moves (depicted as
 Greek letters) to abstract away sub-trees that are irrelevant for the
-commit and ease fusion later. \yrg{Rassure le lecteur en lui disant
-  que tu expliqueras ces notions plus tard.}
+commit and ease fusion later. These notions will be explained in further detail after.
 
-To keep track of which commit introduced which modification we use colors. Each commit is associated with a tint. In the example, left commit has blue tint, and right commit has orange tint. We can see in their diff that they taint the code they introduced and the modification they made.
+To keep track of which commit introduced which modification we use colors. Each commit is associated with a tint. If a change has a given tint, then the corresponding commit is aware (or unaffected) by it. The color that we call white is given to the expressions of the source program and is considered as having all the tints at once as their values is supposed to be known by all the committers. In the example, left commit has blue tint, and right commit has orange tint. We can see in their difference that they taint the code they introduced and the modification they made.
 
 \noindent
 \begin{minipage}{\textwidth}
@@ -377,32 +380,18 @@ them and remove holes by reusing the original program, producing the
 code above in the middle. This process is designed such that it never
 makes any arbitrary choices, and can sometimes generate conflicts when
 no canonical choice exists. However, it tries whenever possible to
-push the changes following moved code to ease refactoring fusions (see
-Lines~$15$ and~$1$). Note that this process propagates awareness
-colors.
+push the changes following moved code to ease refactoring fusions (see Lines~$15$ and~$16$). This process propagates awareness colors.
 
-If stopping there, we capture refactorings based on code moves transparently, make syntactic conflicts happen less often~\yrg{with respect to ...} and enforce some code structure in the changes. However, we lose the ability to commit files that do not parse, and we still do not provide any guarantee about ambiguities. For this
-reason, we need a second phase.
+At the end of this phase, we have a merged syntax tree that, unlike line-based merge, does not conflict on refactorings based on code moves, and enforce some structure in the changes. However, we lose the ability to commit files that do not parse, and we still do not provide any guarantee about ambiguities. For this reason, we need a second phase.
 
 \paragraph{Semantic check}
-At this point, we therefore enter in the semantic check phase. The key
-idea here is to interpret a difference as an interleaving of the
-merged program to the original base~\yrg{What do you mean? I do not
-  understand. Are you interleaving programs or program
-  exectutions?}. On this interleaving, we derive an analysis that
-checks the absence of ambiguous program state. Ambiguity can be linked to the color black (i.e. without any tint), because it means that nobody is aware of the value. The necessity of doing this analysis on an interleaving and not directly on the resulting program comes from the fact that deleted instructions must be taken into account. \gb{Too technical? Should I remove the mention of interleaving here?} \yrg{Yes, we cannot understand that
-  subtlety at this point... but at the same time, without it the
-  reader may wonder why we need the base program. You could remove
-  ``from the fact that deleted instructions must be taken into
-  account'' and replace it with something vague like ``for technical
-reasons explained in Section~\ref{forward-ref}''.}
+This phase runs an analysis on the colored merged program to check that there is no ambigouous program state. Ambiguity can be linked to the color black (i.e. without any tint), because it means that two modifications were affected by each other and could have broken their respective invariants.
 
-In our example the color black appears for instance on Line~$11$ when
-$c$ is true, because variable~$x$ gets a blue color on Line~$4$, and
-variable~$y$ gets an orange color on Line~$7$, therefore value on
+For technical reasons that will be explained in Section~\ref{sec:colored-diff-oracle}, the analysis must run on execution interleaving of the original base program and the merged one.
+
+In our example, the color black appears for instance on Line~$11$ when $c$ is true, because variable~$x$ gets a blue color on Line~$4$, and variable~$y$ gets an orange color on Line~$7$, therefore value on
 Line~$11$ is not known by any commit. It also appears on Line~$16$
-and~$17$ as orange is not aware that its code has been moved, and blue
-could theoretically have reordered instructions.
+and~$17$ as orange is not aware that its code has been moved, and blue could theoretically have reordered instructions.
 
 To finish this example, we need a user to be able to efficiently
 resolve the conflicts. Here the programmer could notice that, on
@@ -410,13 +399,11 @@ Lines~$2$ to~$5$ and~$14$ to~$18$, blue has done only semantic
 preserving changes and would manually replace the blue color by white
 in each of these lines. Then, an ambiguity on Line~$11$ will still
 remain but it could be resolved by overriding the expression in the
-merged commit by a new one like for instance%
+merged commit by a new one like for instance
 \lstinline$if y == 0 { 0 } else { x / y }$.
 Therefore, given this information, the two commits
 can be safely merged with the guarantee that no unintended
-behavior\footnote{Side channel attack vectors might still be silently
-  introduced unless we also model them into the analysis.} will be
-silently introduced by the fusion itself.
+behavior\footnote{Problems like side channel attack vectors might still be silently introduced unless we also model them into the analysis.} will be silently introduced by the fusion itself.
 
 \section{Syntactic merge}
 \label{sec:syntactic-merge}
@@ -426,7 +413,7 @@ takes concurrent commits and merge them together ; second, a
 provenance annotation mechanism on the merged program to allow for a
 subsequent semantic aware analysis of ambiguity.
 
-Standard tools (like diff or git) are using a textual line based
+Standard tools (like diff or Git) are using a textual line based
 merge. This choice makes their algorithms be language insensitive (as
 long as it is textual) but in most programming languages, a line do
 not have any defined semantic. Therefore, we have taken the approach
@@ -437,22 +424,15 @@ differences from the common ancestor to each commit, and then merges
 the differences trees into a singe one. Finally, we can apply the
 merged difference tree to the common ancestor and obtain a
 syntactically valid merge candidate. This program may not be the
-desired final merged code~\yrg{Why?}, and is not even necessarily free
-from conflicts or compile-time errors, but it is a synthesis of all
-the modifications, and should be a good base for manual resolution of
-conflicts.
+desired final merged code as it is not necessarily free
+from conflicts, ambiguities or even compile-time errors, but it is a synthesis of all the modifications, and should be a good base for manual resolution of conflicts.
 
 \subsection{Syntax tree difference}
-We want a rather rich way of describing differences to prevent as much
-as possible useless syntactic conflicts.~\yrg{I do not understand
-this sentence.}
-%
-Therefore our syntax tree difference structure will encode local tree
+Our syntax tree difference structure encodes local tree
 modifications, list insertions and deletions and a notion of typed
-multi-source, multi-target code moves. \yrg{I do not understand
-the logical implication here.}
+multi-source, multi-target code moves.
 
-\subsubsection{Type for syntax tree differences}
+\subsubsection{Grammar for syntax tree differences}
 As said earlier, we encode program differences as a new kind of syntax
 tree that follows the constructors from the target language and add
 new ones.
