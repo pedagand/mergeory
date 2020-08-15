@@ -1537,6 +1537,8 @@ literal &::= () \typsep \mathbf{true} \typsep \mathbf {false} \typsep \mathbb{Z}
 \yrg{What do the boxes mean? Is that a standard format? If so, could
   you give a reference for its specification?}
 
+\yrg{What is the meaning of $\star expr$?}
+
 To define the semantics, we define the program state as a tuple
 $\rtstate{\kappa}{v}{S}$ where $\kappa$ is the continuation, $v$ the
 value of the last computed expression and $S$ the local store
@@ -1544,6 +1546,8 @@ stack. \yrg{You should informally explain why the value of the last
   computed expression is needed and why local stores follow a
   discipline of stack. In particular, one could wonder why there is no
   heap in this program state.}
+
+\yrg{What is the syntax for values?}
 
 For function calls, we can push a new store on top of the previous
 one~\yrg{Is it optional to push a new store? When executing a function
@@ -1566,8 +1570,12 @@ $\rtstate{\mathbb{G}(f)}{()}{\{\overrightarrow{x_a \leftarrow
 
 Then the program follows the reduction rules below:
 \begin{align*}
-\rtstate{\{\overrightarrow{stmt;}\ expr\} \cdot \kappa}{v}{S} &\rightarrow \rtstate{\overrightarrow{stmt} \cdot expr \cdot \kappa}{()}{S}\\
-\rtstate{x = e \cdot \kappa}{v}{S} &\rightarrow \rtstate{e \cdot x = \square \cdot \kappa}{()}{S}\\
+\rtstate{\{\overrightarrow{stmt;}\ expr\} \cdot \kappa}{v}{S} &\rightarrow \rtstate{\overrightarrow{stmt} \cdot expr \cdot \kappa}{()}{S}
+\textrm{\yrg{stmt is undefined.}}
+\\
+\rtstate{x = e \cdot \kappa}{v}{S} &\rightarrow \rtstate{e \cdot x = \square \cdot \kappa}{()}{S}
+\textrm{\yrg{$\square$ is undefined.}}
+\\
 \rtstate{x = \square \cdot \kappa}{v}{S} &\rightarrow \rtstate{\kappa}{()}{S[x \leftarrow v]}\\
 \rtstate{x \cdot \kappa}{v}{S} &\rightarrow \rtstate{\kappa}{S(x)}{S}\\
 \rtstate{literal \cdot \kappa}{v}{S} &\rightarrow \rtstate{\kappa}{literal}{S}\\
@@ -1585,17 +1593,32 @@ Then the program follows the reduction rules below:
 \rtstate{\mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false} \cdot  \kappa}{\mathbf{false}}{S} &\rightarrow \rtstate{b_{false} \cdot \kappa}{()}{S}\\
 \rtstate{\mathbf{while}\ e_{cond}\ b \cdot \kappa}{v}{S} &\rightarrow \rtstate{\mathbf{if}\ e_{cond}\ \{ b;\ \mathbf{while}\ e_{cond}\ b \}\  \mathbf{else}\ \{\} \cdot \kappa}{()}{S}\\
 \rtstate{\mathbf{match}\ e_{scrut}\ \{ \overrightarrow{C(\overrightarrow{x_C,}) \Rightarrow e_C,} \} \cdot \kappa}{v}{S} &\rightarrow \rtstate{e_{scrut} \cdot \mathbf{match}\ \square\ \{ \overrightarrow{C(\overrightarrow{x_C,}) \Rightarrow e_C,} \} \cdot \kappa}{()}{S}\\
-\rtstate{\mathbf{match}\ \square\ \{ \overrightarrow{C(\overrightarrow{x_C,}) \Rightarrow e_C,} \} \cdot \kappa}{D(\overrightarrow{v_D})}{S} &\rightarrow \rtstate{e_D \cdot \kappa}{()}{S[\overrightarrow{x_D \leftarrow v_D}]}\\
-\rtstate{\mathbf{continue} \cdot \overrightarrow{\kappa_{\neg while}} \cdot \textbf{while}\ e_{cond}\ b \cdot \kappa}{v}{S} &\rightarrow \rtstate{\textbf{while}\ e_{cond}\ b \cdot \kappa}{()}{S}\\
-\rtstate{\mathbf{break} \cdot \overrightarrow{\kappa_{\neg while}} \cdot \textbf{while}\ e_{cond}\ b \cdot \kappa}{v}{S} &\rightarrow \rtstate{\kappa}{()}{S}\\
-\rtstate{\mathbf{return}\ e \cdot \kappa}{v}{S} &\rightarrow \rtstate{e \cdot \mathbf{return}\ \square \cdot \kappa}{()}{S}\\
-\rtstate{\mathbf{return}\ \square \cdot \overrightarrow{\kappa_{\neg eof}} \cdot \textbf{eof} \cdot \kappa}{v}{S} &\rightarrow \rtstate{\textbf{eof} \cdot \kappa}{v}{S}\\
+\rtstate{\mathbf{match}\ \square\ \{ \overrightarrow{C(\overrightarrow{x_C,}) \Rightarrow e_C,} \} \cdot \kappa}{D(\overrightarrow{v_D})}{S} &\rightarrow \rtstate{e_D \cdot \kappa}{()}{S[\overrightarrow{x_D \leftarrow v_D}]}
+\textrm{\yrg{What are $e_D$, $x_D$?}}
+\\
+\rtstate{\mathbf{continue} \cdot \overrightarrow{\kappa_{\neg while}} \cdot \textbf{while}\ e_{cond}\ b \cdot \kappa}{v}{S} &\rightarrow \rtstate{\textbf{while}\ e_{cond}\ b \cdot \kappa}{()}{S}
+\textrm{\yrg{You should explain what $\kappa_{\neg while}$ means.}}
+\\
+\rtstate{\mathbf{break} \cdot \overrightarrow{\kappa_{\neg while}} \cdot \textbf{while}\ e_{cond}\ b \cdot \kappa}{v}{S} &\rightarrow \rtstate{\kappa}{()}{S}
+\textrm{\yrg{You should explain what $\kappa_{\neg while}$ means.}}
+\\
+\rtstate{\mathbf{return}\ e \cdot \kappa}{v}{S} &\rightarrow \rtstate{e \cdot \mathbf{return}\ \square \cdot \kappa}{()}{S}
+\\
+\rtstate{\mathbf{return}\ \square \cdot \overrightarrow{\kappa_{\neg eof}} \cdot \textbf{eof} \cdot \kappa}{v}{S} &\rightarrow \rtstate{\textbf{eof} \cdot \kappa}{v}{S}
+\textrm{\yrg{You should explain what $\kappa_{\neg \textbf{eof}}$ means.}}
+\\
 \rtstate{\textbf{eof} \cdot \kappa}{v}{S_f :: S} &\rightarrow \rtstate{\kappa}{v}{S}\\
 \end{align*}
 
 \subsection{The colored difference oracle}
 \label{sec:colored-diff-oracle}
-From this language and its semantics, we define what can be a correlation oracle that will be able to tell if a program trace exhibit an ambiguity created by the fusion.
+From this language and its semantics, we define what can be a
+correlation oracle that will be able to tell if a program trace
+exhibits an ambiguity created by the fusion.
+%
+\yrg{You should first recall what a correlation oracle is, explain
+that you want to characterize ``new'' values (values coming from
+commits) and that you need the original execution trace to do so.}
 
 We cannot do the verification directly on the merge candidate because we need to gather interferences created by deleted code.
 \begin{lstlisting}[label=lst:del_interference, caption={Example of an ambiguity that would be missed if we don't analyze deleted code.}]
