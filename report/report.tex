@@ -1785,16 +1785,30 @@ For instance, this gives the following reduction rules (non-exhaustive list):
 \rtstate{e_1 \diamond e_2 \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{e_1 \cdot \square \diamond e_2 \cdot \kappa}{((), (), \top)}{S}\\
 \end{align*}
 
+\yrg{What are the meaning of $^+$ and $^-$? I am not able to decrypt
+  these rules... Could you explain them? Also, it is a bit strange
+  that $S$ is never changed.}
+
 \paragraph{Instruction producing value}
 
 For instructions that change the current value, we need to be careful
 regarding the color of the result. There are three cases:
 
 \begin{itemize}
-  \item If the instruction is preserved, the output color is the intersection of the input colors
-  \item If the instruction is deleted, the color of the value is tainted by the color of the deletion. However, the input values do not taint the result.
-  \item If the instruction is inserted, the output color is the intersection of the input colors and the color of the insertion.
+  \item
+    If the instruction is preserved, the output color is the
+    intersection of the input colors.
+
+  \item
+    If the instruction is deleted, the color of the value is tainted
+    by the color of the deletion. However, the input values do not
+    taint the result.
+
+  \item
+    If the instruction is inserted, the output color is the
+    intersection of the input colors and the color of the insertion.
 \end{itemize}
+\yrg{The justification are missing.}
 
 This leads to the following reduction rules:
 \begin{align*}
