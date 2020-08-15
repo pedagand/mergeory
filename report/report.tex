@@ -1457,7 +1457,9 @@ after removing all colors from $t_1$ and $t_2$.
 \section{Checking and restoring the semantic of merged program}
 \label{sec:semantic-merge}
 
-Having two commits syntactically merged do not mean that the result is a valid semantic combination that respect the intentions of all original committers.
+Having two commits syntactically merged does not mean that the result
+is a valid semantic combination that respect the intentions of all
+original committers. \yrg{Give an example.}
 
 \begin{lstlisting}[label=lst:double-incr, caption={Double fix of the same function by different commits. The syntactic fusion does not create a conflict be semantically we can create a new bug here.}]
 fn compute_something(x: i32) -> i32 {
@@ -1467,18 +1469,39 @@ fn compute_something(x: i32) -> i32 {
 }
 \end{lstlisting}
 
-That's why after the syntax merging step, we also want to check the semantic of the fusion.
+That is why after the syntax merging step, we also want to check the
+semantic of the fusion for remaining ambiguities.
 
-In this section we will show that first self-contained non-conflicting difference trees can be interpreted as correlation oracles between the original code and a merged candidate. And secondly that we can derive a runtime analysis that ensures that there is no unresolved ambiguity introduced by the fusion operation. In future works, this runtime analysis could be refined into a static analysis.
+In this section, we first will show that self-contained
+non-conflicting difference trees can be interpreted as correlation
+oracles~\yrg{Ref} between the original code and a merged candidate,
+that is specific relation between the two programs' execution
+traces. Secondly, we show that we can derive a runtime analysis that
+ensures that there is no unresolved ambiguity introduced by the fusion
+operation. In future work, this runtime analysis could be refined into
+a static analysis.
 
-If we combine this invariant with the fact that the fusion never lose any introduced change, we obtain the certainty that the intentions inside all original commits are respected, because both changes and implicit environment assumptions are preserved.
+If we combine this invariant with the fact that the fusion never lose
+any introduced change, we obtain the certainty that the intents of all
+original commits are respected, because both changes and implicit
+environment assumptions are preserved.
 
 \subsection{Operational semantics of the studied language}
-In this paper, we will use the following programming language, a simplified version of Rust. It has been chosen because it allows us to explore both functional and imperative coding styles, and we stripped all the borrowing and trait systems that could be difficult to understand for a reader without any Rust background.
+
+In this paper, we will use a simplified version of the Rust
+programming language~\yrg{Ref}. We chose this language because it
+allows us to explore both functional and imperative coding styles.  We
+ignore all the borrowing and trait systems that could be difficult to
+understand for a reader without any Rust background.
 
 \newcommand{\ident}{\mathbb{I}}
 \newcommand{\typ}{\mathbb{T}}
-Syntactically, with $\ident$ the set of variable and function identifiers, $\typ$ the set of type identifiers and $\diamond$ (resp. $\star$) the set of primitive binary (resp. unary) functions, it is defined by:
+
+Syntactically, with $\ident$ the set of variable and function
+identifiers, $\typ$ the set of type identifiers and $\diamond$
+(resp. $\star$) the set of primitive binary (resp. unary) functions,
+the syntax for our toy language is defined by the following grammar:
+
 \begin{align*}
 program &::= \boxed{item}^*\\
 item &::= func \typsep enum\\
@@ -1491,14 +1514,48 @@ expr &::= \ident \typsep literal \typsep \star expr \typsep expr \diamond expr \
 literal &::= () \typsep \mathbf{true} \typsep \mathbf {false} \typsep \mathbb{Z}
 \end{align*}
 
-To define the semantics, we give the program state as a tuple $\rtstate{\kappa}{v}{S}$ where $\kappa$ is the continuation, $v$ the value of the last computed expression and $S$ the local store stack. For function calls, we can push a new store on the previous one, only the topmost store can be used and updated as it correspond to the current function.
+\yrg{What do the boxes mean? Is that a standard format? If so, could
+  you give a reference for its specification?}
 
-We also keep the set of constructors, and the set of function as a global state. We denote $\mathbb{G}(f)$ the body of function $f$ taken from global state. Types do not play any role in reduction rules, but we will assume that programs are already well typed. The initial state is given by the call of the entry point function $f$ with its arguments $\overrightarrow{x_a}$: $\rtstate{\mathbb{G}(f)}{()}{\{\overrightarrow{x_a \leftarrow v_a}\}}$.
+\yrg{What is the meaning of $\star expr$?}
+
+To define the semantics, we define the program state as a tuple
+$\rtstate{\kappa}{v}{S}$ where $\kappa$ is the continuation, $v$ the
+value of the last computed expression and $S$ the local store
+stack. \yrg{You should informally explain why the value of the last
+  computed expression is needed and why local stores follow a
+  discipline of stack. In particular, one could wonder why there is no
+  heap in this program state.}
+
+\yrg{What is the syntax for values?}
+
+For function calls, we can push a new store on top of the previous
+one~\yrg{Is it optional to push a new store? When executing a function
+  call?}, only the topmost store can be used and updated as it
+corresponds to the current function.
+
+We also keep the set of constructors, and the set of functions as a
+global state.~\yrg{That global environment is hardly compatible with a
+  higher-order language, right? That's fine because your language is
+  first order (no anonymous lambda abstraction). Yet, the introduction
+  emphasizes that you chose a sublanguage of Rust to play with
+  functional programs: this looks a bit contradictory.} We denote
+$\mathbb{G}(f)$ the body of function $f$ taken from global
+state. Types do not play any role in reduction rules, but we will
+assume that programs are already well typed. The initial state is
+given by the call of the entry point function $f$ with its arguments
+$\overrightarrow{x_a}$:
+$\rtstate{\mathbb{G}(f)}{()}{\{\overrightarrow{x_a \leftarrow
+    v_a}\}}$.
 
 Then the program follows the reduction rules below:
 \begin{align*}
-\rtstate{\{\overrightarrow{stmt;}\ expr\} \cdot \kappa}{v}{S} &\rightarrow \rtstate{\overrightarrow{stmt} \cdot expr \cdot \kappa}{()}{S}\\
-\rtstate{x = e \cdot \kappa}{v}{S} &\rightarrow \rtstate{e \cdot x = \square \cdot \kappa}{()}{S}\\
+\rtstate{\{\overrightarrow{stmt;}\ expr\} \cdot \kappa}{v}{S} &\rightarrow \rtstate{\overrightarrow{stmt} \cdot expr \cdot \kappa}{()}{S}
+\textrm{\yrg{stmt is undefined.}}
+\\
+\rtstate{x = e \cdot \kappa}{v}{S} &\rightarrow \rtstate{e \cdot x = \square \cdot \kappa}{()}{S}
+\textrm{\yrg{$\square$ is undefined.}}
+\\
 \rtstate{x = \square \cdot \kappa}{v}{S} &\rightarrow \rtstate{\kappa}{()}{S[x \leftarrow v]}\\
 \rtstate{x \cdot \kappa}{v}{S} &\rightarrow \rtstate{\kappa}{S(x)}{S}\\
 \rtstate{literal \cdot \kappa}{v}{S} &\rightarrow \rtstate{\kappa}{literal}{S}\\
@@ -1516,19 +1573,37 @@ Then the program follows the reduction rules below:
 \rtstate{\mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false} \cdot  \kappa}{\mathbf{false}}{S} &\rightarrow \rtstate{b_{false} \cdot \kappa}{()}{S}\\
 \rtstate{\mathbf{while}\ e_{cond}\ b \cdot \kappa}{v}{S} &\rightarrow \rtstate{\mathbf{if}\ e_{cond}\ \{ b;\ \mathbf{while}\ e_{cond}\ b \}\  \mathbf{else}\ \{\} \cdot \kappa}{()}{S}\\
 \rtstate{\mathbf{match}\ e_{scrut}\ \{ \overrightarrow{C(\overrightarrow{x_C,}) \Rightarrow e_C,} \} \cdot \kappa}{v}{S} &\rightarrow \rtstate{e_{scrut} \cdot \mathbf{match}\ \square\ \{ \overrightarrow{C(\overrightarrow{x_C,}) \Rightarrow e_C,} \} \cdot \kappa}{()}{S}\\
-\rtstate{\mathbf{match}\ \square\ \{ \overrightarrow{C(\overrightarrow{x_C,}) \Rightarrow e_C,} \} \cdot \kappa}{D(\overrightarrow{v_D})}{S} &\rightarrow \rtstate{e_D \cdot \kappa}{()}{S[\overrightarrow{x_D \leftarrow v_D}]}\\
-\rtstate{\mathbf{continue} \cdot \overrightarrow{\kappa_{\neg while}} \cdot \textbf{while}\ e_{cond}\ b \cdot \kappa}{v}{S} &\rightarrow \rtstate{\textbf{while}\ e_{cond}\ b \cdot \kappa}{()}{S}\\
-\rtstate{\mathbf{break} \cdot \overrightarrow{\kappa_{\neg while}} \cdot \textbf{while}\ e_{cond}\ b \cdot \kappa}{v}{S} &\rightarrow \rtstate{\kappa}{()}{S}\\
-\rtstate{\mathbf{return}\ e \cdot \kappa}{v}{S} &\rightarrow \rtstate{e \cdot \mathbf{return}\ \square \cdot \kappa}{()}{S}\\
-\rtstate{\mathbf{return}\ \square \cdot \overrightarrow{\kappa_{\neg eof}} \cdot \textbf{eof} \cdot \kappa}{v}{S} &\rightarrow \rtstate{\textbf{eof} \cdot \kappa}{v}{S}\\
+\rtstate{\mathbf{match}\ \square\ \{ \overrightarrow{C(\overrightarrow{x_C,}) \Rightarrow e_C,} \} \cdot \kappa}{D(\overrightarrow{v_D})}{S} &\rightarrow \rtstate{e_D \cdot \kappa}{()}{S[\overrightarrow{x_D \leftarrow v_D}]}
+\textrm{\yrg{What are $e_D$, $x_D$?}}
+\\
+\rtstate{\mathbf{continue} \cdot \overrightarrow{\kappa_{\neg while}} \cdot \textbf{while}\ e_{cond}\ b \cdot \kappa}{v}{S} &\rightarrow \rtstate{\textbf{while}\ e_{cond}\ b \cdot \kappa}{()}{S}
+\textrm{\yrg{You should explain what $\kappa_{\neg while}$ means.}}
+\\
+\rtstate{\mathbf{break} \cdot \overrightarrow{\kappa_{\neg while}} \cdot \textbf{while}\ e_{cond}\ b \cdot \kappa}{v}{S} &\rightarrow \rtstate{\kappa}{()}{S}
+\textrm{\yrg{You should explain what $\kappa_{\neg while}$ means.}}
+\\
+\rtstate{\mathbf{return}\ e \cdot \kappa}{v}{S} &\rightarrow \rtstate{e \cdot \mathbf{return}\ \square \cdot \kappa}{()}{S}
+\\
+\rtstate{\mathbf{return}\ \square \cdot \overrightarrow{\kappa_{\neg eof}} \cdot \textbf{eof} \cdot \kappa}{v}{S} &\rightarrow \rtstate{\textbf{eof} \cdot \kappa}{v}{S}
+\textrm{\yrg{You should explain what $\kappa_{\neg \textbf{eof}}$ means.}}
+\\
 \rtstate{\textbf{eof} \cdot \kappa}{v}{S_f :: S} &\rightarrow \rtstate{\kappa}{v}{S}\\
 \end{align*}
 
 \subsection{The colored difference oracle}
 \label{sec:colored-diff-oracle}
-From this language and its semantics, we define what can be a correlation oracle that will be able to tell if a program trace exhibit an ambiguity created by the fusion.
+From this language and its semantics, we define what can be a
+correlation oracle that will be able to tell if a program trace
+exhibits an ambiguity created by the fusion.
+%
+\yrg{You should first recall what a correlation oracle is, explain
+that you want to characterize ``new'' values (values coming from
+commits) and that you need the original execution trace to do so.}
 
-We cannot do the verification directly on the merge candidate because we need to gather interferences created by deleted code.
+We cannot do the verification directly on the merge candidate because
+we need to gather interferences created by deleted code.
+\yrg{This sentence will be mysterious to the reader.}
+
 \begin{lstlisting}[label=lst:del_interference, caption={Example of an ambiguity that would be missed if we don't analyze deleted code.}]
 fn f() -> bool {
     let mut res = @\setstcolor{orange}\st{true} $\rightarrow$ {\color{orange}\ul{false}}@;
@@ -1537,11 +1612,26 @@ fn f() -> bool {
 }
 \end{lstlisting}
 
-Therefore, in order to take into account the deleted code, we reason on both the original code known by all committers and the merge candidate. We then need to synchronize executions of these two programs and use the color algebra to verify that we do not have any unchecked ambiguity.
+Therefore, in order to take into account the deleted code, we reason
+on both the original code known by all committers and the merge
+candidate. We then need to synchronize executions of these two
+programs and use the color algebra to verify that we do not have any
+unchecked ambiguity.
 
-In general, synchronization between different programs is really hard but here we already have a good syntactic description of the differences between them. We can directly deduce the interleaving from the merged difference tree because it gives implicit correlation points. Indeed, each time there is a spine node that does not depend on the control flow decisions, we know for sure that both programs will at some point execute the same code, and we can synchronize this execution. Moreover, for each change, or divergent control flow decision, we know precisely  where it is located in the spine allowing to resynchronize easily when programs start to behave similarly again.
+In general, synchronization between different programs is really hard
+but here we already have a good syntactic description of the
+differences between them. Indeed, we can directly deduce the interleaving from
+the merged difference tree because it gives implicit correlation
+points. Indeed, each time there is a spine node that does not depend
+on the control flow decisions, we know for sure that both programs
+will at some point execute the same code, and we can synchronize this
+execution. Moreover, for each change, or divergent control flow
+decision, we know precisely where it is located in the spine allowing
+to resynchronize easily when programs start to behave similarly again.
 
-To express the interleaving between two programs, and compute the colors of the expressions, we use the correlation oracle framework developed by T. Girka\todo{ref}.
+To express the interleaving between two programs, and compute the
+colors of the expressions, we use the correlation oracle framework
+developed by T. Girka\todo{ref}.
 
 \begin{figure}[ht]
 \begin{minipage}{.34\textwidth}
@@ -1623,22 +1713,50 @@ fn f(c: bool) -> i32 {
 \label{fig:oracle_sync_from_diff}
 \end{figure}
 
-Formally, the correlation oracle is defined as a program with a states that can be projected on either of the correlated programs. Moreover, it carries information about the co-execution of both programs.
+Formally, the correlation oracle is defined as a program with a state
+that can be projected on either of the correlated programs. Moreover,
+it carries extra information to track the simultaneous executions of
+both programs and the next synchronization point.
 
-Here we keep states as tuples $\rtstate{\kappa}{v}{S}$ but all the individual components are slightly more complex: $\kappa$ is the continuation but its elements can be either deleted (\st{$instr$}$^c$), inserted (\ul{$instr$}$^c$), or preserved ($instr$), depending on whether they occur on the original only, the merged candidate only or both. Deleted and inserted instructions carry a color with them. For each value $v$ or element of the store $S(x)$, they are replaced by a pair of values associated with a color $(v_{del}, v_{ins}, c)$.
+Here we keep states as tuples $\rtstate{\kappa}{v}{S}$ but all the
+individual components are slightly more complex: $\kappa$ is the
+continuation but its elements can be either deleted
+(\st{$instr$}$^c$), inserted (\ul{$instr$}$^c$), or preserved
+($instr$), depending on whether they occur on the original only, the
+merged candidate only or both. Deleted and inserted instructions carry
+a color with them. For each value $v$ or element of the store $S(x)$,
+they are replaced by a pair of values associated with a color
+$(v_{del}, v_{ins}, c)$. \yrg{You should explain this definition more
+  clearly, and also justify it. For the moment, this paragraph is
+  unfortunately quite obscure and technical...}
 
-The projection of a state to its equivalent in the original program $\pi_{del}$ removes all the inserted instructions in the continuation, and takes first elements of pairs of values, always ignoring colors. Same for the projection on the merge candidate $\pi_{ins}$, but removing deleted instructions, and taking second element inside pair of values.
+The projection of a state to its equivalent in the original program
+$\pi_{del}$ removes all the inserted instructions in the continuation,
+and takes first elements of pairs of values, always ignoring
+colors. The projection on the merge candidate $\pi_{ins}$ is similar,
+except that it removes deleted instructions, and that it takes the
+second element inside each pair of values.
 
-For $S$ a store, we denote $S_{del} = \pi_{del} \circ S$, $S_{ins} = \pi_{ins} \circ S$ and $S_{c}$ the projection on the color of the value of $S$.
+For a store~$S$, we write $S_{del}$ for $\pi_{del} \circ S$, $S_{ins}$
+for $\pi_{ins} \circ S$, and $S_{c}$ for the projection on the color
+of the value of $S$. \yrg{I am not sure that you have defined the
+color of a store.}
 
-To describe how interleaving is done, we can also give operational semantic reductions.
+To describe how interleaving is done, we can also give operational
+semantic reductions. \yrg{Where?}
 
-In all the rules, if an instruction in the continuation should be both inserted and deleted according to the rules, it is simply discarded. If it should be inserted (resp. deleted) twice with different colors, we take the intersection (resp. union) of these colors to follow the color composition rules.
+In all the rules, if an instruction in the continuation should be both
+inserted and deleted according to the rules, it is simply
+discarded. If it should be inserted (resp. deleted) twice with
+different colors, we take the intersection (resp. union) of these
+colors to follow the color composition rules. \yrg{Justify!}
 
 \paragraph{Reusing rules from underlying language}
-The rules from the underlying language can be reused for instructions that simply expand inside the continuation. In this case we preserve the deleted/inserted/preserved status and the color on the expansion.
+The rules from the underlying language can be reused for instructions
+that simply expand inside the continuation. In this case, we preserve
+the deleted/inserted/preserved status and the color on the expansion.
 
-For instance this gives the following reduction rules (non-exhaustive list):
+For instance, this gives the following reduction rules (non-exhaustive list):
 \newbox\boxoverarrow
 \sbox\boxoverarrow{$\overrightarrow{stmt;}$}
 \begin{align*}
@@ -1647,13 +1765,30 @@ For instance this gives the following reduction rules (non-exhaustive list):
 \rtstate{e_1 \diamond e_2 \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{e_1 \cdot \square \diamond e_2 \cdot \kappa}{((), (), \top)}{S}\\
 \end{align*}
 
+\yrg{What are the meaning of $^+$ and $^-$? I am not able to decrypt
+  these rules... Could you explain them? Also, it is a bit strange
+  that $S$ is never changed.}
+
 \paragraph{Instruction producing value}
-For instructions that change the current value, we need to be careful of the color of the result. There is three cases:
+
+For instructions that change the current value, we need to be careful
+regarding the color of the result. There are three cases:
+
 \begin{itemize}
-  \item If the instruction is preserved, the output color is the intersection of the input colors
-  \item If the instruction is deleted, the color of the value is tainted by the color of the deletion. However, the input values do not taint the result.
-  \item If the instruction is inserted, the output color is the intersection of the input colors and the color of the insertion.
+  \item
+    If the instruction is preserved, the output color is the
+    intersection of the input colors.
+
+  \item
+    If the instruction is deleted, the color of the value is tainted
+    by the color of the deletion. However, the input values do not
+    taint the result.
+
+  \item
+    If the instruction is inserted, the output color is the
+    intersection of the input colors and the color of the insertion.
 \end{itemize}
+\yrg{The justifications are missing.}
 
 This leads to the following reduction rules:
 \begin{align*}
@@ -1737,36 +1872,106 @@ Now when we encounter a \textbf{match}, that is destructuring an enum value, we 
 \vrtstate{\mathul{\usebox\boxmatch}^k \cdot \kappa}{(v^-, D(\overrightarrow{v_D^+}), c(\overrightarrow{c_D}))}{S} &\rightarrow \rtstate{\mathul{e_D}^{c \cap k} \cdot \kappa}{(v^-, (), k)}{S\left[\overrightarrow{x_D \leftarrow (S_{del}(x_D), v_D^+, c_D)}\right]}\\
 \end{align*}
 
-\paragraph{Ambiguity detection} During the execution of the correlation oracle, ambiguities are detected whenever the black color is found in the value. To avoid stopping at the first ambiguity and be able to warn the user about more than one problem at the same time, we can continue the execution on a black value and locally replace it with white, signalling an error to be manually resolved later. A merge is valid if it never create such black value.
+\yrg{At this point, you should state the theorem corresponding to the
+  soundness of these reduction rules. It does not matter that you did
+  not prove them correct as long as you convince us that the target
+  properties is indeed a valid oracle.}
+
+\paragraph{Ambiguity detection}
+
+During the execution of the correlation oracle, ambiguities are
+detected whenever the black color is found in the value. To avoid
+stopping at the first ambiguity and be able to warn the user about
+more than one problem at the same time, we can continue the execution
+on a black value and locally replace it with white, signalling an
+error to be manually resolved later. A merge is valid if it never
+create such black value.
 \begin{align*}
  \rtstate{\kappa}{(v^-, v^+, \bot)}{S} &\overset{!}{\rightarrow} \rtstate{\kappa}{(v^-, v^+, \top)}{S}
 \end{align*}
 
+\yrg{What is the meaning of the ! here?}
+
 \subsection{Resolving conflicts and ambiguities}
-The colored difference oracle reports a list of ambiguity points, that must be resolved before having a valid merge. For our tool to be practical, the manual ambiguity resolution should be easy and rather quick as soon as the programmer who initiated the merge understand how the commits interact at each ambiguity point. In this internship, I propose resolution tactics that let a programer alter the merge candidate to progressively remove conflicts and ambiguities. As for the semantic check, this part is purely theoretical as I had no time for implementing it.
+The colored difference oracle reports a list of ambiguity points, that
+must be resolved before having a valid merge. For our tool to be
+practical, the manual ambiguity resolution should be easy and rather
+quick as soon as the programmer who initiated the merge understand how
+the commits interact at each ambiguity point. In this internship, I
+propose resolution tactics that let a programer alter the merge
+candidate to progressively remove conflicts and ambiguities. As for
+the semantic check, this part is purely theoretical as I had no time
+for implementing it.
 
-After each tactic application, our intended tool would recheck the semantics for potential remaining ambiguities, until there is none left. At the end of the process, we  simply keep the projection on the last merged candidate as the final merged program.
+After each tactic application, our intended tool would recheck the
+semantics for potential remaining ambiguities, until there is none
+left. At the end of the process, we simply keep the projection on the
+last merged candidate as the final merged program.
 
-Currently we only have few resolution tactics but I think that they are powerful enough for resolving all conflicts. However they trust the programer to ensure invariants and are quite low level so more automated tactics could be added by later works.
+Currently we only have few resolution tactics but I think that they
+are powerful enough for resolving all conflicts. However they trust
+the programer to ensure invariants and are quite low level so more
+automated tactics could be added in future work.
 
-\paragraph{Declare preserving semantic change} Some changes are refactorings that do not modify the semantics, or are bugfixes that do not change the intended semantics that rest of the program rely on.
-The automatic ambiguity detection will be triggered by these changes because it is unable to notice the constant implicit semantic preservation. To mark these ambiguity as false positive, we can use the \textit{preserving} tactic, that replace the color of a change with constant semantic by white (the change can be the whole commit or only some modifications). It represent the fact that beeing aware or not of the modification is irrelevant as the user told us that it does not change the meaning of the code, and it will effectively remove the ambiguity.
+\paragraph{Declare preserving semantic change}
+%
+Some changes are refactorings that do not modify the semantics, or are
+bugfixes that do not change the intended semantics that rest of the
+program rely on.  The automatic ambiguity detection will be triggered
+by these changes because it is unable to notice the constant implicit
+semantic preservation. To mark these ambiguity as false positive, we
+can use the \textit{preserving} tactic, that replace the color of a
+change with constant semantic by white (the change can be the whole
+commit or only some modifications). It represents the fact that being
+aware or not of the modification is irrelevant as the user told us
+that it does not change the meaning of the code, and it will
+effectively remove the ambiguity.
 
-\paragraph{Reviewed interaction block} Sometimes, even if changes do not globally preserve semantics, after manual check, their interaction does not cause any real problem. In that case, the tactic \textit{reviewed} mark a block of code as still keeping its intended semantic even if several modifications interact inside. When the correlation oracle execute a reviewed block, the color of the value is reset to white between each evaluation step. Therefore both final value, and variables assigned inside the block are white after the block execution.
+\paragraph{Reviewed interaction block}
+%
+Sometimes, even if changes do not globally preserve semantics, after
+manual check, their interaction does not cause any real problem. In
+that case, the tactic \textit{reviewed} mark a block of code as still
+keeping its intended semantic even if several modifications interact
+inside. When the correlation oracle executes a reviewed block, the
+color of the value is reset to white between each evaluation
+step. Therefore, both final value, and variables assigned inside the
+block are white after the block execution.
 % \begin{align*}
 % \rtstate{\mathbf{reviewed}\ e \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{e \cdot \mathbf{eor} \cdot \kappa}{(v^-, v^+, \top^*)}{S}\\
 % \rtstate{\mathbf{eor} \cdot \kappa}{(v^-, v^+, \top^*)}{S} &\rightarrow \rtstate{\kappa}{(v^-, v^+, \top)}{S}\\
 % \end{align*}
 % $\top^*$ is the color $\top$ but for any program step, no matter the rule used (except $\mathbf{eor}$), the output state color stays $\top^*$.
 
-\paragraph{Revert a change} Some changes will not compose well and with global knowledge reverting them is simply the thing to do. The \textit{revert} tactic take a position in the difference tree and either remove inserted code, restore deleted code or both.
+\paragraph{Revert a change}
+%
+Some changes will not compose well and with global knowledge reverting
+them is simply the thing to do. The \textit{revert} tactic takes a
+position in the difference tree and either removes inserted code,
+restores deleted code or both.
 
-\paragraph{Introduce a new change} Similarly, in order to do some manual adjustments it could be necessary to use a tactic that manually add a change somewhere after the automatic syntax merge. As it is done in order to restore some semantics after all the modifications are known, we can directly mark this new change as \textit{reviewed}.
+\paragraph{Introduce a new change}
+%
+Similarly, in order to do some manual adjustments it could be
+necessary to use a tactic that manually adds a change somewhere after
+the automatic syntactic merge. As it is done in order to restore some
+semantics after all the modifications are known, we can directly mark
+this new change as \textit{reviewed}.
 
-\paragraph{Resolve syntactic conflicts} We can also use this tactic system to resolve the syntactic conflicts that prevent the colored difference oracle to run. To do so we add tactics that resolve conflicts, locally reverting one change to keep only the other, fix the insertion order, or force a meta-variable replacement.
+\paragraph{Resolve syntactic conflicts}
+%
+We can also use this tactic system to resolve the syntactic conflicts
+that prevent the colored difference oracle to run. To do so, we add
+tactics that resolve conflicts, locally reverting one change to keep
+only the other, fix the insertion order, or force a meta-variable
+replacement.
 
 \section{Related work}
 \label{sec:related-work}
 \todo{Write this section}
+
+\yrg{You should add a section about the implementation, or at the very least,
+a reference to the tool's git repository with a clear description of what it
+does.}
 
 \end{document}
