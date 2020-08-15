@@ -1620,7 +1620,10 @@ exhibits an ambiguity created by the fusion.
 that you want to characterize ``new'' values (values coming from
 commits) and that you need the original execution trace to do so.}
 
-We cannot do the verification directly on the merge candidate because we need to gather interferences created by deleted code.
+We cannot do the verification directly on the merge candidate because
+we need to gather interferences created by deleted code.
+\yrg{This sentence will be mysterious to the reader.}
+
 \begin{lstlisting}[label=lst:del_interference, caption={Example of an ambiguity that would be missed if we don't analyze deleted code.}]
 fn f() -> bool {
     let mut res = @\setstcolor{orange}\st{true} $\rightarrow$ {\color{orange}\ul{false}}@;
@@ -1629,11 +1632,26 @@ fn f() -> bool {
 }
 \end{lstlisting}
 
-Therefore, in order to take into account the deleted code, we reason on both the original code known by all committers and the merge candidate. We then need to synchronize executions of these two programs and use the color algebra to verify that we do not have any unchecked ambiguity.
+Therefore, in order to take into account the deleted code, we reason
+on both the original code known by all committers and the merge
+candidate. We then need to synchronize executions of these two
+programs and use the color algebra to verify that we do not have any
+unchecked ambiguity.
 
-In general, synchronization between different programs is really hard but here we already have a good syntactic description of the differences between them. We can directly deduce the interleaving from the merged difference tree because it gives implicit correlation points. Indeed, each time there is a spine node that does not depend on the control flow decisions, we know for sure that both programs will at some point execute the same code, and we can synchronize this execution. Moreover, for each change, or divergent control flow decision, we know precisely  where it is located in the spine allowing to resynchronize easily when programs start to behave similarly again.
+In general, synchronization between different programs is really hard
+but here we already have a good syntactic description of the
+differences between them. Indeed, we can directly deduce the interleaving from
+the merged difference tree because it gives implicit correlation
+points. Indeed, each time there is a spine node that does not depend
+on the control flow decisions, we know for sure that both programs
+will at some point execute the same code, and we can synchronize this
+execution. Moreover, for each change, or divergent control flow
+decision, we know precisely where it is located in the spine allowing
+to resynchronize easily when programs start to behave similarly again.
 
-To express the interleaving between two programs, and compute the colors of the expressions, we use the correlation oracle framework developed by T. Girka\todo{ref}.
+To express the interleaving between two programs, and compute the
+colors of the expressions, we use the correlation oracle framework
+developed by T. Girka\todo{ref}.
 
 \begin{figure}[ht]
 \begin{minipage}{.34\textwidth}
@@ -1715,9 +1733,19 @@ fn f(c: bool) -> i32 {
 \label{fig:oracle_sync_from_diff}
 \end{figure}
 
-Formally, the correlation oracle is defined as a program with a states that can be projected on either of the correlated programs. Moreover, it carries information about the co-execution of both programs.
+Formally, the correlation oracle is defined as a program with a states
+that can be projected on either of the correlated programs. Moreover,
+it carries information about the simultaneous executions of both programs.
 
-Here we keep states as tuples $\rtstate{\kappa}{v}{S}$ but all the individual components are slightly more complex: $\kappa$ is the continuation but its elements can be either deleted (\st{$instr$}$^c$), inserted (\ul{$instr$}$^c$), or preserved ($instr$), depending on whether they occur on the original only, the merged candidate only or both. Deleted and inserted instructions carry a color with them. For each value $v$ or element of the store $S(x)$, they are replaced by a pair of values associated with a color $(v_{del}, v_{ins}, c)$.
+Here we keep states as tuples $\rtstate{\kappa}{v}{S}$ but all the
+individual components are slightly more complex: $\kappa$ is the
+continuation but its elements can be either deleted
+(\st{$instr$}$^c$), inserted (\ul{$instr$}$^c$), or preserved
+($instr$), depending on whether they occur on the original only, the
+merged candidate only or both. Deleted and inserted instructions carry
+a color with them. For each value $v$ or element of the store $S(x)$,
+they are replaced by a pair of values associated with a color
+$(v_{del}, v_{ins}, c)$.
 
 The projection of a state to its equivalent in the original program $\pi_{del}$ removes all the inserted instructions in the continuation, and takes first elements of pairs of values, always ignoring colors. Same for the projection on the merge candidate $\pi_{ins}$, but removing deleted instructions, and taking second element inside pair of values.
 
