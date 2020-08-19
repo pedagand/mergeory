@@ -70,6 +70,8 @@
 
 \maketitle
 
+\noindent {\color{red}This report uses colors for examples. Therefore it will be hard to read if printed in grayscale.}
+
 \subsection*{The general context}
 
 % \todo{What is it about ? Where does it come from ? What is the state of the art in this area ?}
@@ -718,6 +720,7 @@ expansive part of the algorithm is computing sequence alignments, all the rest i
 It is actually computing a difference between original and modified programs because we start from the trivial difference $\change{d}{i}$ and every step except step 3 does not lose any information. Step 3 elisions do not cause any trouble because step 4 only keep elisions that can be completed in presence of the source (or modified) program. By losing information, step 3 actually widens the domain of the final difference but does not change the result on tree $d$.
 
 \subsubsection{Practical considerations: how to extend a syntax tree}
+\label{sec:codegen}
 Implementing an algorithm that requires extending a syntax tree can be tedious in practice because we want to attach new information and/or create holes on a fixed structure while keeping the typedness of the tree.
 
 Along this paper, I give a Rust implementation for the syntax difference and merging algorithm of Rust programs. The parser used (the syn\yrg{Ref?} crate) uses more than 180 types in its syntax trees, so manual extension was not an option.
@@ -731,6 +734,7 @@ not adapted, as it systematically forgets the comments inside source
 code. But this is left for future work as a pure engineering problem.
 
 \subsection{Awareness colors}
+\label{sec:colors}
 Before merging differences together, we want to define a way of keeping track of which commit introduced each modification. For that we use a notion of awareness colors.
 
 Each commit in a fusion gets an associated tint. If we denote by
@@ -772,47 +776,127 @@ Now that we have difference trees for each individual concurrent
 change, we can try to merge them in a way that keeps track of the
 origin of each piece of code.
 
-\yrg{At this point, you must discuss what a merging algorithm is, why
-  it is necessarily arbitrary (semantically speaking), and what are
+\subsubsection{High-level specification of a merging algorithm}
+A merging algorithm takes two differences and produce another difference that contains all the changes from inputs if they are compatible or show where they are incompatible otherwise. This high-level description is underspecified because semantically combining changes only has an intuitive meaning depending on the implicit idea of what each commit does (often summarized in english in the commit message). Therefore, these algorithms are necessarily somehow arbitrary because they force a particular meaning for change combination. This does not mean that they are all equivalent, their definition for combination is more or less aligned with usual real-life commits.
+
+In this paper, our arbitrary choice is to focus on syntax to align differences (because we think that it often follows the intuition of the developpers) and let changes follow moved code (because it allow seemless merging of a large class of refactoring operations). These two principles will be explained further in Section~\ref{sec:merge_principles}. That said, we avoid further arbitrary choices that could favor one of the input tree over the other.
+
+\yrg{At this point, you must discuss what are
   the design principles that guided your work to get a form of
   syntactical merge which seems to take no arbitrary choice at the
-  level of syntax...}
+  level of syntax...}\gb{Hmm, you mean low level principles like merge common spine or push meta-variables down the deletion trees? This seems too 'low-level' for this part...}
 
-As with line based merge, this merging operation can and will regularly fail if someone wants to merge syntactically incompatible changes.
+We will denote $t_1 \merge t_2$ the result of our merge algorithm on difference trees $t_1$ and $t_2$.
+  
+Often the two input differences will not share the same domain. The output can therefore only be defined on the intersection of these domains. It makes no sense to merge differences whose domain are disjoint. In a standard setup, both input differences were computed on a common base and therefore we are sure that the merge output is at least defined for this base program.
 
-We therefore break the symmetry between deletion and insertion trees
-as there will be only one deletion and multiple insertions, and we
-need to extend our difference types to accumulate potential conflicts.
-\yrg{The logical implication is mysterious. You should explain in
-more depth why we need to break the symmetry here.}
-
+On top of that, the merging operation can and will regularly produce conflicts whenever someone wants to merge syntactically incompatible changes.
+Therefore we need to extend our grammar of differences to include these conflicts. Insertions and deletions do not trigger the same kind of conflicts, so we have to break the symmetry between them. It leads to the following grammar:
 \begin{align*}
-d &::= S(\overrightarrow{d}, \overrightarrow{d}) \typsep \alpha \typsep \MvConflict(\alpha, d, i) \\
-i &::= S(\overrightarrow{i}, \overrightarrow{j}) \typsep \alpha \typsep \InsConflict(\overrightarrow{i})\\
-j &::= i \typsep \DelConflict(i) \typsep \OrdConflict(\overrightarrow{i})\\
-t &::= S(\overrightarrow{t}, \overrightarrow{s}) \typsep \id \typsep  \change{d}{i}\\
-s &::= t \typsep \mathst{d} \typsep \DelConflict(d, i) \typsep \mathul{i} \typsep \OrdConflict(\overrightarrow{\overrightarrow{i}})\\
+tree &::= S(\overrightarrow{tree}, \overrightarrow{seqelt}) \typsep \id \typsep  \change{del}{ins}\\
+seqelt &::= tree \typsep \mathst{del} \typsep \DelConflict(del, ins) \typsep \mathul{ins} \typsep \OrdConflict(\overrightarrow{\overrightarrow{ins}})\\
+del &::= S(\overrightarrow{del}, \overrightarrow{del}) \typsep \alpha \typsep \MvConflict(\alpha, del, ins) \\
+ins &::= S(\overrightarrow{ins}, \overrightarrow{insseqelt}) \typsep \alpha \typsep \InsConflict(\overrightarrow{ins})\\
+insseqelt &::= ins \typsep \DelConflict(ins) \typsep \OrdConflict(\overrightarrow{ins})\\
 \end{align*}
 
-\yrg{Take the time to explain the role of each nonterminal of this
-grammar and to give an informal description of each syntactic
-construction. It is impossible for a reader (and even for me) to
-magically infer the semantics of all these constructions. You must
-also explain how these types compare and interact with the previous types
-for syntax differences.}
+Conflict represent parts that couldn't be merged and therefore prevent application of the difference on any tree. They can come from four different sources:
+\begin{itemize}
+  \item Insertion conflict ($\InsConflict$) simply represent two different insertions that were about to be merged in the same place.
+  \item Deletion conflict ($\DelConflict$) appears where one commit deletes a node while the other one had changes in it.
+  \item Insert order conflict ($\OrdConflict$) is caused by two insertions taking place at the same location. As the merge operation is never performing any choice, it cannot arbitrarily order them.
+  \item Meta-variable conflict ($\MvConflict$) is triggered when a meta-variable appears more than once in deletion tree, and the inlined insertions in each occurrences differ, therefore not giving a consistent replacement. This will be explained in further details later.
+\end{itemize}
 
+As this syntax is an extension, the syntax differences presented earlier can be directly reinterpreted in this grammar and conversely, differences without conflicts still follow the old grammar. Moreover, these new trees are also colored. \gb{Should I color the grammar?}
+
+\subsubsection{Design principles for our merging algorithm}
+\label{sec:merge_principles}
+\paragraph{Align changes following the syntax}
+As the domains of both input differences must overlap, we always can align their spine and deletion trees. This therefore also give a full change alignment as insertions are attached on a specific place in the spine (however it sometimes creates conflicts). By doing so, we respect the property that no commit is favored because alignment comes from shared nodes.
+
+The first step of the merging algorithm aligns the common spine nodes and unwind the remaining ones that are facing a change. On Figure~\ref{fig:spine_alignment}, we can see that only the nodes $x$ and $+$ are in both spines. Therefore, spine nodes $y$ and $*$ in the orange tree must be unwinded producing white nodes as a change before merging.
+
+\begin{figure}[ht]
+\begin{minipage}{0.33\textwidth}
+\centering\begin{tikzpicture}
+\node[varnode] (plus) {$+$};
+\node[varnode] (x) at ($(plus)+(-0.75,-1)$) {$x$};
+\node[changenode, color=blue] (change) at ($(plus)+(1.8,-1.4)$) {\tikz[color=black]{
+    \node[varnode, color=blue] (del_times) {$\color{black}*$};
+    \node[varnode, color=blue] (del_y) at ($(del_times)+(-0.5,-1)$) {$\color{black}y$};
+    \node[mvnode, color=blue] (del_alpha) at ($(del_times)+(0.5,-1)$) {$\color{black}\alpha$};
+    \draw (del_times) -- (del_y);
+    \draw (del_times) -- (del_alpha);
+    
+    \node[mvnode, color=blue] (ins_alpha) at ($(del_times)!0.5!(del_alpha)+(2, 0)$) {$\color{black}\alpha$};
+    \node (arrow) at ($(del_times)!0.5!(del_alpha)!0.5!(ins_alpha)$) {$\rightarrow$};
+}};
+\draw (plus) -- (x);
+\draw (plus) -- (change);
+\end{tikzpicture}
+\end{minipage}\hfill
+\begin{minipage}{0.33\textwidth}
+\centering\begin{tikzpicture}
+\node[varnode] (plus) {$+$};
+\node[varnode] (x) at ($(plus)+(-0.75,-1)$) {$x$};
+\node[varnode] (times) at ($(plus)+(0.75,-1)$) {$*$};
+\node[varnode] (y) at ($(times)+(-0.75,-1)$) {$y$};
+\node[changenode] (change) at ($(times)+(1,-1)$) {\tikz{
+    \node[varnode, color=orange] (two) {$\color{black}2$};
+    \node[varnode, colorB] (z) at ($(two)+(1.5, 0)$) {$z$};
+    \node (arrow) at ($(two)!0.5!(z)$) {$\rightarrow$};
+}};
+\draw (plus) -- (x);
+\draw (plus) -- (times);
+\draw (times) -- (y);
+\draw (times) -- (change);
+\end{tikzpicture}
+\end{minipage}
+\hfill
+\begin{minipage}{0.33\textwidth}
+\centering\begin{tikzpicture}
+\node[varnode] (plus) {$+$};
+\node[varnode] (x) at ($(plus)+(-0.75,-1)$) {$x$};
+\node[changenode] (change) at ($(plus)+(2,-1.4)$) {\tikz{
+    \node[varnode] (del_times) {$\color{black}*$};
+    \node[varnode] (del_y) at ($(del_times)+(-0.5,-1)$) {$\color{black}y$};
+    \node[varnode, color=orange] (del_two) at ($(del_times)+(0.5,-1)$) {$\color{black}2$};
+    \draw (del_times) -- (del_y);
+    \draw (del_times) -- (del_two);
+    
+    \node[varnode] (ins_times) at ($(del_times)+(2.5, 0)$) {$*$};
+    \node[varnode] (ins_y) at ($(ins_times)+(-0.5,-1)$) {$y$};
+    \node[varnode, colorB] (ins_z) at ($(ins_times)+(0.5,-1)$) {$z$};
+    \draw (ins_times) -- (ins_y);
+    \draw (ins_times) -- (ins_z);
+    
+    \node (arrow) at ($($(del_times)!0.5!(del_two)$)!0.5!($(ins_times)!0.5!(ins_y)$)$) {$\rightarrow$};
+}};
+\draw (plus) -- (x);
+\draw (plus) -- (change);
+\end{tikzpicture}
+\end{minipage}
+\caption{Spine alignment: We unwind the spine of the second tree producing the third in order to be aligned with first.}
+\label{fig:spine_alignment}
+\end{figure}
+
+If a difference sub-tree is aligned with an unchanged node (either $\square$ or $\change{\alpha}{\alpha}$), we keep the changed one only. This is quite an intuitive notion of combination with unchanged node yielding to the important property $t \merge \square = t$.
+
+When merging deletion trees, either both inputs agree on a common syntax node, or one of them has a meta-variable. In the latter case, we have to produce the most specific deletion tree, therefore keeping the non meta-variable sub-tree. This is the consensus between the two differences as the one with meta-variable accepts any sub-tree at this point while the other accepts only the kept one. We must remember that the meta-variable has been deleted for a more specific tree and replace its remaining occurences in deletions (always) and insertions (except in case of the inlining explained later).
+
+\gb{I probably should add an example here, but it is hard to find one that is non-conflicting, not complex and without inlining}
+
+When merging insertion trees, however, meta-variables always conflict with each other because they correspond to specific subtrees instead of capturing one. Therefore, we only merge fully identical nodes.
+
+\paragraph{Inlining changes inside meta-variables}
 When dealing with meta-variables, that represent a multi-source
 multi-target code move, our merging algorithm will try to push changes
-toward the destination of the code movement.  This is done in a
-two-phase way. First, if we have two changes facing each other we try
-to inline one of them inside the deletion tree of the other, by
-allowing differences wherever we have a meta-variable. To avoid making
-any arbitrary choice, this is ignored if both changes could be inlined
-in the other. Then, we check that these inlined changes are consistent
-for each meta-variable, and if they are, we replace all occurrences of
-the meta-variable by the obtained insertion.  \yrg{This paragraph is
-  highly technical! You should probably start your explanations with
-  simple cases and introduce these subtle situations afterwards.}
+toward the destination of the code movement.
+
+This is done in a two-phase way. First, if we have two changes facing each other we try to inline one of them inside the deletion tree of the other, by allowing differences wherever we have a meta-variable. By doing so, we check if the changes of one difference are fully contained inside code that will be moved by the other.
+
+Then, we check that these inlined changes are consistent across different occurences of the same meta-variable. If they are, we replace all occurrences of the meta-variable by the obtained insertion. If they are not, we generate a $\MvConflict$ conflict on each deleted $\alpha$ with the corresponding facing insertion.
 
 \begin{figure}[ht]
 \begin{minipage}{0.49\textwidth}
@@ -877,488 +961,58 @@ the meta-variable by the obtained insertion.  \yrg{This paragraph is
     \node (arrow) at ($($(del_x)!0.5!(del_plus)$)!0.5!($(ins_two)!0.5!(ins_minus)$)$) {$\rightarrow$};
 \end{tikzpicture}
 \end{minipage}
+\caption{Example of successful meta-variable inlining}
 \label{fig:metavar_inlining}
-\caption{Meta-variable inlining}
 \end{figure}
 
-\yrg{The next paragraphs should probably come earlier, right after the
-  syntax definitions... You should add a bit more structure to this
-  section. I suggest: (a) what is a merging algorithm? (b) what is its
-  high-level specification (input/output types, pre/post-conditions)?
-  (c) what are the main design principles of your implementation?}
+On Figure~\ref{fig:metavar_inlining}, we can see that the orange change can be inlined in the blue deletion tree. Indeed, if we compare their tree, all differences occur under meta-variable $\alpha$. Conversely, the blue change cannot be inlined because the inserted node $-$ in blue cannot be merged with deleted node $+$ in the orange tree. If there are no other occurences of $\alpha$, or the corresponding inlined tree is always $4*\beta$, we can replace every $\alpha$ by $4*\beta$, producing the tree on the right.
 
-In absence of conflicts, merged differences have the same semantics as
-simple difference trees.
+To avoid making any arbitrary choice, meta-variable inlining is ignored if both changes could be inlined in the other. This brings back the important property that mergeing a change with itself does not change anything.
 
-Conflict represent parts that couldn't be merged and therefore prevent application of the difference on any tree. They can come from four different sources:
-\begin{itemize}
-  \item Insertion conflict ($\InsConflict$) simply represent two different insertions that were in the same place.
-  \item Deletion conflict ($\DelConflict$) appears where one commit deletes a node while the other one had changes in it.
-  \item Insert order conflict ($\OrdConflict$) is caused by two insertions taking place at the same location. As the merge operation is never performing any choice, it cannot arbitrarily order them.
-  \item Meta-variable conflict ($\MvConflict$) is triggered when a meta-variable appears more than once in deletion tree, and the inlined insertions in each occurrences differ, therefore not giving a consistent replacement.
-\end{itemize}
-
-\subsubsection{Specification of the difference merging algorithm}
-
-The difference merging algorithm is defined modulo two replacement
-functions $\Gamma$ and $\Delta$ from meta-variables to respectively
-insertion and deletion trees, that are heavily constrained and in
-practice inferred during the merge.~\yrg{You should have a forward
-pointer to a section that precisely explains how this inference work.
-You should also explain that this presentation (with oracles) simplifies
-the formalization.}
-
-\yrg{This will take you some time but it is mandatory to:
-(i) enumerate and explain each judgment and how it is read ;
-(ii) give some informal explanation for each rule.
-}
-
-\begin{prooftree}
- \AxiomC{$\Gamma, \Delta \vdash t_r \merge t_l = t$}
- \RightLabel{\textsc{Symmetry}}
- \UnaryInfC{$\Gamma, \Delta \vdash t_l \merge t_r = t$}
-\end{prooftree}
-
-\paragraph{Merge spine nodes}
-\begin{prooftree}
- \AxiomC{}
- \RightLabel{\textsc{Id}}
- \UnaryInfC{$\Gamma, \Delta \vdash t \merge \id = \Delta(\Gamma(t))$}
-\end{prooftree}
-
-\begin{prooftree}
- \AxiomC{$\overrightarrow{\Gamma, \Delta \vdash t_l \merge t_r = t}$}
- \AxiomC{$\overrightarrow{\Gamma, \Delta \vdash s_l \merge s_r = s}$}
- \RightLabel{\textsc{Spine}}
- \BinaryInfC{$\Gamma, \Delta \vdash S(\overrightarrow{t_l}, \overrightarrow{s_l}) \merge S(\overrightarrow{t_r}, \overrightarrow{s_r}) = S(\overrightarrow{t}, \overrightarrow{s})$}
-\end{prooftree}
-
-\begin{prooftree}
- \AxiomC{$\Gamma \vdash i_l \not\subset d_r$}
- \AxiomC{$\Gamma \vdash i_r \not\subset d_l$}
- \AxiomC{$\Gamma \vdash d_l$}
- \AxiomC{$\Gamma \vdash d_r$}
- \RightLabel{\textsc{ChNoInl}}
- \QuaternaryInfC{$\Gamma, \Delta \vdash (\change{d_l}{i_l}) \merge (\change{d_r}{i_r}) = (\change{d_l \wedge d_r}{i_l \vee i_r})$}
-\end{prooftree}
-
-\begin{prooftree}
- \AxiomC{$\Gamma \vdash i_l \subset d_r = d'$}
- \AxiomC{$\Gamma \vdash i_r \not\subset d_l$}
- \AxiomC{$\Gamma \vdash d_l$}
- \RightLabel{\textsc{ChOneInl}}
- \TrinaryInfC{$\Gamma, \Delta \vdash (\change{d_l}{i_l}) \merge (\change{d_r}{i_r}) = (\change{d' \wedge d_l}{\Gamma(i_r)})$}
-\end{prooftree}
-
-\begin{prooftree}
- \AxiomC{$\Gamma \vdash i_l \subset d_r$}
- \AxiomC{$\Gamma \vdash i_r \subset d_l$}
- \AxiomC{$\Gamma \vdash d_l$}
- \AxiomC{$\Gamma \vdash d_r$}
- \RightLabel{\textsc{ChBothInl}}
- \QuaternaryInfC{$\Gamma, \Delta \vdash (\change{d_l}{i_l}) \merge (\change{d_r}{i_r}) = (\change{d_l \wedge d_r}{i_l \vee i_r})$}
-\end{prooftree}
-
-\paragraph{Merge sequence edit scripts (except insertions)}
-\begin{prooftree}
- \AxiomC{$\Gamma, \Delta \vdash t_l \merge t_r = t$}
- \AxiomC{$\Gamma, \Delta \vdash r_l \merge r_r = r$}
- \RightLabel{\textsc{BothZip}}
- \BinaryInfC{$\Gamma, \Delta \vdash (t_l :: r_l) \merge (t_r :: r_r) = t :: r$}
-\end{prooftree}
-
-\begin{prooftree}
- \AxiomC{$\Gamma \vdash d_l$}
- \AxiomC{$\Gamma \vdash d_r$}
- \AxiomC{$\Gamma, \Delta \vdash r_l \merge r_r = r$}
- \RightLabel{\textsc{BothDel}}
- \TrinaryInfC{$\Gamma, \Delta \vdash (\mathst{d_l} :: r_l) \merge (\mathst{d_r} :: r_r) = \mathst{d_l \wedge d_r} :: r$}
-\end{prooftree}
-
-\begin{prooftree}
- \AxiomC{$t_r = \change{d_r}{i_r}$}
- \AxiomC{$\Gamma \vdash i_r \subset d_l = d'$}
- \AxiomC{$\Gamma \vdash d_r$}
- \AxiomC{$\Gamma, \Delta \vdash r_l \merge r_r = r$}
- \RightLabel{\textsc{DelZipInline}}
- \QuaternaryInfC{$\Gamma, \Delta \vdash (\mathst{d_l} :: r_l) \merge (t_r :: r_r) = \mathst{d' \wedge d_r} :: r$}
-\end{prooftree}
-
-\begin{prooftree}
- \AxiomC{$t_r = \change{d_r}{i_r}$}
- \AxiomC{$\Gamma \vdash i_r \not\subset d_l$}
- \AxiomC{$\Gamma \vdash d_l$}
- \AxiomC{$\Gamma \vdash d_r$}
- \AxiomC{$\Gamma, \Delta \vdash r_l \merge r_r = r$}
- \RightLabel{\textsc{DelZipConflict}}
- \QuinaryInfC{$\Gamma, \Delta \vdash (\mathst{d_l} :: r_l) \merge (t_r :: r_r) = \DelConflict(d_l \wedge d_r, \Gamma(i_r)) :: r$}
-\end{prooftree}
-
-\begin{prooftree}
- \AxiomC{$\Gamma \vdash i_l \not\subset d_r$}
- \AxiomC{$\Gamma \vdash i_r \not\subset d_l$}
- \AxiomC{$\Gamma \vdash d_l$}
- \AxiomC{$\Gamma \vdash d_r$}
- \AxiomC{$\Gamma, \Delta \vdash r_l \merge r_r = r$}
- \RightLabel{\textsc{DelConflNoInl}}
- \QuinaryInfC{$\Gamma, \Delta \vdash (\DelConflict(d_l, i_l) :: r_l) \merge (\DelConflict(d_r, i_r) :: r_r) = \DelConflict(d_l \wedge d_r, i_l \vee i_r) :: r$}
-\end{prooftree}
-
-\begin{prooftree}
- \AxiomC{$\Gamma \vdash i_l \subset d_r = d'_r$}
- \AxiomC{$\Gamma \vdash i_r \not\subset d_l$}
- \AxiomC{$\Gamma \vdash d_l$}
- \AxiomC{$\Gamma, \Delta \vdash r_l \merge r_r = r$}
- \RightLabel{\textsc{DelConflOneInl}}
- \QuaternaryInfC{$\Gamma, \Delta \vdash (\DelConflict(d_l, i_l) :: r_l) \merge (\DelConflict(d_r, i_r) :: r_r) = \DelConflict(d_l \wedge d'_r, \Gamma(i_r)) :: r$}
-\end{prooftree}
-
-\begin{prooftree}
- \AxiomC{$\Gamma \vdash i_l \subset d_r = d'_r$}
- \AxiomC{$\Gamma \vdash i_r \subset d_l = d'_l$}
- \AxiomC{$\Gamma, \Delta \vdash r_l \merge r_r = r$}
- \RightLabel{\textsc{DelConflBothInl}}
- \TrinaryInfC{$\Gamma, \Delta \vdash (\DelConflict(d_l, i_l) :: r_l) \merge (\DelConflict(d_r, i_r) :: r_r) = \mathst{d'_l \wedge d'_r} :: r$}
-\end{prooftree}
-
-\begin{prooftree}
- \AxiomC{$t_r = \change{d_r}{i_r}$}
- \AxiomC{$\Gamma, \Delta \vdash (\DelConflict(d_l, i_l) :: r_l) \merge (\DelConflict(d_r, i_r) :: r_r) = r$}
- \RightLabel{\textsc{DelConflZip}}
- \BinaryInfC{$\Gamma, \Delta \vdash (\DelConflict(d_l, i_l) :: r_l) \merge (t_r :: r_r) = r$}
-\end{prooftree}
-
-\begin{prooftree}
- \AxiomC{$\Gamma \vdash i_l \not\subset d_r$}
- \AxiomC{$\Gamma \vdash d_r$}
- \AxiomC{$\Gamma \vdash d_l$}
- \AxiomC{$\Gamma, \Delta \vdash r_l \merge r_r = r$}
- \RightLabel{\textsc{DelConflDelNoInl}}
- \QuaternaryInfC{$\Gamma, \Delta \vdash (\DelConflict(d_l, i_l) :: r_l) \merge (\mathst{d_r} :: r_r) = \DelConflict(d_l \wedge d_r, \Gamma(i_l)) :: r$}
-\end{prooftree}
-
-\begin{prooftree}
- \AxiomC{$\Gamma \vdash i_l \subset d_r = d'_r$}
- \AxiomC{$\Gamma \vdash d_l$}
- \AxiomC{$\Gamma, \Delta \vdash r_l \merge r_r = r$}
- \RightLabel{\textsc{DelConflDelInl}}
- \TrinaryInfC{$\Gamma, \Delta \vdash (\DelConflict(d_l, i_l) :: r_l) \merge (\mathst{d_r} :: r_r) = \mathst{d_l \wedge d'_r} :: r$}
-\end{prooftree}
-
-\paragraph{Merge insertions in sequence edit scripts}
-
-\begin{prooftree}
- \AxiomC{$s_r \neq \mathul{\cdot}$}
- \AxiomC{$s_r \neq \OrdConflict(\cdot)$}
- \AxiomC{$\Gamma, \Delta \vdash r_l \merge (s_r :: r_r) = r$}
- \RightLabel{\textsc{InsBefore}}
- \TrinaryInfC{$\Gamma, \Delta \vdash (\mathul{i_l} :: r_l) \merge (s_r :: r_r) = \mathul{\Gamma(i_l)} :: r$}
-\end{prooftree}
-
-\begin{prooftree}
- \AxiomC{$\Gamma(i_l) = \Gamma(i_r) = i$}
- \AxiomC{$\Gamma, \Delta \vdash r_l \merge r_r = r$}
- \RightLabel{\textsc{InsSame}}
- \BinaryInfC{$\Gamma, \Delta \vdash (\mathul{i_l} :: r_l) \merge (\mathul{i_r} :: r_r) = \mathul{i} :: r$}
-\end{prooftree}
-
-\begin{prooftree}
- \AxiomC{$\Gamma, \Delta \vdash r_l \merge r_r = r$}
- \RightLabel{\textsc{OrdConfl}}
- \UnaryInfC{$\Gamma, \Delta \vdash (\mathul{i_l} :: r_l) \merge (\mathul{i_r} :: r_r) = \OrdConflict([\Gamma(i_l), \Gamma(i_r)]) :: r$}
-\end{prooftree}
-
-\begin{prooftree}
- \AxiomC{$s_r \neq \mathul{\cdot}$}
- \AxiomC{$s_r \neq \OrdConflict(\cdot)$}
- \AxiomC{$\Gamma, \Delta \vdash r_l \merge (s_r :: r_r) = r$}
- \RightLabel{\textsc{OrdConflBefore}}
- \TrinaryInfC{$\Gamma, \Delta \vdash (\OrdConflict(i_l) :: r_l) \merge (s_r :: r_r) = \OrdConflict(\Gamma(i_l)) :: r$}
-\end{prooftree}
-
-\begin{prooftree}
- \AxiomC{$\Gamma, \Delta \vdash r_l \merge r_r = r$}
- \RightLabel{\textsc{OrdConflPush}}
- \UnaryInfC{$\Gamma, \Delta \vdash (\mathul{i_l} :: r_l) \merge (\OrdConflict(i_r) :: r_r) = \OrdConflict(\Gamma(i_l) :: \Gamma(i_r)) :: r$}
-\end{prooftree}
-
-\begin{prooftree}
- \AxiomC{$\Gamma, \Delta \vdash r_l \merge r_r = r$}
- \RightLabel{\textsc{OrdConflMerge}}
- \UnaryInfC{$\Gamma, \Delta \vdash (\OrdConflict(i_l) :: r_l) \merge (\OrdConflict(i_r) :: r_r) = \OrdConflict(\Gamma(i_l) \mathbin{@} \Gamma(i_r)) :: r$}
-\end{prooftree}
-
-\paragraph{Inclusion of insertion inside a deletion}\phantom{ }
-
-\noindent
-\begin{minipage}{.49\textwidth}
-\begin{prooftree}
- \AxiomC{$\overrightarrow{\Gamma \vdash i \subset d = d'}$}
- \RightLabel{\textsc{SynIncl}}
- \UnaryInfC{$\Gamma \vdash S(\overrightarrow{i}) \subset S^c(\overrightarrow{d}) = S^c(\overrightarrow{d'})$}
-\end{prooftree}
-
-\begin{prooftree}
- \AxiomC{$\Gamma(\alpha)^{c \cup c'} = \Gamma(i)^c$}
- \RightLabel{\textsc{MvIncl}}
- \UnaryInfC{$\Gamma \vdash i \subset \alpha = \alpha$}
-\end{prooftree}
-\end{minipage}\hfill
-\begin{minipage}{.49\textwidth}
-\begin{prooftree}
- \AxiomC{$d \neq \alpha$}
- \AxiomC{$d \neq S(\cdot)$}
- \RightLabel{\textsc{SynNotIncl}}
- \BinaryInfC{$\Gamma \vdash S(\cdot) \not\subset d$}
-\end{prooftree}
-
-\begin{prooftree}
- \AxiomC{$d \neq \alpha$}
- \AxiomC{$i \neq S(\cdot)$}
- \RightLabel{\textsc{InsNotIncl}}
- \BinaryInfC{$\Gamma \vdash i \not\subset d$}
-\end{prooftree}
-\end{minipage}
-
-\begin{prooftree}
- \AxiomC{$\Gamma(\alpha) = \top$}
- \RightLabel{\textsc{MvConfl}}
- \UnaryInfC{$\Gamma \vdash i \subset \alpha = \MvConflict(\alpha, \alpha, i)$}
-\end{prooftree}
-
-\begin{prooftree}
- \AxiomC{$\Gamma(\alpha) = \top$}
- \RightLabel{\textsc{MvConflPush}}
- \UnaryInfC{$\Gamma \vdash i \subset \MvConflict(\alpha, d, i') = \MvConflict(\alpha, d, i \vee i')$}
-\end{prooftree}
-
-\paragraph{Coherence with $\Gamma$ of kept deletion trees}\phantom{ }
-
-\noindent\begin{minipage}{0.49\textwidth}
-\begin{prooftree}
- \AxiomC{$\overrightarrow{\Gamma \vdash d}$}
- \RightLabel{\textsc{KeptSyn}}
- \UnaryInfC{$\Gamma \vdash S(\overrightarrow{d})$}
-\end{prooftree}
-\end{minipage}\hfill
-\begin{minipage}{0.49\textwidth}
-\begin{prooftree}
- \AxiomC{$\Gamma(\alpha) = \top$}
- \AxiomC{$\Gamma \vdash d$}
- \RightLabel{\textsc{KeptMvConfl}}
- \BinaryInfC{$\Gamma \vdash \MvConflict(\alpha, d, i)$}
-\end{prooftree}
-\end{minipage}
-
-\begin{prooftree}
- \AxiomC{$\Gamma(\alpha) \in \{ \oplus(\Delta(\alpha)), \top \}$}
- \RightLabel{\textsc{KeptMv}}
- \UnaryInfC{$\Gamma \vdash \alpha$}
-\end{prooftree}
-
-Where $\oplus$ is a function transposing a deletion tree to an insertion tree by passing through each meta-variable conflict so that $\oplus(\MvConflict(\alpha, d, i)) = \oplus(d)$. It also replace every color by white.
-
-\paragraph{Deletion intersection}\phantom{ }
-
-\noindent\begin{minipage}{0.49\textwidth}
-\begin{prooftree}
- \AxiomC{$\overrightarrow{\Delta \vdash d_l \wedge d_r = d}$}
- \RightLabel{\textsc{SameSyn}}
- \UnaryInfC{$\Delta \vdash S^{c_l}(\overrightarrow{d_l}) \wedge S^{c_r}(\overrightarrow{d_r}) = S^{c_l \cup c_r}(\overrightarrow{d})$}
-\end{prooftree}
-
-\begin{prooftree}
- \AxiomC{}
- \RightLabel{\textsc{SameMv}}
- \UnaryInfC{$\Delta \vdash \alpha^{c_l} \wedge \alpha^{c_r} = \Delta(\alpha)^{c_l \cup c_r}$}
-\end{prooftree}
-\end{minipage}\hfill
-\begin{minipage}{0.49\textwidth}
-\begin{prooftree}
- \AxiomC{$\Delta \vdash \Delta(\alpha) \wedge d_r = \Delta(\alpha)$}
- \RightLabel{\textsc{MvLeft}}
- \UnaryInfC{$\Delta \vdash \alpha^{c_l} \wedge d_r^{c_r} = \Delta(\alpha)^{c_l \cup c_r}$}
-\end{prooftree}
-
-\begin{prooftree}
- \AxiomC{$\Delta \vdash \Delta(\alpha) \wedge d_l = \Delta(\alpha)$}
- \RightLabel{\textsc{MvRight}}
- \UnaryInfC{$\Delta \vdash d_l^{c_l} \wedge \alpha^{c_r} = \Delta(\alpha)^{c_l \cup c_r}$}
-\end{prooftree}
-\end{minipage}
-
-\begin{prooftree}
- \AxiomC{$\Delta \vdash d_l \wedge d_r = d$}
- \RightLabel{\textsc{MvConflLeft}}
- \UnaryInfC{$\Delta \vdash \MvConflict(\alpha, d_l^{c_l}, i) \wedge d_r^{c_r} = \MvConflict(\alpha, d^{c_l \cup c_r}, \Gamma(i))$}
-\end{prooftree}
-
-\begin{prooftree}
- \AxiomC{$\Delta \vdash d_l \wedge d_r = d$}
- \RightLabel{\textsc{MvConflRight}}
- \UnaryInfC{$\Delta \vdash d_l^{c_l} \wedge \MvConflict(\alpha, d_r^{c_r}, i) = \MvConflict(\alpha, d^{c_l \cup c_r}, \Gamma(i))$}
-\end{prooftree}
-
-\paragraph{Simplification of insertion union}
-
-\begin{prooftree}
- \AxiomC{$\Gamma(i_l)^{c_l} = \Gamma(i_r)^{c_r} = i$}
- \RightLabel{\textsc{SameIns}}
- \UnaryInfC{$\Gamma \vdash i_l \vee i_r = i^{c_l \cup c_r}$}
-\end{prooftree}
-
-\begin{prooftree}
- \AxiomC{$\overrightarrow{\Gamma \vdash i_l \vee i_r = i}$}
- \RightLabel{\textsc{InsSyn}}
- \UnaryInfC{$\Gamma \vdash S^{c_l}(\overrightarrow{i_l}) \vee S^{c_r}(\overrightarrow{i_r}) = S^{c_l \cup c_r}(\overrightarrow{i})$}
-\end{prooftree}
-
-\begin{prooftree}
- \AxiomC{}
- \RightLabel{\textsc{InsConfl}}
- \UnaryInfC{$\Gamma \vdash i_l \vee i_r = \InsConflict(\Gamma(i_l), \Gamma(i_r))$}
-\end{prooftree}
+\paragraph{Color propagation}
+While merging, we propagate the colors that are on the input nodes to the output. To do so we follow the discipline described in Section~\ref{sec:colors}, without any difficulties. When code replace a meta-variable because of inlining, it keeps its original color but is now under an insertion context that also have the color of the original meta-variable. By color composition rule, this is the only way to create black color during the syntactic phase. One could notice that meta-variable inlining will often create black colors that we want to avoid. This is intended as color ambiguities are a lot easier to resolve than syntactic conflicts.
 
 \subsubsection{Algorithm for merging differences}
+\label{sec:syntactic_merge_algo}
 
-The above specification is telling what a merged version must look
-like but does not tell us how to compute this merged version. Simply
-following the rules is not enough, because we have two oracles
-$\Gamma$ and $\Delta$ to infer. Moreover, for $\Gamma$ there is a
-priori several possibilities \yrg{Why? Give examples.}. Hopefully, we
-can easily distinguish one that will minimize the number of conflicts
-generated.~\yrg{Are you sure? Can you explain why? Since there is no
-  proof of this fact, you should probably weaken a little bit your
-  assertions.} We want a valid $\Gamma$ that minimize the number of
-meta-variables associated to $\top$.~\yrg{Why?}
-
-From a high level point of view, the merging algorithm follows these steps:
-\begin{itemize}
-
+\gb{Cette section reste très technique, mais je ne pense pas pouvoir y échapper...}
+Following the principles exposed above, our algorithm follows these steps:
+\begin{enumerate}
  \item Ensure that all the meta-variables used in both programs are
-   disjoint by alpha-renaming whenever necessary.~\yrg{Why?}
+   disjoint by alpha-renaming whenever necessary. This prevent merging different similarly named meta-variables that correspond to different subtrees.
 
- \item Align the spines of both difference trees. This requires
-   unrolling whenever one of the difference tree still has a spine
-   node while the other has a difference at the same place. This step
-   also aligns the sequences and detects inserted order conflicts.
-   ~\yrg{I do not understand this. Why is this case not handled by
-   the declarative specification?}
-
- \begin{figure}[ht]
-\begin{minipage}{0.33\textwidth}
-\centering\begin{tikzpicture}
-\node[varnode] (plus) {$+$};
-\node[varnode] (x) at ($(plus)+(-0.75,-1)$) {$x$};
-\node[changenode, color=blue] (change) at ($(plus)+(2,-1.4)$) {\tikz[color=black]{
-    \node[varnode, color=blue] (del_times) {$\color{black}*$};
-    \node[varnode, color=blue] (del_y) at ($(del_times)+(-0.75,-1)$) {$\color{black}y$};
-    \node[mvnode, color=blue] (del_alpha) at ($(del_times)+(0.75,-1)$) {$\color{black}\alpha$};
-    \draw (del_times) -- (del_y);
-    \draw (del_times) -- (del_alpha);
-    
-    \node[mvnode, color=blue] (ins_alpha) at ($(del_times)!0.5!(del_alpha)+(2.5, 0)$) {$\color{black}\alpha$};
-    \node (arrow) at ($(del_times)!0.5!(del_alpha)!0.5!(ins_alpha)$) {$\rightarrow$};
-}};
-\draw (plus) -- (x);
-\draw (plus) -- (change);
-\end{tikzpicture}
-\end{minipage}\hfill
-\begin{minipage}{0.33\textwidth}
-\centering\begin{tikzpicture}
-\node[varnode] (plus) {$+$};
-\node[varnode] (x) at ($(plus)+(-0.75,-1)$) {$x$};
-\node[varnode] (times) at ($(plus)+(0.75,-1)$) {$*$};
-\node[varnode] (y) at ($(times)+(-0.75,-1)$) {$y$};
-\node[changenode] (change) at ($(times)+(1,-1)$) {\tikz{
-    \node[varnode, color=orange] (two) {$\color{black}2$};
-    \node[varnode, colorB] (z) at ($(two)+(1.5, 0)$) {$z$};
-    \node (arrow) at ($(two)!0.5!(z)$) {$\rightarrow$};
-}};
-\draw (plus) -- (x);
-\draw (plus) -- (times);
-\draw (times) -- (y);
-\draw (times) -- (change);
-\end{tikzpicture}
-\end{minipage}
-\hfill
-\begin{minipage}{0.33\textwidth}
-\centering\begin{tikzpicture}
-\node[varnode] (plus) {$+$};
-\node[varnode] (x) at ($(plus)+(-0.75,-1)$) {$x$};
-\node[changenode] (change) at ($(plus)+(2,-1.4)$) {\tikz{
-    \node[varnode] (del_times) {$\color{black}*$};
-    \node[varnode] (del_y) at ($(del_times)+(-0.5,-1)$) {$\color{black}y$};
-    \node[varnode, color=orange] (del_two) at ($(del_times)+(0.5,-1)$) {$\color{black}2$};
-    \draw (del_times) -- (del_y);
-    \draw (del_times) -- (del_two);
-    
-    \node[varnode] (ins_times) at ($(del_times)+(2.5, 0)$) {$*$};
-    \node[varnode] (ins_y) at ($(ins_times)+(-0.5,-1)$) {$y$};
-    \node[varnode, colorB] (ins_z) at ($(ins_times)+(0.5,-1)$) {$z$};
-    \draw (ins_times) -- (ins_y);
-    \draw (ins_times) -- (ins_z);
-    
-    \node (arrow) at ($($(del_times)!0.5!(del_two)$)!0.5!($(ins_times)!0.5!(ins_y)$)$) {$\rightarrow$};
-}};
-\draw (plus) -- (x);
-\draw (plus) -- (change);
-\end{tikzpicture}
-\end{minipage}
-\label{fig:spine-alignment}
-\caption{Spine alignment: We unwind the spine of the second tree producing the third in order to be aligned with first.}
-\end{figure}
-
- \yrg{Take the time to explain the figure.}
-
+ \item Align the spines of both difference trees as explained in Section~\ref{sec:merge_principles}. This step also aligns the sequences in the spine and detects insert order conflicts.
  
- \item Merge the insertion trees together. For each insertion we try
-   to inline it inside the facing deletion tree first~\yrg{Why?}. If
-   only one inlining could succeed, then we perform it, else we try to
-   merge together the insertion trees. This take the union of tints as
-   resulting color and create conflicts whenever both insertion do not
-   match. By performing inlinings, we can remember $\Gamma^*$ a map
-   form meta-variables to a list of the trees that were inlined on the
-   meta-variable.
-   \yrg{This is really technical and difficult to follow...}
-   
- \item Merge the deletion trees together. For that, we build $\Delta$
-   as we merge the sub-trees.
-   \yrg{Too succint to be understandable...}
+ \item Merge the facing insertion trees together. This can only occur when two in-tree modifications face each other: $(\change{d_l}{i_l}) \merge (\change{d_r}{i_r})$ (otherwise, insertions are processed at step 2 because they are either identical or conflict for ordering).
+ In that case try to perform inlinings of $i_l$ into $d_r$ and $i_r$ into $d_l$. If exactly one succeeds, let's say $i_l$, remember inside $d_r$ the associations $i_l$ subtree / $d_r$ meta-variable as temporarily $\MvConflict$ conflict and keep $i_r$ alone as the merged insertion. Else, recursively align $i_l$ with $i_r$, yielding $\OrdConflict(i_l, i_r)$ on (sub)nodes that were distinct.
+ 
+ To ease checking later, during this step, we keep for each meta-variable $\alpha$ a list $\Gamma^*(\alpha)$ of sub-trees that were inlined inside it, and remember which meta-variables occured in a failed inlining.
 
- \item Then we perform all the substitutions wherever there are
-   meta-variables with a replacement in $\Delta$ for deletion trees,
-   and in $\Gamma$ for insertion trees.
-   \yrg{Again, you should give more explanations.}
-\end{itemize}
+ \item Merge the facing deletion trees together. For that we align deleted trees with each other. If they do not match, we can stop here as it means that the domain intersection of inputs is empty. 
+ 
+ When we align a subtree with a meta-variable, we need later to remove the meta-variable everywhere. For that we remember $\Delta$ a map from meta-variables to deletion sub-tree replacements. If there is a subsequent alignment with a meta-variable $\alpha$ whose replacement in $\Delta$ is already filled, we continue alignment with $\Delta(\alpha)$. If we encounter $\MvConflict$ nodes, we simply traverse them.
 
-If we want to merge more than two differences, we can reapply the same
-algorithm on already merged trees, thus accumulating modifications but
-also conflicts.
-\yrg{This section is already technical enough. This remark should probably
-be done in a discussion section.}
+ \item Perform the substitutions wherever there are meta-variables with a replacement in $\Delta$ for deletion trees, and in $\Gamma$ for insertion trees. Note that some meta-variables are not removed in the merge process and therefore do not occur in $\Delta$ or $\Gamma$. We do so by browsing once again all the partially merged difference.
+ 
+ $\Gamma$ is a meta-variable replacement function computed on the fly from $\Gamma^*$. For a meta-variable $\alpha$ that never occurs in failed inlining, if all elements of $\Gamma^*(\alpha)$ are equal to the same insertion tree $i$, then $\Gamma(\alpha) = i$ else we have $\Gamma(\alpha) = \top$. Having all elements of $\Gamma^*(\alpha)$ equal means that the replacement is coherent across the various occurrences of $\alpha$. For a meta-variable that occurs in failed inlining then $\Gamma(\alpha)$ is an white insertion tree version of $\Delta(\alpha)$ when $\Gamma^*(\alpha)$ is empty and $\top$ otherwise. This makes sense because when a meta-variable is never inlined into, we should expand it in insertions as 
+ When $\Gamma(\alpha) = \top$, we never replace $\alpha$ and we keep the related $\MvConflict$ structures in deletion trees. Else, we remove these $\MvConflict$ structures as the ``conflict'' does not exist because inlining has been fully resolved.
+ 
+ Substitutions inside substitutions may be required. So we first substitute inside $\Delta$ and $\Gamma$ before replacing a meta-variable. This can lead to cycles on edge cases. We resolve cycles in $\Gamma$ as $\top$ because we want to keep conflicts on degenerate cases, and in $\Delta$ as a fresh meta-variable because we can notice that cycles only occur for meta-variables aliasing each other (otherwise only infinitely long syntax tree would be in the domain intersection).
+\end{enumerate}
 
-\yrg{You should say that the algorithm is not totally formalized yet,
-  and its proof of correctness is still far from being
-  reachable. Hence, you can also provide informal arguments, which is
-  already something.}
+This algorithm is implemented (in the repository mentionned Section~\ref{sec:codegen}) but not fully formalized yet. You can find an unfinished formal specification in Appendix~\ref{app:syntactic_merge_spec}.
 
-Before moving on to the semantic analysis, we can replace all the meta-variables and holes that are left with their associated code in the original file to produce a self-contained file.
-
-\subsection{Properties of the generated merged difference tree}
+\subsubsection{Properties of the generated merged difference tree}
 Despite the rather arbitrary choice of doing this specific syntactic
-merge, our algorithm \yrg{should eventually?} provides some good
-properties.
+merge, our algorithm should eventually provide some good
+properties. These properties are not proved, but follow from the design principles.
 
 \paragraph{Preserve common spine}
 All the nodes that are inside the spine of both commits are preserved.
 
 \paragraph{Deletion tree intersection}
-If some code is deleted in one of the commits, it must also be deleted
-in the merged result colored with at least as many tints \yrg{as
-  what?}. Moreover, if two commits delete the same code, the result
-pushes meta-variables as far as possible down the tree\yrg{ of the
-  deleted code?}.
+If some code is deleted in one of the commits with color $c$, it must also be deleted in the merged result a color $c' \supseteq c$. Moreover, if two commits delete the same code, the result
+pushes meta-variables as far as possible down the deleted tree.
 
 \paragraph{Domain}
 First, we can notice that in absence of conflicts, the domain of the
@@ -1367,7 +1021,7 @@ inputs. Mathematically, we have: $\dom(t_1 \merge t_2) = \dom(t_1)
 \cap \dom(t_2)$. This comes from spine preservation combined with
 deletion tree intersection.
 \yrg{Notice that you never formally defined the domain of the
-merged difference.}
+merged difference.}\gb{Isn't the interpretation of differences as functions from \ref{sec:diff_application} implicitly defining it?}
 
 \paragraph{Idempotence}
 $t \merge t = t$. This comes from the fact that we do not let
@@ -1399,13 +1053,23 @@ t_1$, we have $(t_1 \merge t_2)(d) = (t_1 \circ t_2)(d)$. Here the
 precondition will be true for differences without code moves. This
 means that on orthogonal changes, the merge operation is the same as
 the composition where they are both defined. \todo{Check that we
-  cannot remove the domain assumption}
+  cannot remove the domain assumption}\gb{This check is out of scope with the time I have left...}
 
 \paragraph{Compatible with inverse}
 If $d \in \dom(t_1^{-1} \circ (t_1 \merge t_2))$, then $(t_1^{-1}
 \circ (t_1 \merge t_2))(d) = t_2(d)$. Note here that inverse is
 defined for differences without colors, so the equality holds only
-after removing all colors from $t_1$ and $t_2$.
+after removing all colors from $t_1$ and $t_2$. This is less powerful as one may think, because often, $\dom(t_1^{-1} \circ (t_1 \merge t_2))$ will be empty.
+
+\subsection{Self-contained difference}
+
+If we want to merge more than two differences, we can reapply the same
+algorithm on already merged trees, thus accumulating modifications but
+also conflicts.
+
+In a setup where all commits come from a common base, when all relevant commits are accumulated and before moving on to the semantic analysis, we replace all the meta-variables and holes that are left in the merged difference with their associated code in the common base to produce a self-contained file. This pseudo-applied difference, allows us to retrieve both the base code and the merged code but also keeps the colors and the position of the changes. Therefore it is a good input format for the semantic analysis.
+
+\todo{Grammar of this format if space is available. I doubt about this...}
 
 \section{Checking and restoring the semantic of merged program}
 \label{sec:semantic-merge}
@@ -1423,7 +1087,7 @@ fn compute_something(x: i32) -> i32 {
 \end{lstlisting}
 
 That is why after the syntax merging step, we also want to check the
-semantic of the fusion for remaining ambiguities.
+semantic of the fusion for possible ambiguities.
 
 In this section, we first will show that self-contained
 non-conflicting difference trees can be interpreted as correlation
@@ -1704,7 +1368,7 @@ colors to follow the color composition rules. \yrg{Justify!}
 
 \paragraph{Reusing rules from underlying language}
 The rules from the underlying language can be reused for instructions
-that simply expand inside the continuation. In this case, we preserve
+that only expand inside the continuation. In this case, we preserve
 the deleted/inserted/preserved status and the color on the expansion.
 
 For instance, this gives the following reduction rules (non-exhaustive list):
@@ -1919,11 +1583,11 @@ replacement.
 
 \section{Related work}
 \label{sec:related-work}
-\todo{Write this section}
+\todo{Write this}
 
 \yrg{You should add a section about the implementation, or at the very least,
 a reference to the tool's git repository with a clear description of what it
-does.}
+does.}\gb{I talk about it in Section~\ref{sec:codegen} now, I really have no space for a real implementation section}
 
 \begin{appendices}
 \section{Specification of difference application}
@@ -2023,6 +1687,356 @@ syn_codegen! {
 \end{lstlisting}
 
 \yrg{Please explain/comment this code snippet!}
+\todo{Change the snippet}
+
+\section{Specification of the difference merging algorithm}
+\label{app:syntactic_merge_spec}
+
+The difference merging algorithm is defined modulo two replacement
+functions $\Gamma$ and $\Delta$ from meta-variables to respectively
+insertion and deletion trees, that are heavily constrained and in
+practice inferred during the merge as seen in Section~\ref{sec:syntactic_merge_algo}.
+
+The specification is based on several judgements:
+\begin{itemize}
+ \item The main one $\Gamma, \Delta \vdash t_l \merge t_r = t$ states that under meta-variable replacements $\Gamma$ and $\Delta$ the syntactic merge of $t_l$ and $t_r$ is well defined and has the output $t$. This declines for difference trees and sequences. 
+ \item $\Gamma \vdash i \subset d = d'$ means that under replacements $\Gamma$, $i$ can be inlined into $d$ forming the deletion tree $d'$. Its negative counterpart is $\Gamma \vdash i \not\subset d$. 
+ \item $\Gamma \vdash d$ means that if nothing is inlined inside, $d$ is compatible with replacements in $\Gamma$.
+ \item $\Delta \vdash d_l \wedge d_r = d$, means that under replacements $\Delta$, $d_l$ and $d_r$ can be merged into a deletion tree $d$ representing the intersection of the trees accepted by $d_l$ and $d_r$.
+ \item $\Gamma \vdash i_l \vee i_r = i$, means that under replacements $\Gamma$, $i_l$ and $i_r$ can be merged into insertion tree $i$.
+\end{itemize}
+Besides, this section follows the same notations as Appendix~\ref{app:diff_application_spec}.
+
+\yrg{This will take you some time but it is mandatory to:
+(i) enumerate and explain each judgment and how it is read ;
+(ii) give some informal explanation for each rule.}\gb{(i) done; (ii) probably too long for the time I have left given the fact that it is ``only'' an Appendix now that ``may or may not be read''}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma, \Delta \vdash t_r \merge t_l = t$}
+ \RightLabel{\textsc{Symmetry}}
+ \UnaryInfC{$\Gamma, \Delta \vdash t_l \merge t_r = t$}
+\end{prooftree}
+
+\paragraph{Merge spine nodes}
+\begin{prooftree}
+ \AxiomC{}
+ \RightLabel{\textsc{Id}}
+ \UnaryInfC{$\Gamma, \Delta \vdash t \merge \id = \Delta(\Gamma(t))$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\overrightarrow{\Gamma, \Delta \vdash t_l \merge t_r = t}$}
+ \AxiomC{$\overrightarrow{\Gamma, \Delta \vdash s_l \merge s_r = s}$}
+ \RightLabel{\textsc{Spine}}
+ \BinaryInfC{$\Gamma, \Delta \vdash S(\overrightarrow{t_l}, \overrightarrow{s_l}) \merge S(\overrightarrow{t_r}, \overrightarrow{s_r}) = S(\overrightarrow{t}, \overrightarrow{s})$}
+\end{prooftree}
+
+\newbox\boxspinenode
+\sbox\boxspinenode{$S(\overrightarrow{t}, \overrightarrow{s})$}
+\begin{prooftree}
+ \AxiomC{$\Gamma, \Delta \vdash (\change{\usebox\boxspinenode}{\usebox\boxspinenode}) \merge (\change{d_r}{i_r}) = c$}
+ \RightLabel{\textsc{Unwind}}
+ \UnaryInfC{$\Gamma, \Delta \vdash \usebox\boxspinenode \merge (\change{d_r}{i_r}) = c$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma \vdash i_l \not\subset d_r$}
+ \AxiomC{$\Gamma \vdash i_r \not\subset d_l$}
+ \AxiomC{$\Gamma \vdash d_l$}
+ \AxiomC{$\Gamma \vdash d_r$}
+ \RightLabel{\textsc{ChNoInl}}
+ \QuaternaryInfC{$\Gamma, \Delta \vdash (\change{d_l}{i_l}) \merge (\change{d_r}{i_r}) = (\change{d_l \wedge d_r}{i_l \vee i_r})$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma \vdash i_l \subset d_r = d'$}
+ \AxiomC{$\Gamma \vdash i_r \not\subset d_l$}
+ \AxiomC{$\Gamma \vdash d_l$}
+ \RightLabel{\textsc{ChOneInl}}
+ \TrinaryInfC{$\Gamma, \Delta \vdash (\change{d_l}{i_l}) \merge (\change{d_r}{i_r}) = (\change{d' \wedge d_l}{\Gamma(i_r)})$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma \vdash i_l \subset d_r$}
+ \AxiomC{$\Gamma \vdash i_r \subset d_l$}
+ \AxiomC{$\Gamma \vdash d_l$}
+ \AxiomC{$\Gamma \vdash d_r$}
+ \RightLabel{\textsc{ChBothInl}}
+ \QuaternaryInfC{$\Gamma, \Delta \vdash (\change{d_l}{i_l}) \merge (\change{d_r}{i_r}) = (\change{d_l \wedge d_r}{i_l \vee i_r})$}
+\end{prooftree}
+
+\paragraph{Merge sequence edit scripts (except insertions)}
+\begin{prooftree}
+ \AxiomC{}
+ \RightLabel{\textsc{EmptySeq}}
+ \UnaryInfC{$\Gamma, \Delta \vdash [] \merge [] = []$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma, \Delta \vdash t_l \merge t_r = t$}
+ \AxiomC{$\Gamma, \Delta \vdash r_l \merge r_r = r$}
+ \RightLabel{\textsc{BothZip}}
+ \BinaryInfC{$\Gamma, \Delta \vdash (t_l :: r_l) \merge (t_r :: r_r) = t :: r$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma \vdash d_l$}
+ \AxiomC{$\Gamma \vdash d_r$}
+ \AxiomC{$\Gamma, \Delta \vdash r_l \merge r_r = r$}
+ \RightLabel{\textsc{BothDel}}
+ \TrinaryInfC{$\Gamma, \Delta \vdash (\mathst{d_l} :: r_l) \merge (\mathst{d_r} :: r_r) = \mathst{d_l \wedge d_r} :: r$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$t_r = \change{d_r}{i_r}$}
+ \AxiomC{$\Gamma \vdash i_r \subset d_l = d'$}
+ \AxiomC{$\Gamma \vdash d_r$}
+ \AxiomC{$\Gamma, \Delta \vdash r_l \merge r_r = r$}
+ \RightLabel{\textsc{DelZipInline}}
+ \QuaternaryInfC{$\Gamma, \Delta \vdash (\mathst{d_l} :: r_l) \merge (t_r :: r_r) = \mathst{d' \wedge d_r} :: r$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$t_r = \change{d_r}{i_r}$}
+ \AxiomC{$\Gamma \vdash i_r \not\subset d_l$}
+ \AxiomC{$\Gamma \vdash d_l$}
+ \AxiomC{$\Gamma \vdash d_r$}
+ \AxiomC{$\Gamma, \Delta \vdash r_l \merge r_r = r$}
+ \RightLabel{\textsc{DelZipConflict}}
+ \QuinaryInfC{$\Gamma, \Delta \vdash (\mathst{d_l} :: r_l) \merge (t_r :: r_r) = \DelConflict(d_l \wedge d_r, \Gamma(i_r)) :: r$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma \vdash i_l \not\subset d_r$}
+ \AxiomC{$\Gamma \vdash i_r \not\subset d_l$}
+ \AxiomC{$\Gamma \vdash d_l$}
+ \AxiomC{$\Gamma \vdash d_r$}
+ \AxiomC{$\Gamma, \Delta \vdash r_l \merge r_r = r$}
+ \RightLabel{\textsc{DelConflNoInl}}
+ \QuinaryInfC{$\Gamma, \Delta \vdash (\DelConflict(d_l, i_l) :: r_l) \merge (\DelConflict(d_r, i_r) :: r_r) = \DelConflict(d_l \wedge d_r, i_l \vee i_r) :: r$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma \vdash i_l \subset d_r = d'_r$}
+ \AxiomC{$\Gamma \vdash i_r \not\subset d_l$}
+ \AxiomC{$\Gamma \vdash d_l$}
+ \AxiomC{$\Gamma, \Delta \vdash r_l \merge r_r = r$}
+ \RightLabel{\textsc{DelConflOneInl}}
+ \QuaternaryInfC{$\Gamma, \Delta \vdash (\DelConflict(d_l, i_l) :: r_l) \merge (\DelConflict(d_r, i_r) :: r_r) = \DelConflict(d_l \wedge d'_r, \Gamma(i_r)) :: r$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma \vdash i_l \subset d_r = d'_r$}
+ \AxiomC{$\Gamma \vdash i_r \subset d_l = d'_l$}
+ \AxiomC{$\Gamma, \Delta \vdash r_l \merge r_r = r$}
+ \RightLabel{\textsc{DelConflBothInl}}
+ \TrinaryInfC{$\Gamma, \Delta \vdash (\DelConflict(d_l, i_l) :: r_l) \merge (\DelConflict(d_r, i_r) :: r_r) = \mathst{d'_l \wedge d'_r} :: r$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$t_r = \change{d_r}{i_r}$}
+ \AxiomC{$\Gamma, \Delta \vdash (\DelConflict(d_l, i_l) :: r_l) \merge (\DelConflict(d_r, i_r) :: r_r) = r$}
+ \RightLabel{\textsc{DelConflZip}}
+ \BinaryInfC{$\Gamma, \Delta \vdash (\DelConflict(d_l, i_l) :: r_l) \merge (t_r :: r_r) = r$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma \vdash i_l \not\subset d_r$}
+ \AxiomC{$\Gamma \vdash d_r$}
+ \AxiomC{$\Gamma \vdash d_l$}
+ \AxiomC{$\Gamma, \Delta \vdash r_l \merge r_r = r$}
+ \RightLabel{\textsc{DelConflDelNoInl}}
+ \QuaternaryInfC{$\Gamma, \Delta \vdash (\DelConflict(d_l, i_l) :: r_l) \merge (\mathst{d_r} :: r_r) = \DelConflict(d_l \wedge d_r, \Gamma(i_l)) :: r$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma \vdash i_l \subset d_r = d'_r$}
+ \AxiomC{$\Gamma \vdash d_l$}
+ \AxiomC{$\Gamma, \Delta \vdash r_l \merge r_r = r$}
+ \RightLabel{\textsc{DelConflDelInl}}
+ \TrinaryInfC{$\Gamma, \Delta \vdash (\DelConflict(d_l, i_l) :: r_l) \merge (\mathst{d_r} :: r_r) = \mathst{d_l \wedge d'_r} :: r$}
+\end{prooftree}
+
+\paragraph{Merge insertions in sequence edit scripts}
+
+\begin{prooftree}
+ \AxiomC{$s_r \neq \mathul{\cdot}$}
+ \AxiomC{$s_r \neq \OrdConflict(\cdot)$}
+ \AxiomC{$\Gamma, \Delta \vdash r_l \merge (s_r :: r_r) = r$}
+ \RightLabel{\textsc{InsBefore}}
+ \TrinaryInfC{$\Gamma, \Delta \vdash (\mathul{i_l} :: r_l) \merge (s_r :: r_r) = \mathul{\Gamma(i_l)} :: r$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma, \Delta \vdash r_l \merge [] = r$}
+ \RightLabel{\textsc{InsEnd}}
+ \UnaryInfC{$\Gamma, \Delta \vdash (\mathul{i_l} :: r_l) \merge [] = \mathul{\Gamma(i_l)} :: r$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma(i_l) = \Gamma(i_r) = i$}
+ \AxiomC{$\Gamma, \Delta \vdash r_l \merge r_r = r$}
+ \RightLabel{\textsc{InsSame}}
+ \BinaryInfC{$\Gamma, \Delta \vdash (\mathul{i_l} :: r_l) \merge (\mathul{i_r} :: r_r) = \mathul{i} :: r$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma, \Delta \vdash r_l \merge r_r = r$}
+ \RightLabel{\textsc{OrdConfl}}
+ \UnaryInfC{$\Gamma, \Delta \vdash (\mathul{i_l} :: r_l) \merge (\mathul{i_r} :: r_r) = \OrdConflict([\Gamma(i_l), \Gamma(i_r)]) :: r$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$s_r \neq \mathul{\cdot}$}
+ \AxiomC{$s_r \neq \OrdConflict(\cdot)$}
+ \AxiomC{$\Gamma, \Delta \vdash r_l \merge (s_r :: r_r) = r$}
+ \RightLabel{\textsc{OrdConflBefore}}
+ \TrinaryInfC{$\Gamma, \Delta \vdash (\OrdConflict(i_l) :: r_l) \merge (s_r :: r_r) = \OrdConflict(\Gamma(i_l)) :: r$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma, \Delta \vdash r_l \merge r_r = r$}
+ \RightLabel{\textsc{OrdConflPush}}
+ \UnaryInfC{$\Gamma, \Delta \vdash (\mathul{i_l} :: r_l) \merge (\OrdConflict(i_r) :: r_r) = \OrdConflict(\Gamma(i_l) :: \Gamma(i_r)) :: r$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma, \Delta \vdash r_l \merge r_r = r$}
+ \RightLabel{\textsc{OrdConflMerge}}
+ \UnaryInfC{$\Gamma, \Delta \vdash (\OrdConflict(i_l) :: r_l) \merge (\OrdConflict(i_r) :: r_r) = \OrdConflict(\Gamma(i_l) \mathbin{@} \Gamma(i_r)) :: r$}
+\end{prooftree}
+With $\mathbin{@}$ beeing list concatenation.
+
+\paragraph{Inclusion of insertion inside a deletion}\phantom{ }
+
+\noindent
+\begin{minipage}{.49\textwidth}
+\begin{prooftree}
+ \AxiomC{$\overrightarrow{\Gamma \vdash i \subset d = d'}$}
+ \RightLabel{\textsc{SynIncl}}
+ \UnaryInfC{$\Gamma \vdash S(\overrightarrow{i}) \subset S^c(\overrightarrow{d}) = S^c(\overrightarrow{d'})$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma(\alpha)^{c \cup c'} = \Gamma(i)^c$}
+ \RightLabel{\textsc{MvIncl}}
+ \UnaryInfC{$\Gamma \vdash i \subset \alpha = \alpha$}
+\end{prooftree}
+\end{minipage}\hfill
+\begin{minipage}{.49\textwidth}
+\begin{prooftree}
+ \AxiomC{$d \neq \alpha$}
+ \AxiomC{$d \neq S(\cdot)$}
+ \RightLabel{\textsc{SynNotIncl}}
+ \BinaryInfC{$\Gamma \vdash S(\cdot) \not\subset d$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$d \neq \alpha$}
+ \AxiomC{$i \neq S(\cdot)$}
+ \RightLabel{\textsc{InsNotIncl}}
+ \BinaryInfC{$\Gamma \vdash i \not\subset d$}
+\end{prooftree}
+\end{minipage}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma(\alpha) = \top$}
+ \RightLabel{\textsc{MvConfl}}
+ \UnaryInfC{$\Gamma \vdash i \subset \alpha = \MvConflict(\alpha, \alpha, i)$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma(\alpha) = \top$}
+ \RightLabel{\textsc{MvConflPush}}
+ \UnaryInfC{$\Gamma \vdash i \subset \MvConflict(\alpha, d, i') = \MvConflict(\alpha, d, i \vee i')$}
+\end{prooftree}
+
+\paragraph{Coherence with $\Gamma$ of kept deletion trees}\phantom{ }
+
+\noindent\begin{minipage}{0.49\textwidth}
+\begin{prooftree}
+ \AxiomC{$\overrightarrow{\Gamma \vdash d}$}
+ \RightLabel{\textsc{KeptSyn}}
+ \UnaryInfC{$\Gamma \vdash S(\overrightarrow{d})$}
+\end{prooftree}
+\end{minipage}\hfill
+\begin{minipage}{0.49\textwidth}
+\begin{prooftree}
+ \AxiomC{$\Gamma(\alpha) = \top$}
+ \AxiomC{$\Gamma \vdash d$}
+ \RightLabel{\textsc{KeptMvConfl}}
+ \BinaryInfC{$\Gamma \vdash \MvConflict(\alpha, d, i)$}
+\end{prooftree}
+\end{minipage}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma(\alpha) \in \{ \oplus(\Delta(\alpha)), \top \}$}
+ \RightLabel{\textsc{KeptMv}}
+ \UnaryInfC{$\Gamma \vdash \alpha$}
+\end{prooftree}
+
+Where $\oplus$ is a function transposing a deletion tree to an insertion tree by passing through each meta-variable conflict so that $\oplus(\MvConflict(\alpha, d, i)) = \oplus(d)$. It also replace every color by white.
+
+\paragraph{Deletion alignment}\phantom{ }
+
+\noindent\begin{minipage}{0.49\textwidth}
+\begin{prooftree}
+ \AxiomC{$\overrightarrow{\Delta \vdash d_l \wedge d_r = d}$}
+ \RightLabel{\textsc{SameSyn}}
+ \UnaryInfC{$\Delta \vdash S^{c_l}(\overrightarrow{d_l}) \wedge S^{c_r}(\overrightarrow{d_r}) = S^{c_l \cup c_r}(\overrightarrow{d})$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{}
+ \RightLabel{\textsc{SameMv}}
+ \UnaryInfC{$\Delta \vdash \alpha^{c_l} \wedge \alpha^{c_r} = \Delta(\alpha)^{c_l \cup c_r}$}
+\end{prooftree}
+\end{minipage}\hfill
+\begin{minipage}{0.49\textwidth}
+\begin{prooftree}
+ \AxiomC{$\Delta \vdash \Delta(\alpha) \wedge d_r = \Delta(\alpha)$}
+ \RightLabel{\textsc{MvLeft}}
+ \UnaryInfC{$\Delta \vdash \alpha^{c_l} \wedge d_r^{c_r} = \Delta(\alpha)^{c_l \cup c_r}$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Delta \vdash \Delta(\alpha) \wedge d_l = \Delta(\alpha)$}
+ \RightLabel{\textsc{MvRight}}
+ \UnaryInfC{$\Delta \vdash d_l^{c_l} \wedge \alpha^{c_r} = \Delta(\alpha)^{c_l \cup c_r}$}
+\end{prooftree}
+\end{minipage}
+
+\begin{prooftree}
+ \AxiomC{$\Delta \vdash d_l \wedge d_r = d$}
+ \RightLabel{\textsc{MvConflLeft}}
+ \UnaryInfC{$\Delta \vdash \MvConflict(\alpha, d_l^{c_l}, i) \wedge d_r^{c_r} = \MvConflict(\alpha, d^{c_l \cup c_r}, \Gamma(i))$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\Delta \vdash d_l \wedge d_r = d$}
+ \RightLabel{\textsc{MvConflRight}}
+ \UnaryInfC{$\Delta \vdash d_l^{c_l} \wedge \MvConflict(\alpha, d_r^{c_r}, i) = \MvConflict(\alpha, d^{c_l \cup c_r}, \Gamma(i))$}
+\end{prooftree}
+
+\paragraph{Insertion alignment}
+
+\begin{prooftree}
+ \AxiomC{$\Gamma(i_l)^{c_l} = \Gamma(i_r)^{c_r} = i$}
+ \RightLabel{\textsc{SameIns}}
+ \UnaryInfC{$\Gamma \vdash i_l \vee i_r = i^{c_l \cup c_r}$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\overrightarrow{\Gamma \vdash i_l \vee i_r = i}$}
+ \RightLabel{\textsc{InsSyn}}
+ \UnaryInfC{$\Gamma \vdash S^{c_l}(\overrightarrow{i_l}) \vee S^{c_r}(\overrightarrow{i_r}) = S^{c_l \cup c_r}(\overrightarrow{i})$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{}
+ \RightLabel{\textsc{InsConfl}}
+ \UnaryInfC{$\Gamma \vdash i_l \vee i_r = \InsConflict(\Gamma(i_l), \Gamma(i_r))$}
+\end{prooftree}
 
 \end{appendices}
 \end{document}
