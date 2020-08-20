@@ -674,7 +674,7 @@ We call ``spine'' the merged part of the difference tree. Figure~\ref{fig:spine_
 \label{fig:metavar_elision}
 \end{figure}
 
-Figure~\ref{fig:metavar_elision} illustrate such an ellision for a change where the programmer just transformed a $+$ into a $-$. The subexpression $(2*x)$ is elided as $\alpha$ and the subexpression $x$ is elided as $\beta$, therefore the result only talks about the operator modification, and is a more generic change.
+Figure~\ref{fig:metavar_elision} illustrate such an elision for a change where the programmer just transformed a $+$ into a $-$. The subexpression $(2*x)$ is elided as $\alpha$ and the subexpression $x$ is elided as $\beta$, therefore the result only talks about the operator modification, and is a more generic change.
 
 A given meta-variable can occur more that twice (at least once in deletion and once in insertion but maybe more). Therefore, code displacements have multiple sources and multiple targets, but a given meta-variable will always represent an identical code sub-tree. The fact that a given meta-variable can have multiple sources may seem unsatisfying, but it makes it possible to detect code displacements automatically without arbitrary choices. Moreover, thanks to that, we can easily revert a difference by simply exchanging the deleted and inserted trees.
 
@@ -812,7 +812,7 @@ To compute a syntactic difference, we take syntax trees of both the original pro
     their hash.
 
   \item If an elided node does not match an elision with the same hash
-    in the other tree, replace it by the original sub-tree. This ensures that every elided node occur at least once in both tree. The step is necessary because the subset of step 2 can contain nodes that are always below an ellided node, and therefore will not exist anymore.
+    in the other tree, replace it by the original sub-tree. This ensures that every elided node occur at least once in both tree. The step is necessary because the subset of step 2 can contain nodes that are always below an elided node, and therefore will not exist anymore.
 
   \item Merge both syntax trees into a common spine where possible (matching syntax constructors), else keep changes as two separate elided trees.
   Align sequences using recursively a dynamic algorithm minimizing the number of changed nodes of the resulting tree.
@@ -992,7 +992,7 @@ The first step of the merging algorithm aligns the common spine nodes and unwind
 
 If a difference sub-tree is aligned with an unchanged node (either $\square$ or $\change{\alpha}{\alpha}$), we keep the changed one only. This is quite an intuitive notion of combination with unchanged node yielding to the important property $t \merge \square = t$.
 
-When merging deletion trees, either both inputs agree on a common syntax node, or one of them has a meta-variable. In the latter case, we have to produce the most specific deletion tree, therefore keeping the non meta-variable sub-tree. This is the consensus between the two differences as the one with meta-variable accepts any sub-tree at this point while the other accepts only the kept one. We must remember that the meta-variable has been deleted for a more specific tree and replace its remaining occurences in deletions (always) and insertions (except in case of the inlining explained later).
+When merging deletion trees, either both inputs agree on a common syntax node, or one of them has a meta-variable. In the latter case, we have to produce the most specific deletion tree, therefore keeping the non meta-variable sub-tree. This is the consensus between the two differences as the one with meta-variable accepts any sub-tree at this point while the other accepts only the kept one. We must remember that the meta-variable has been deleted for a more specific tree and replace its remaining occurrences in deletions (always) and insertions (except in case of the inlining explained later).
 
 \gb{I probably should add an example here, but it is hard to find one that is non-conflicting, not complex and without inlining}
 
@@ -1235,7 +1235,7 @@ To define the semantics, we define the program state as a tuple
 $\rtstate{\kappa}{v}{S}$ where $\kappa$ is the continuation, $v$ the
 value of the last computed expression and $S$ the local store
 stack.
-The value of the last computed expression is needed in program states because any expression can itself be a complex branching subprogram returning the value we need to continue (as functionnal programming style requires). Instructions in continuation refer to this previous value with the pseudo-expression $\square$.
+The value of the last computed expression is needed in program states because any expression can itself be a complex branching subprogram returning the value we need to continue (as functional programming style requires). Instructions in continuation refer to this previous value with the pseudo-expression $\square$.
 When a function is called, we push a new store on top of the previous
 one. Only the topmost store can be used and updated as it
 corresponds to the stack frame of the current function.
@@ -1292,7 +1292,7 @@ From this language and its semantics, we want to define an analysis that will be
 
 To do so, we need to characterize values that are changed by the commits, and check that these are not also changed by another one, leveraging the awareness colors gathered on the code during the syntactic step.
 
-\subsubsection{A correlation oracle to syncronize original and merged programs}
+\subsubsection{A correlation oracle to synchronize original and merged programs}
 
 We cannot do this verification directly on the colored merged program because
 deleting code can also change values in imperative programs. Listing~\ref{lst:del_interference} gives a short example of a semantic ambiguity that could be missed if deleted code is ignored.
@@ -1399,7 +1399,7 @@ fn f(c: bool) -> i32 {
 \label{fig:oracle_sync_from_diff}
 \end{figure}
 
-Figure~\ref{fig:oracle_sync_from_diff} shows an example of such syncronization. Lines 2 and 4 are executed by only one program but we can resynchronize afterwards at the next spine node. As the control flow decision changes at line 5, we first let the original program execute line 8, then let the merged one execute line 6 and then resynchronize. At each step we advance in at least one of the programs, sometimes keeping the other stalled.
+Figure~\ref{fig:oracle_sync_from_diff} shows an example of such synchronization. Lines 2 and 4 are executed by only one program but we can resynchronize afterwards at the next spine node. As the control flow decision changes at line 5, we first let the original program execute line 8, then let the merged one execute line 6 and then resynchronize. At each step we advance in at least one of the programs, sometimes keeping the other stalled.
 
 To express the interleaving between two programs, and compute the
 colors of the expressions, we use the correlation oracle framework \cite{girka2017verifiable}.
@@ -1554,17 +1554,17 @@ Executing some instructions (division by zero for instance) may crash one of the
 
 At a crash in the merged program we can end the analysis as no new ambiguities will be discovered. The crash point itself may or may not be declared ambiguous depending on the color of the instruction and the operands.
 
-If the original program crashes however, we have to continue executing the merged program alone as only the effect of remaining deleted instructions is gone. To simulate that, we mark all the continuation as inserted with color white (following composition rules for already inserted instructions). The white color is chosen as we consider that fixing a crash will never break invariants of other commits. This is an assumption that might be questionned.
+If the original program crashes however, we have to continue executing the merged program alone as only the effect of remaining deleted instructions is gone. To simulate that, we mark all the continuation as inserted with color white (following composition rules for already inserted instructions). The white color is chosen as we consider that fixing a crash will never break invariants of other commits. This is an assumption that might be questioned.
 
 \paragraph{Interpreting a colored difference with this oracle formalism}
-We can interpret non-conflicting self-contained differences as code for colored diffrence oracles.
+We can interpret non-conflicting self-contained differences as code for colored difference oracles.
 Indeed, removed and inserted code directly map to removed and inserted expressions, and we only have to add a last reduction rule that splits the execution paths when needed.
 $$\rtstate{\mathst{e_d}^k \rightarrow \mathul{e_i}^k \cdot \kappa}{(v^-, v^+, c)}{S} \rightarrow \rtstate{\mathst{e_d}^k \cdot \mathul{e_i}^k \cdot \kappa}{((), (), \top)}{S}$$
 This was expected as we designed the merging algorithm and the way it propagates colors to match the semantic analysis given here.
 
 \paragraph{Soundness of the reduction rules}
 The soundness of the rules above is directly given by the interpretation of the color of a value, and therefore of an ambiguity. A value must have a given tint if and only if the corresponding commit is aware of it (or at least of all meaningful invariants linked to it) in the current program state.
-All the unforseen interactions between concurrent commits might be source of bugs, but fortunately, all of them will generate black values. This is because by definition unforseen interaction occur when either two independantly modified values are combined or newly introduced code uses independantly modified value.
+All the unforeseen interactions between concurrent commits might be source of bugs, but fortunately, all of them will generate black values. This is because by definition unforseen interaction occur when either two independently modified values are combined or newly introduced code uses independently modified value.
 
 \paragraph{Ambiguity detection}
 
@@ -1658,7 +1658,7 @@ Some more recent works (like the GumTree algorithm \cite{falleri2014fine}) wante
 
 But these untyped differences can, when applied, produce programs that do not necessarily follow the syntax of the programming language. Therefore, datatype (or syntax) driven differences were introduced. The first approach considered actions on a stack of typed sub-trees \cite{lempsink2009type}. This seems hard to work with in a merging context, but a later refinement \cite{vassena2016generic} gave a merging algorithm nonetheless but failed to give typing guarantee in the merged output. A concurrent vision lead to representing the structured changes as tree themselves \cite{miraldo2017type} with spine, sequence edit scripts and change nodes. Later refinements introduced the notion of meta-variables for dealing with moved code \cite{miraldo2019efficient}. These two last papers highly inspired our difference algorithm. However, the proposed merge algorithm in \cite{miraldo2019efficient} only works if changes are fully disjoint and needed to be heavily completed to meet our goals.
 
-Completely different studies focus on how to semantically characterize changes instead of caring about their syntax. To do so, they introduce logical frameworks that interleave the two considered programs and enable reasoning about states facing each other. Relational Hoare logic \cite{benton2004simple} is one of such framework. As it cannot prove anything on programs that do not crash at the same time and we thought that bug fixes are important changes, we preferred to use the correlation oracle formalism \cite{girka2017verifiable} developed later that address this issue. The difference language proposed along correlation oracles require manual difference labelling (and proving) and would have required a quadratic human work in the number of considered changes for implementing a merge algorithm. Therefore we chose to use the formalism without its proposed difference system.
+Completely different studies focus on how to semantically characterize changes instead of caring about their syntax. To do so, they introduce logical frameworks that interleave the two considered programs and enable reasoning about states facing each other. Relational Hoare logic \cite{benton2004simple} is one of such framework. As it cannot prove anything on programs that do not crash at the same time and we thought that bug fixes are important changes, we preferred to use the correlation oracle formalism \cite{girka2017verifiable} developed later that address this issue. The difference language proposed along correlation oracles require manual difference labeling (and proving) and would have required a quadratic human work in the number of considered changes for implementing a merge algorithm. Therefore we chose to use the formalism without its proposed difference system.
 
 Prior work \cite{girka2015mechanically} already used the general idea of letting a difference syntax tree drive the semantic interleaving, but did not try any kind of merging on its language specific difference language.
 
@@ -1769,7 +1769,7 @@ syn_codegen! {
 }
 \end{lstlisting}
 
-This shows how the code genarator can be used a hash-tagged family variant of the syn syntax trees. The macro call \verb$extend_family!$, is replaced by a copy of the syn type tree where some types are enriched.
+This shows how the code generator can be used a hash-tagged family variant of the syn syntax trees. The macro call \verb$extend_family!$, is replaced by a copy of the syn type tree where some types are enriched.
 For instance, all vectors of \verb$Stmt$ are replaced by vectors of \verb$HashTagged<Stmt>$. This generates a copy of the 180+ types of the syn family. Then \verb$family_impl!$ implement a trait \verb$Convert$ for the type \verb$TreeHasher$ on all pairs of enums and struct from the family variants \verb$syn$ (the default one) and \verb$self$ the one inside the current module. For instance, trait \verb$Convert<syn::Expr, hash::Expr>$ is implemented for \verb$TreeHasher$ with a simple structural recursive conversion. However, this implementation relies on non provided implementations like \verb$Convert<syn::Expr, HashTagged<hash::Expr>>$, that must be manually given because the code generator cannot guess how to convert into the type replacement.
 
 \section{Specification of the difference merging algorithm}
