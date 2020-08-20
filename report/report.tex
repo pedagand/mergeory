@@ -80,7 +80,7 @@ In software engineering, people rarely work alone on large
 projects. Therefore, quite often they want to merge their work with
 what has been done by others in the meantime.
 %
-To automate these fusions , and keep track of the changes, developers use dedicated tools named \textit{version control systems}. The most used ones are Git and Mercurial, but others exist with different approaches like Subversion (centralized, older) or Darcs and Pijul (category-based). \todo{refs}
+To automate these fusions, and keep track of the changes, developers use dedicated tools named \textit{version control systems}. The most used one nowadays is Git \cite{git}.
 
 A \textit{commit} is an atomic action of changing several source code
 files that makes sense by itself (whatever this may mean for the
@@ -109,14 +109,15 @@ code, a system like Git accepts to merge them
 automatically. Unfortunately, even if two modifications are physically
 separated, they may interact, especially when one modification breaks
 the assumptions on top of which the other has been conceived.
+We will show on running examples that this can be a source of bugs.
 
-In this work, we propose a semantically sound notion of commits 
+Instead, we want to developp a semantically sound notion of commits 
 merge which captures that kind of unforeseen interactions 
 between concurrent modifications.
 
-This can help programmers to make software with less bugs, as they will be able to trust that a merge operation will not silently introduce unwanted behaviours.
+This can help programmers to make software more robust, as they will be able to trust that a merge operation will not silently introduce unwanted behaviours.
 
-The study of the semantics of differences between two programs is not new\todo{refs?}, but some work has been done recently to introduce the notion of correlation oracle\todo{ref} that we use here. However, to my knowledge it was never applied to the specific problem of giving semantic guarantees for the merging operation in version control systems.
+The study of the semantics of differences between two programs is not new \cite{benton2004simple}, but some work has been done recently to introduce the notion of correlation oracle \cite{girka2017verifiable} that we use here. However, to my knowledge it was never applied to the specific problem of giving semantic guarantees for the merging operation in version control systems.
 
 \subsection*{Your contribution}
 
@@ -124,12 +125,8 @@ The study of the semantics of differences between two programs is not new\todo{r
 % Be careful, do \emph{not} give technical details, only rough ideas !
 % Pay a special attention to the description  of the \emph{scientific} approach.}
 
-In Section~\ref{sec:overview}, we show on a running example how a
-purely textual merge of modifications may introduce bugs. We
-illustrate how our tool capture these bugs as semantic conflicts (called ambiguities) between
-the commits. We also explain its architecture which is based on two
-main components, which also are the two main contributions of this
-work: (i) an algorithm which implements a principled notion of
+Resolving the problem by a pure semantic merging was considered hard for reasons explained in Section~\ref{sec:overview}. Therefore, we tried to split the problem, and resolve each step independantly.
+This internship propse a merging tool based on two distinct main components, which also are the two main contributions: (i) an algorithm which implements a principled notion of
 syntactic merge at the level of syntax trees (Section~\ref{sec:syntactic-merge}) ; (ii) a semantic notion of unambiguous merge
 at the level of execution traces (Section~\ref{sec:semantic-merge}).
 
@@ -139,20 +136,36 @@ at the level of execution traces (Section~\ref{sec:semantic-merge}).
 % Experiments ? Proofs ?
 % Comment the robustness of your solution: how does it rely/depend on the working assumptions ?}
 
-As we shall discuss in Section~\ref{sec:related-work}, our work
-improves on existing approaches of syntactic merge. The syntactic merge algorithm works on any language that can be parsed into a syntax tree, provide good fusion in presence of refactorings, and does never favor a commit over another. Moreover, we were able to provide a working implementation.
+Our syntactic merge algorithm works on any language that can be parsed into a syntax tree, provide good fusion in presence of refactorings, and does never favor a commit over another. As we shall discuss in Section~\ref{sec:related-work}, it improves on existing approaches of syntactic merge. Moreover, we were able to provide a working implementation that behaves as expected on tested cases, and provides provenance color annotations for the next step.
+Section~\ref{sec:merge_properties} shows additionnal good properties that should derive from the exposed design principles but whose proof is left for future work.
 
-For semantic guarantees, we offer a practical, expressive, and original notion of unambiguous merge. This part is specific to a particular programming language, but we demonstrate how it should work for languages that feature both functionnal and imperative features, to make it easily adaptable.
+For semantic guarantees, we offer a practical, expressive, and original notion of unambiguous merge, and derive a runtime analysis for checking it. We ensure that whenever a commit break invariants on which another commit relied on, the user will be forced to take action. As we do not have much information about the intentions of changes, this can generate too much conflicts, but always enough. We then provide a simple way of patching the merged program to resolve these conflicts.
+Unfortunately, this part is specific to a particular programming language, but we demonstrate how it should work for languages that provide both functionnal and imperative features, to make it easily adaptable.
 
 \subsection*{Summary and future work}
 
-\todo{What is next ? In which respect is your approach general ?
-What did your contribution bring to the area ?
-What should be done now ?
-What is the good \emph{next} question ?}
+% \todo{What is next ? In which respect is your approach general ?
+% What did your contribution bring to the area ?
+% What should be done now ?
+% What is the good \emph{next} question ?}
+
+At the end of the internship, we have developped a new merging process that produces a non-surprising syntactic fusion of changes and then forces programmers to review all potential bad interactions between concurrent commits. The syntactic merging part is supported by an implementation.
+
+This might become a starting point for further works that also try to avoid unintended behaviour introduction during code merging.
+
+However, our approach still need improvements to provide more theoretical guarantees, and be usable in the real world. 
+
+For the syntactic merging algorithm a lot of properties remain to be proven. The given algorithm does not come yet with a proof that it respect the intended specifications; specifications that might themselves need some improvements. 
+Moreover, the average user feelings about the produced merged differences have not been tested, and better merging paradigms can still be found.
+
+On the semantic check part, what we give is only a theoretical foundation because runtime trace analysis cannot reasonnably be run on all possible inputs to give full program guarantees. However, our work opens the way for a static analysis that check our runtime properties to remove this flaw, and finally provide a running implementation of the system.
+
+For the conflict and ambiguity resolution system, the tactics given in this paper are rather weak and low-level, pushing all the checking burden on the programmer. More automated strategies could be added to ease the workflow and maybe even remove most false-positive ambiguities.
 
 \section{Overview}
 \label{sec:overview}
+
+This section show on a running example how a purely textual merge of modifications may introduce bugs. Then, we will explain the architecture of our tool which is based on two main components and illustrate how it captures these bugs as semantic conflicts (called ambiguities) between the commits.
 
 \subsection{Problems with textual line-based approach}
 Merging changes while preserving the original intent of the
@@ -443,7 +456,7 @@ Trying to merge together two nodes in the syntax tree is easy, we simply need to
 
 However, this approach shows its limits in presence of sequences ({\it e.g.} sequences of functions or sequences of statements). If we consider that the sequence constructor contains its size, sequences with only one element inserted or removed will have all their common elements still written twice.
 Otherwise, if we encode the sequence with Cons/Nil constructors (like OCaml's list), elements will always be inserted/removed at the end, almost always generating sub-optimal differences.
-Therefore, we use sequence edit scripts \yrg{ref?} \gb{I am not refining sequence edit script themselves, the algorithm to find them however is a refinement of LCS.} instead as the output of a merge operation on two sequences.
+Therefore, we use sequence edit scripts \cite[§3.Alignment]{miraldo2017type} \gb{I am not refining sequence edit script themselves, the algorithm to find them however is a refinement of LCS.} instead as the output of a merge operation on two sequences.
 
 We call ``spine'' the merged part of the difference tree. Figure~\ref{fig:spine_seq_align} gives an example of such spine.
 
@@ -719,15 +732,15 @@ expansive part of the algorithm is computing sequence alignments, all the rest i
 
 It is actually computing a difference between original and modified programs because we start from the trivial difference $\change{d}{i}$ and every step except step 3 does not lose any information. Step 3 elisions do not cause any trouble because step 4 only keep elisions that can be completed in presence of the source (or modified) program. By losing information, step 3 actually widens the domain of the final difference but does not change the result on tree $d$.
 
-\subsubsection{Practical considerations: how to extend a syntax tree}
+\subsection{Implementation considerations: how to extend a syntax tree}
 \label{sec:codegen}
 Implementing an algorithm that requires extending a syntax tree can be tedious in practice because we want to attach new information and/or create holes on a fixed structure while keeping the typedness of the tree.
 
-Along this paper, I give a Rust implementation for the syntax difference and merging algorithm of Rust programs. The parser used (the syn\yrg{Ref?} crate) uses more than 180 types in its syntax trees, so manual extension was not an option.
+Along this paper, I give a Rust implementation for the syntax difference and merging algorithm of Rust programs. The parser used (the syn crate \cite{syn-crate}) uses more than 180 types in its syntax trees, so manual extension was not an option.
 
 The solution I give is based on a somehow generic code generation system (implemented as procedural macro). The idea is that we want to add the ability to extend a type family of mutually recursive sum of products (nested enums and structs in Rust terminology) by systematically changing some types by others, thus generating a new family variant. Then, we also make a code generator to traverse or convert between variants of the same family. After generation, we only have to write manual code once for each new capability of the family variants.
 
-See Appendix~\ref{app:codegen} for an example of how to use such code generator in practice. The code of the full project (including the code generator and the merging algorithm) can be found on \url{https://gaufre.informatique.univ-paris-diderot.fr/Bertholon/mergeory}.
+See Appendix~\ref{app:codegen} for an example of how to use such code generator in practice. The code of the full project (including the code generator and the merging algorithm) can be found at \url{https://gaufre.informatique.univ-paris-diderot.fr/Bertholon/mergeory}.
 
 Note that for having a production ready tool, the current parser is
 not adapted, as it systematically forgets the comments inside source
@@ -1003,6 +1016,7 @@ Following the principles exposed above, our algorithm follows these steps:
 This algorithm is implemented (in the repository mentionned Section~\ref{sec:codegen}) but not fully formalized yet. You can find an unfinished formal specification in Appendix~\ref{app:syntactic_merge_spec}.
 
 \subsubsection{Properties of the generated merged difference tree}
+\label{sec:merge_properties}
 Despite the rather arbitrary choice of doing this specific syntactic
 merge, our algorithm should eventually provide some good
 properties. These properties are not proved, but follow from the design principles.
@@ -1091,7 +1105,7 @@ semantic of the fusion for possible ambiguities.
 
 In this section, we first will show that self-contained
 non-conflicting difference trees can be interpreted as correlation
-oracles~\yrg{Ref} between the original code and a merged candidate,
+oracles~\cite{girka2017verifiable} between the original code and a merged candidate,
 that is specific relation between the two programs' execution
 traces. Secondly, we show that we can derive a runtime analysis that
 ensures that there is no unresolved ambiguity introduced by the fusion
@@ -1106,7 +1120,7 @@ environment assumptions are preserved.
 \subsection{Operational semantics of the studied language}
 
 In this paper, we will use a simplified version of the Rust
-programming language~\yrg{Ref}. We chose this language because it
+programming language~\cite{rust-lang}. We chose this language because it
 allows us to explore both functional and imperative coding styles.  We ignore all the borrowing and trait systems that could be difficult to understand for a reader without any Rust background.
 
 \newcommand{\ident}{\mathbb{I}}
@@ -1245,8 +1259,7 @@ decision, we know precisely where it is located in the spine allowing
 to resynchronize easily when programs start to behave similarly again.
 
 To express the interleaving between two programs, and compute the
-colors of the expressions, we use the correlation oracle framework
-developed by T. Girka\todo{ref}.
+colors of the expressions, we use the correlation oracle framework \cite{girka2017verifiable}.
 
 \begin{figure}[ht]
 \begin{minipage}{.34\textwidth}
@@ -1583,13 +1596,29 @@ replacement.
 
 \section{Related work}
 \label{sec:related-work}
-\todo{Write this}
+Trying to give good representation for program differences is a well studied subject. Historically, we use algorithms solving longest common subsequence \cite{wagner1974string} and compare files line by line (the well known diff Unix tool \cite{hunt1976algorithm} use this approach).
+Subsequent works studied how to get more structured differences by using trees instead of lines, reducing to the tree edit distance problem \cite{bille2005survey} instead.
+Some more recent works (like the GumTree algorithm \cite{falleri2014fine}) wanted to take into account the fact that code can be moved around by programmers. A later refinement showed that even copy-paste-modify interactions can be captured \cite{higo2017generating}.
+
+But these untyped differences can, when applied, produce programs that do not necessarily follow the syntax of the programming language. Therefore, datatype (or syntax) driven differences were introduced. The first approach considered actions on a stack of typed sub-trees \cite{lempsink2009type}. This seems hard to work with in a merging context. A concurrent vision lead to representing the structured changes as tree themselves \cite{miraldo2017type} with spine, sequence edit scripts and change nodes. Later refinements introduced the notion of meta-variables for dealing with moved code \cite{miraldo2019efficient}. These two last papers highly inspired our difference algorithm. However, the proposed merge algorithm in \cite{miraldo2019efficient} only works if changes are fully disjoint and needed to be heavily completed to meet our goals.
+
+\gb{Je viens de découvrir l'existance d'un papier \cite{vassena2016generic} que je n'arrive pas a télécharger même avec un proxy dans l'ENS... Apparemment il essaye de déduire un algo de fusion d'une différence similaire à \cite{lempsink2009type} qui ne marche pas si bien que ça (d'après \cite{miraldo2019efficient}). Quoi qu'il en soit vu que ça traite de fusion sur arbre syntaxique, ça ferait un très bon related work. Qu'est ce que je suis censé faire dans un cas comme ça ? Je ne vais pas citer des travaux auxquels je n'ai pas accès... Avoir le pdf pourrait régler le problème.}
+
+Completely different studies focus on how to semantically characterize changes instead of caring about their syntax. To do so, they introduce logical framworks that interleave the two considered programs and enable reasonning about states facing each other. Relational Hoare logic \cite{benton2004simple} is one of such framework. As it cannot prove anything on programs that do not crash at the same time and we thought that bugfixes are important changes, we prefered to use the correlation oracle formalism \cite{girka2017verifiable} developped later that adress this issue. The difference language proposed along correlation oracles require manual difference labelling (and proving) and would have required a quadratic human work in the number of considered changes for implementing a merge algorithm. Therefore we chose to use the formalism without its proposed difference system.
+
+Prior work \cite{girka2015mechanically} already used the general idea of letting a difference syntax tree drive the semantic interleaving, but did not try any kind of merging on its language specific difference language.
+
+Besides, the awareness color mechanism that we use in the analysis can be compared to a form of provenance analysis \cite{cheney2007provenance}. 
 
 \yrg{You should add a section about the implementation, or at the very least,
 a reference to the tool's git repository with a clear description of what it
 does.}\gb{I talk about it in Section~\ref{sec:codegen} now, I really have no space for a real implementation section}
 
 \begin{appendices}
+\renewcommand{\refname}{\section{References}}
+\bibliographystyle{plain}
+\bibliography{references}
+
 \section{Specification of difference application}
 \label{app:diff_application_spec}
 
