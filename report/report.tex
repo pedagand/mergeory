@@ -1771,8 +1771,8 @@ syn_codegen! {
 }
 \end{lstlisting}
 
-\yrg{Please explain/comment this code snippet!}
-\todo{Change the snippet}
+This shows how the code genarator can be used a hash-tagged family variant of the syn syntax trees. The macro call \verb$extend_family!$, is replaced by a copy of the syn type tree where some types are enriched.
+For instance, all vectors of \verb$Stmt$ are replaced by vectors of \verb$HashTagged<Stmt>$. This generates a copy of the 180+ types of the syn family. Then \verb$family_impl!$ implement a trait \verb$Convert$ for the type \verb$TreeHasher$ on all pairs of enums and struct from the family variants \verb$syn$ (the default one) and \verb$self$ the one inside the current module. For instance, trait \verb$Convert<syn::Expr, hash::Expr>$ is implemented for \verb$TreeHasher$ with a simple structural recursive conversion. However, this implementation relies on non provided implementations like \verb$Convert<syn::Expr, HashTagged<hash::Expr>>$, that must be manually given because the code generator cannot guess how to convert into the type replacement.
 
 \section{Specification of the difference merging algorithm}
 \label{app:syntactic_merge_spec}
