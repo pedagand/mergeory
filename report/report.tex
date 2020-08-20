@@ -80,20 +80,23 @@ In software engineering, people rarely work alone on large
 projects. Therefore, quite often they want to merge their work with
 what has been done by others in the meantime.
 %
-To automate these fusions, and keep track of the changes, developers use dedicated tools named \textit{version control systems}. The most used one nowadays is Git \cite{git}.
+To automate these fusions, and keep track of the changes, developers
+use dedicated tools named \textit{version control systems}. The most
+used one nowadays is Git \cite{git}.
 
-A \textit{commit} is an atomic action of changing several source code
-files that makes sense by itself (whatever this may mean for the
-programmer). Typical commits include refactorings, bugfixes or the
-introduction of new features.
+In the terminology of software evolution, a \textit{commit} is an
+atomic action of changing several source code files that makes sense
+by itself (whatever this may mean for the programmer). Typical commits
+include refactorings, bugfixes or the introduction of new features.
 
 Programmers make commits simultaneously, being unaware of what other
 programmers may have done at the same time. However, the final product
 is a fusion of what they all did. This space of unawareness can lead
 to subtle bugs, that cannot be seen if people only review changes and
 not the final code\footnote{Modern coding techniques involve
-  continuous integration testing \cite{fowler2006continuous} to mitigate that, but tests cases are
-  not perfect, so we want to expose another approach.}.
+  continuous integration testing \cite{fowler2006continuous} to
+  mitigate that, but tests cases are not perfect, so we want to expose
+  another approach.}.
 
 \subsection*{The research problem}
 
@@ -103,21 +106,29 @@ not the final code\footnote{Modern coding techniques involve
 % If so, why are you the first researcher in the universe who consider it ?
 % If not, why did you think that you could bring an original contribution ?}
 
-The current tools merging concurrent changes to source code are
-purely textual: as long as two modifications modify distinct lines of
+The current tools to merge concurrent changes are purely textual and
+line-oriented: as long as two modifications modify distinct lines of
 code, a system like Git accepts to merge them
 automatically. Unfortunately, even if two modifications are physically
 separated, they may interact, especially when one modification breaks
-the assumptions on top of which the other has been conceived.
-We will show on running examples that this can be a source of bugs.
+the assumptions on top of which the other has been conceived.  We will
+show on running examples that this can be a source of bugs.
 
-Instead, we want to developp a semantically sound notion of commits 
-merge which captures that kind of unforeseen interactions 
-between concurrent modifications.
+Instead, we want to develop a semantically sound notion of commits
+merge which detects that kind of unforeseen interactions between
+concurrent modifications.
 
-This can help programmers to make software more robust, as they will be able to trust that a merge operation will not silently introduce unwanted behaviours.
+This new detection of conflicts can help programmers to make software
+more robust, as they will be able to trust that a merge operation will
+not silently introduce unwanted behaviours.
 
-The study of the semantics of differences between two programs is not new \cite{benton2004simple}, but some work has been done recently to introduce the notion of correlation oracle \cite{girka2017verifiable} that we use here. However, to my knowledge it was never applied to the specific problem of giving semantic guarantees for the merging operation in version control systems.
+The study of the semantics of differences between two programs is not
+new \cite{benton2004simple}, but some work has been done recently to
+introduce the notion of correlation oracle \cite{girka2017verifiable}
+to represent a rich set of verifiable relations between reduction
+traces. However, to my knowledge, relational analysis has never been
+applied to the specific problem of giving semantic guarantees for the
+merging operation in version control systems.
 
 \subsection*{Your contribution}
 
@@ -125,10 +136,15 @@ The study of the semantics of differences between two programs is not new \cite{
 % Be careful, do \emph{not} give technical details, only rough ideas !
 % Pay a special attention to the description  of the \emph{scientific} approach.}
 
-Resolving the problem by a pure semantic merging was considered hard for reasons explained in Section~\ref{sec:overview}. Therefore, we tried to split the problem, and resolve each step independantly.
-This internship propse a merging tool based on two distinct main components, which also are the two main contributions: (i) an algorithm which implements a principled notion of
-syntactic merge at the level of syntax trees (Section~\ref{sec:syntactic-merge}) ; (ii) a semantic notion of unambiguous merge
-at the level of execution traces (Section~\ref{sec:semantic-merge}).
+Resolving the problem by a purely semantic merging was considered hard
+for reasons explained in Section~\ref{sec:overview}. Therefore, we
+tried to split the problem, and solve each step independently. This
+internship proposes a merging tool based on two distinct main
+components, which also are the two main contributions: (i) an
+algorithm which implements a principled notion of syntactic merge at
+the level of syntax trees (Section~\ref{sec:syntactic-merge}) ; (ii) a
+semantic notion of unambiguous merge at the level of execution traces
+(Section~\ref{sec:semantic-merge}).
 
 \subsection*{Arguments supporting its validity}
 
@@ -136,11 +152,28 @@ at the level of execution traces (Section~\ref{sec:semantic-merge}).
 % Experiments ? Proofs ?
 % Comment the robustness of your solution: how does it rely/depend on the working assumptions ?}
 
-Our syntactic merge algorithm works on any language that can be parsed into a syntax tree, provide good fusion in presence of refactorings, and does never favor a commit over another. As we shall discuss in Section~\ref{sec:related-work}, it improves on existing approaches of syntactic merge. Moreover, we were able to provide a working implementation that behaves as expected on tested cases, and provides provenance color annotations for the next step.
-Section~\ref{sec:merge_properties} shows additionnal good properties that should derive from the exposed design principles but whose proof is left for future work.
+Our syntactic merge algorithm works on any language that can be parsed
+into a syntax tree, provides good fusion in presence of refactorings,
+and never favors a commit over another. As we shall discuss in
+Section~\ref{sec:related-work}, it improves on existing approaches of
+syntactic merge. Moreover, we were able to provide a working
+implementation that behaves as expected on tested cases, and provides
+provenance color annotations for the next step.
+Section~\ref{sec:merge_properties} shows additional good properties
+that should derive from the exposed design principles but whose formal
+proof is left for future work.
 
-For semantic guarantees, we offer a practical, expressive, and original notion of unambiguous merge, and derive a runtime analysis for checking it. We ensure that whenever a commit break invariants on which another commit relied on, the user will be forced to take action. As we do not have much information about the intentions of changes, this can generate too much conflicts, but always enough. We then provide a simple way of patching the merged program to resolve these conflicts.
-Unfortunately, this part is specific to a particular programming language, but we demonstrate how it should work for languages that provide both functionnal and imperative features, to make it easily adaptable.
+For semantic guarantees, we offer a practical, expressive, and
+original notion of unambiguous merge, and derive a runtime analysis
+for checking it. We ensure that whenever a commit break invariants on
+which another commit relied on, the user will be forced to take
+action. As we do not have much information about the intents behind
+source code changes, this can generate many conflicts, but always
+enough. We then provide a simple way of patching the merged program to
+resolve these conflicts.  Unfortunately, this part is specific to a
+particular programming language, but we demonstrate how it should work
+for languages that provide both functional and imperative features,
+to make it easily adaptable to a large set of programming languages.
 
 \subsection*{Summary and future work}
 
@@ -149,18 +182,40 @@ Unfortunately, this part is specific to a particular programming language, but w
 % What should be done now ?
 % What is the good \emph{next} question ?}
 
-At the end of the internship, we have developped a new merging process that produces a non-surprising syntactic fusion of changes and then forces programmers to review all potential bad interactions between concurrent commits. The syntactic merging part is supported by an implementation.
+At the end of the internship, we have developped a new merging process
+that produces a non-surprising~\yrg{predictable?} syntactic fusion of
+changes and then forces programmers to review all potential bad
+interactions between concurrent commits. The syntactic merging part is
+supported by an implementation.
 
-This might become a starting point for further works that also try to avoid unintended behaviour introduction during code merging.
+This achievement could become a starting point for further work that
+also tries to avoid unintended behaviours introduced during code
+merging.
 
-However, our approach still need improvements to provide more theoretical guarantees, and be usable in the real world. 
+However, our approach still need improvements to provide more
+theoretical guarantees, and be usable in the real world.
 
-For the syntactic merging algorithm a lot of properties remain to be proven. The given algorithm does not come yet with a proof that it respect the intended specifications; specifications that might themselves need some improvements. 
-Moreover, the average user feelings about the produced merged differences have not been tested, and better merging paradigms can still be found.
+For the syntactic merging algorithm a lot of properties remain to be
+proven. The given algorithm does not come yet with a proof that it
+respect the intended specifications; specifications that might
+themselves need some improvements.
 
-On the semantic check part, what we give is only a theoretical foundation because runtime trace analysis cannot reasonnably be run on all possible inputs to give full program guarantees. However, our work opens the way for a static analysis that check our runtime properties to remove this flaw, and finally provide a running implementation of the system.
+Moreover, the average user's feelings about the produced merged
+differences have not been tested thoroughly, and better merging
+paradigms can still be found.
 
-For the conflict and ambiguity resolution system, the tactics given in this paper are rather weak and low-level, pushing all the checking burden on the programmer. More automated strategies could be added to ease the workflow and maybe even remove most false-positive ambiguities.
+On the semantic check part, what we give is only a theoretical
+foundation because runtime trace analysis cannot reasonnably be run on
+all possible inputs to give full program guarantees. However, our work
+opens the way for a static analysis that checks our runtime properties
+to remove this flaw, and finally provides a running implementation of
+the system.
+
+For the conflict and ambiguity resolution system, the tactics given in
+this paper are rather weak and low-level, pushing all the checking
+burden on the programmer. More automated strategies could be added to
+ease the workflow and maybe even remove most false-positive
+ambiguities.
 
 \section{Overview}
 \label{sec:overview}
