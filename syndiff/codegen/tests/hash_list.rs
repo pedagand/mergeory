@@ -5,33 +5,33 @@ trait Convert<In, Out> {
 }
 
 #[derive(Clone)]
-enum Bst {
-    EndOfTree,
-    AstA(B),
+enum ListBase {
+    Nil,
+    Cons(ElementBase),
 }
 
 #[derive(Clone)]
-struct B {
+struct ElementBase {
     pub hello: String,
     pub world: i32,
-    pub rec: Box<Bst>,
+    pub tail: Box<ListBase>,
 }
 
 mrsop_codegen! {
-    #[reuse(Bst)]
-    enum Ast {
-        EndOfTree,
-        AstA(A),
+    #[reuse(ListBase)]
+    enum List {
+        Nil,
+        Cons(Element),
     }
 
-    #[reuse(B)]
-    struct A {
+    #[reuse(ElementBase)]
+    struct Element {
         pub hello: String,
         pub world: i32,
-        pub rec: Box<Ast>,
+        pub tail: Box<List>,
     }
 
-    mod hash_tree {
+    mod hash_list {
         use crate::Convert;
         use std::hash::{Hash, Hasher};
         use std::collections::hash_map::{HashMap, DefaultHasher};
@@ -41,8 +41,8 @@ mrsop_codegen! {
         struct HashSum(u64);
 
         #[derive(Default, Debug)]
-        pub struct HashTables {
-            ast_table: HashMap<HashSum, Rc<Ast>>,
+        pub struct HashTable {
+            ast_table: HashMap<HashSum, Rc<List>>,
         }
 
         #[derive(Debug)]
@@ -53,7 +53,7 @@ mrsop_codegen! {
 
         #[derive(Hash, PartialEq, Eq, Debug)]
         extend_family! {
-            Box<Ast> as HashTagged<Ast>,
+            Box<List> as HashTagged<List>,
         }
 
         impl<T: Hash> From<T> for HashTagged<T> {
@@ -82,9 +82,9 @@ mrsop_codegen! {
         }
         impl<T> Eq for HashTagged<T> { }
 
-        impl Convert<Box<super::Ast>, HashTagged<Ast>> for HashTables {
-            fn convert(&mut self, input: Box<super::Ast>) -> HashTagged<Ast> {
-                let ast: Ast = self.convert(*input);
+        impl Convert<Box<super::List>, HashTagged<List>> for HashTable {
+            fn convert(&mut self, input: Box<super::List>) -> HashTagged<List> {
+                let ast: List = self.convert(*input);
                 let hash_tagged = HashTagged::from(ast);
                 let existing_item = self
                     .ast_table
@@ -95,21 +95,21 @@ mrsop_codegen! {
             }
         }
 
-        family_impl!(Convert<super, self> for HashTables);
+        family_impl!(Convert<super, self> for HashTable);
     }
 }
 
 #[test]
 fn simple() {
-    let ast = Ast::AstA(A {
+    let ast = List::Cons(Element {
         hello: "hello".to_string(),
         world: 42,
-        rec: Box::new(Ast::EndOfTree),
+        tail: Box::new(List::Nil),
     });
-    let mut hash_tables = hash_tree::HashTables::default();
+    let mut hash_tables = hash_list::HashTable::default();
     let hash_ast = hash_tables.convert(ast.clone());
 
-    let mut hash_tables2 = hash_tree::HashTables::default();
+    let mut hash_tables2 = hash_list::HashTable::default();
     let hash_ast2 = hash_tables2.convert(ast);
 
     assert!(hash_ast == hash_ast2);
