@@ -87,7 +87,7 @@ used one nowadays is Git \cite{git}.
 In the terminology of software evolution, a \textit{commit} is an
 atomic action of changing several source code files that makes sense
 by itself (whatever this may mean for the programmer). Typical commits
-include refactorings, bugfixes or the introduction of new features.
+include refactorings, bug fixes or the introduction of new features.
 
 Programmers make commits simultaneously, being unaware of what other
 programmers may have done at the same time. However, the final product
@@ -120,7 +120,7 @@ concurrent modifications.
 
 This new detection of conflicts can help programmers to make software
 more robust, as they will be able to trust that a merge operation will
-not silently introduce unwanted behaviours.
+not silently introduce unwanted behaviors.
 
 The study of the semantics of differences between two programs is not
 new \cite{benton2004simple}, but some work has been done recently to
@@ -182,14 +182,14 @@ to make it easily adaptable to a large set of programming languages.
 % What should be done now ?
 % What is the good \emph{next} question ?}
 
-At the end of the internship, we have developped a new merging process
+At the end of the internship, we have developed a new merging process
 that produces a non-surprising~\yrg{predictable?} syntactic fusion of
 changes and then forces programmers to review all potential bad
 interactions between concurrent commits. The syntactic merging part is
 supported by an implementation.
 
 This achievement could become a starting point for further work that
-also tries to avoid unintended behaviours introduced during code
+also tries to avoid unintended behaviors introduced during code
 merging.
 
 However, our approach still need improvements to provide more
@@ -205,7 +205,7 @@ differences have not been tested thoroughly, and better merging
 paradigms can still be found.
 
 On the semantic check part, what we give is only a theoretical
-foundation because runtime trace analysis cannot reasonnably be run on
+foundation because runtime trace analysis cannot reasonably be run on
 all possible inputs to give full program guarantees. However, our work
 opens the way for a static analysis that checks our runtime properties
 to remove this flaw, and finally provides a running implementation of
@@ -220,14 +220,18 @@ ambiguities.
 \section{Overview}
 \label{sec:overview}
 
-This section show on a running example how a purely textual merge of modifications may introduce bugs. Then, we will explain the architecture of our tool which is based on two main components and illustrate how it captures these bugs as semantic conflicts (called ambiguities) between the commits.
+This section shows on a running example how a purely textual merge of
+modifications can introduce bugs. Then, we will explain the
+architecture of our tool which is based on two main components and
+illustrate how it captures these bugs as semantic conflicts (called
+ambiguities) between the commits.
 
 \subsection{Problems with textual line-based approach}
 Merging changes while preserving the original intent of the
-developpers is non trivial. The usual method implemented in version
+developers is non trivial. The usual method implemented in version
 control systems takes a textual line-based approach. We typically have
 three files: a common base and two modified versions. We first compare
-the base against each modification to create a line to line alignment
+the base against each modification to create a line-to-line alignment
 minimizing changes. Then we try to merge these changes. If the same
 line in the base is modified in two distinct ways, we declare a
 conflict, else we apply the single change. This method works on any
@@ -323,45 +327,82 @@ fn f(c: bool) -> i32 {
 
 On the example above, we show two problems with the line-based
 approach. First, the refactoring in blue does not compose with value
-changes in orange. This creates the conflict shown between Lines~$2$ and~$9$. Secondly, the fusion of
-both codes creates a runtime bug on Line~$15$: the implicit assumption
-that $y$ is non null is broken by orange on Line~11, but this is
-silently accepted. We say that when $c$ is true, $x / y$ is an
-ambiguous expression because its result only comes from the fusion
-itself. Moreover, we can notice that the absence of conflict on
-Lines~$10$~to~$14$ is only due to the code formatting style, if the
-same if-expression was written on a single line, there would be a
-conflict there. Globally, the example shows that by not knowing
-anything about how a program is executed, textual merge creates
-conflicts both too often to accept refactorings and not enough to
-avoid introducing bugs.
+changes in orange. This creates the conflict shown between Lines~$2$
+and~$9$. Secondly, the fusion of both codes creates a runtime bug on
+Line~$15$: the implicit assumption that $y$ is non null is broken by
+orange on Line~$11$, but this is silently accepted. We say that when
+$c$ is true, $x / y$ is an ambiguous expression because its result
+only comes from the fusion itself. Moreover, we can notice that the
+absence of conflict on Lines~$10$~to~$14$ is only due to the code
+formatting style, if the same if-expression was written on a single
+line, there would be a conflict there. Globally, the example shows
+that by not knowing anything about how a program is executed, textual
+merge creates conflicts both too often to accept refactorings and not
+often enough to avoid introducing bugs.
 
 \subsection{A new merging algorithm}
-In this paper, we try to fix the problems exposed above with a new merging process.
-This section reuses the previous example (Listing~\ref{lst:overview_commits}) to expose the key ideas, the full description being given later.
+In this paper, we try to fix the problems exposed above with a new
+merging process.  This section reuses the previous example
+(Listing~\ref{lst:overview_commits}) to expose the key ideas, the full
+description being given later.
 
 \paragraph{Two phase approach}
-In order to compare program semantics, the standard approach requires to align executions (or just codes), and deduce properties on similarities and differences. In a merge process we also need such alignment between concurrent versions to tell how to interleave the changes and when they interact. This alignment must therefore be given by something, and for practical reasons, it should be automated. In this work, I chose to try to use a syntax driven alignment of changes. This choice should feel quite natural for programmers because syntax is already their way of communicating the semantic of the program. Furthermore, syntax can be used as the input of subsequent semantic analysis to detect bad interactions.
+In order to compare program semantics, the standard approach requires
+to align executions (or just codes), and deduce properties on
+similarities and differences. In a merge process we also need such
+alignment between concurrent versions to tell how to interleave the
+changes and when they interact. This alignment must therefore be given
+by something, and for practical reasons, it should be automated.
 
-This splits our merge procedure into two distinct phases. We first syntactically merge both commits. This solves the change alignment problem but does not prevent creating bugs when merging. These new bugs come from the fact that each commit assumes some invariants about the program that can be broken by another concurrent commit.
-That is why we run as a second phase a semantic analysis on the merged syntax tree to deduce which program states are ambiguous. A program state is semantically ambiguous if it comes from a modification whose invariants may have been broken by another modification. Initially, as the fusion algorithm is not aware of the precise invariants, any value that comes from none of the commits in particular but only their combination will be considered ambiguous.
-These ambiguity points, should then be manually reviewed, and resolved.
-\yrg{I think that this paragraph is important and could be made clearer.
-You should try to justify a little bit more the approach and the
-problem it solves.
-}
-\gb{J'ai réécrit une bonne partie du paragraphe pour essayer d'améliorer l'explication de la coupure du problème en deux et de l'existance de la phase de vérification sémantique.}
+In this work, I chose to try to use a syntax driven alignment of
+changes. This choice should feel quite natural for programmers because
+syntax is already their way of communicating the semantic of the
+program. Furthermore, syntax can be used as the input of subsequent
+semantic analysis to detect bad interactions.
+
+Following this approach, we split our merge procedure into two
+distinct phases. We first syntactically merge both commits. This
+solves the change alignment problem but does not prevent creating bugs
+when merging. These new bugs come from the fact that each commit
+assumes some invariants about the program that can be broken by
+another concurrent commit.
+
+That is why we run as a second phase a semantic analysis on the merged
+syntax tree to deduce which program states are ambiguous. A program
+state is semantically ambiguous if it comes from a modification whose
+invariants may have been broken by another modification. Initially, as
+the fusion algorithm is not aware of the precise invariants, any value
+that comes from none of the commits in particular but only their
+combination will be considered ambiguous.  These ambiguity points,
+should then be manually reviewed, and resolved.  \yrg{I think that
+  this paragraph is important and could be made clearer.  You should
+  try to justify a little bit more the approach and the problem it
+  solves.  } \gb{J'ai réécrit une bonne partie du paragraphe pour
+  essayer d'améliorer l'explication de la coupure du problème en deux
+  et de l'existance de la phase de vérification sémantique.}
 
 \paragraph{Syntactic merge}
-Similarly to what line-based merge do, we first want to compute individual differences between the common base and each of the commits. However here, differences are not based on lines of code but on the syntax tree itself. This means that differences are structural,
+Similarly to what line-based merge do, we first want to compute
+individual differences between the common base and each of the
+commits. However here, differences are not based on lines of code but
+on the syntax tree itself. This means that differences are structural,
 represented as syntax trees of an extension of the source
 language. Indeed, in addition to normal code, differences can have
-\ul{insertions}, \st{deletions}, local replacements, unchanged holes (depicted
-as $\id$), or multi-source multi-target code moves (depicted as
-Greek letters) to abstract away sub-trees that are irrelevant for the
-commit and ease fusion later. These notions will be explained in further detail in Section~\ref{sec:syntax_tree_def}.
+\ul{insertions}, \st{deletions}, local replacements, unchanged holes
+(depicted as $\id$), or multi-source multi-target code moves (depicted
+as Greek letters) to abstract away sub-trees that are irrelevant for
+the commit and ease fusion later. These notions will be explained in
+further detail in Section~\ref{sec:syntax_tree_def}.
 
-To keep track of which commit introduced which modification we use colors. Each commit is associated with a tint. If a change has a given tint, then the corresponding commit is aware (or unaffected) by it. The color that we call white is given to the expressions of the source program and is considered as having all the tints at once as their values is supposed to be known by all the committers. In the example, left commit has blue tint, and right commit has orange tint. We can see in their difference that they taint the code they introduced and the modification they made.
+To keep track of which commit introduced which modification we use
+colors. Each commit is associated with a tint. If a change has a given
+tint, then the corresponding commit is aware (or unaffected) by
+it. The color that we call white is given to the expressions of the
+source program and is considered as having all the tints at once as
+their values is supposed to be known by all the committers. In the
+example, left commit has blue tint, and right commit has orange
+tint. We can see in their difference that they taint the code they
+introduced and the modification they made.
 
 \noindent
 \begin{minipage}{\textwidth}
@@ -456,7 +497,7 @@ push the changes following moved code to ease refactoring fusions (see Lines~$15
 At the end of this phase, we have a merged syntax tree that, unlike line-based merge, does not conflict on refactorings based on code moves, and enforce some structure in the changes. However, we lose the ability to commit files that do not parse, and we still do not provide any guarantee about ambiguities. For this reason, we need a second phase.
 
 \paragraph{Semantic check}
-This phase runs an analysis on the colored merged program to check that there is no ambigouous program state. Ambiguity can be linked to the color black (i.e. without any tint), because it means that two modifications were affected by each other and could have broken their respective invariants.
+This phase runs an analysis on the colored merged program to check that there is no ambiguous program state. Ambiguity can be linked to the color black (i.e. without any tint), because it means that two modifications were affected by each other and could have broken their respective invariants.
 
 For technical reasons that will be explained in Section~\ref{sec:colored-diff-oracle}, the analysis must run on execution interleaving of the original base program and the merged one.
 
@@ -637,7 +678,7 @@ Figure~\ref{fig:metavar_elision} illustrate such an ellision for a change where 
 
 A given meta-variable can occur more that twice (at least once in deletion and once in insertion but maybe more). Therefore, code displacements have multiple sources and multiple targets, but a given meta-variable will always represent an identical code sub-tree. The fact that a given meta-variable can have multiple sources may seem unsatisfying, but it makes it possible to detect code displacements automatically without arbitrary choices. Moreover, thanks to that, we can easily revert a difference by simply exchanging the deleted and inserted trees.
 
-As an example, the change $\change{x*y}{x+x}$ will be ellided as $\change{\alpha*y}{\alpha+\alpha}$ because $x$ was duplicated.
+As an example, the change $\change{x*y}{x+x}$ will be elided as $\change{\alpha*y}{\alpha+\alpha}$ because $x$ was duplicated.
 Conversely, the reverse change $\change{x+x}{x*y}$ will become $\change{\alpha+\alpha}{\alpha*y}$ as it is hard to tell automatically from which $x$ the kept one comes from.
 
 This code displacement notion is especially important for capturing refactoring in differences to merge them correctly with other commits later.
@@ -813,7 +854,7 @@ this lattice white (equal to $\mathbb{T}$, denoted by $\top$) and the
 minimum black (equal to $\emptyset$, denoted by $\bot$).
 
 A change gets the color $c \in \mathbb{C}$, if for all
-tint in $c$, the associated commit is aware of the behaviour (new and broken invariants) of the colored source code. \yrg{You already
+tint in $c$, the associated commit is aware of the behavior (new and broken invariants) of the colored source code. \yrg{You already
 used $c$ in the syntax for differences!}\gb{Not anymore}
 Similarly, a value has a color $c \in \mathbb{C}$ if for all tints in $c$, the corresponding commit is fully aware of it, or at least aware of all the meaningful invariants inside it.
 
@@ -827,7 +868,7 @@ If the exact same modification is done twice, the result has the union of tints 
 \sbox\boxdelinner{\setul{-.75ex}{}$\mathul{x}^c$}
 \newbox\boxinsinner
 \sbox\boxinsinner{\setul{.1ex}{}$\mathul{x}^c$}
-However, insertions and deletion do not behave exactly in the same way regarding composition. If some code is deleted inside deleted code, the color of the deletion is the union of the colors ($\setul{-.4ex}{}\mathul{\usebox\boxdelinner}^{c'} = \mathst{x}^{c \cup c'}$) because any of the two modifications can be held responsible for the deletion. However, if some code is inserted inside inserted code, we have to consider the intersection of the colors ($\setul{.4ex}{}\mathul{\usebox\boxinsinner}^{c'} = \mathul{x}^{c \cap c'}$) because only the interaction between the modifications explain the final behaviour. These composition cases occur mainly in presence of meta-variables or during execution (see section \ref{sec:colored-diff-oracle}).
+However, insertions and deletion do not behave exactly in the same way regarding composition. If some code is deleted inside deleted code, the color of the deletion is the union of the colors ($\setul{-.4ex}{}\mathul{\usebox\boxdelinner}^{c'} = \mathst{x}^{c \cup c'}$) because any of the two modifications can be held responsible for the deletion. However, if some code is inserted inside inserted code, we have to consider the intersection of the colors ($\setul{.4ex}{}\mathul{\usebox\boxinsinner}^{c'} = \mathul{x}^{c \cap c'}$) because only the interaction between the modifications explain the final behavior. These composition cases occur mainly in presence of meta-variables or during execution (see section \ref{sec:colored-diff-oracle}).
 
 Before merging, we apply the singleton color corresponding to the
 commit on the difference tree, recursively as follows:
@@ -845,9 +886,9 @@ change, we can try to merge them in a way that keeps track of the
 origin of each piece of code.
 
 \subsubsection{High-level specification of a merging algorithm}
-A merging algorithm takes two differences and produce another difference that contains all the changes from inputs if they are compatible or show where they are incompatible otherwise. This high-level description is underspecified because semantically combining changes only has an intuitive meaning depending on the implicit idea of what each commit does (often summarized in english in the commit message). Therefore, these algorithms are necessarily somehow arbitrary because they force a particular meaning for change combination. This does not mean that they are all equivalent, their definition for combination is more or less aligned with usual real-life commits.
+A merging algorithm takes two differences and produce another difference that contains all the changes from inputs if they are compatible or show where they are incompatible otherwise. This high-level description is underspecified because semantically combining changes only has an intuitive meaning depending on the implicit idea of what each commit does (often summarized in English in the commit message). Therefore, these algorithms are necessarily somehow arbitrary because they force a particular meaning for change combination. This does not mean that they are all equivalent, their definition for combination is more or less aligned with usual real-life commits.
 
-In this paper, our arbitrary choice is to focus on syntax to align differences (because we think that it often follows the intuition of the developpers) and let changes follow moved code (because it allow seemless merging of a large class of refactoring operations). These two principles will be explained further in Section~\ref{sec:merge_principles}. That said, we avoid further arbitrary choices that could favor one of the input tree over the other.
+In this paper, our arbitrary choice is to focus on syntax to align differences (because we think that it often follows the intuition of the developers) and let changes follow moved code (because it allow seamless merging of a large class of refactoring operations). These two principles will be explained further in Section~\ref{sec:merge_principles}. That said, we avoid further arbitrary choices that could favor one of the input tree over the other.
 
 \yrg{At this point, you must discuss what are
   the design principles that guided your work to get a form of
@@ -964,7 +1005,7 @@ toward the destination of the code movement.
 
 This is done in a two-phase way. First, if we have two changes facing each other we try to inline one of them inside the deletion tree of the other, by allowing differences wherever we have a meta-variable. By doing so, we check if the changes of one difference are fully contained inside code that will be moved by the other.
 
-Then, we check that these inlined changes are consistent across different occurences of the same meta-variable. If they are, we replace all occurrences of the meta-variable by the obtained insertion. If they are not, we generate a $\MvConflict$ conflict on each deleted $\alpha$ with the corresponding facing insertion.
+Then, we check that these inlined changes are consistent across different occurrences of the same meta-variable. If they are, we replace all occurrences of the meta-variable by the obtained insertion. If they are not, we generate a $\MvConflict$ conflict on each deleted $\alpha$ with the corresponding facing insertion.
 
 \begin{figure}[ht]
 \begin{minipage}{0.49\textwidth}
@@ -1033,9 +1074,9 @@ Then, we check that these inlined changes are consistent across different occure
 \label{fig:metavar_inlining}
 \end{figure}
 
-On Figure~\ref{fig:metavar_inlining}, we can see that the orange change can be inlined in the blue deletion tree. Indeed, if we compare their tree, all differences occur under meta-variable $\alpha$. Conversely, the blue change cannot be inlined because the inserted node $-$ in blue cannot be merged with deleted node $+$ in the orange tree. If there are no other occurences of $\alpha$, or the corresponding inlined tree is always $4*\beta$, we can replace every $\alpha$ by $4*\beta$, producing the tree on the right.
+On Figure~\ref{fig:metavar_inlining}, we can see that the orange change can be inlined in the blue deletion tree. Indeed, if we compare their tree, all differences occur under meta-variable $\alpha$. Conversely, the blue change cannot be inlined because the inserted node $-$ in blue cannot be merged with deleted node $+$ in the orange tree. If there are no other occurrences of $\alpha$, or the corresponding inlined tree is always $4*\beta$, we can replace every $\alpha$ by $4*\beta$, producing the tree on the right.
 
-To avoid making any arbitrary choice, meta-variable inlining is ignored if both changes could be inlined in the other. This brings back the important property that mergeing a change with itself does not change anything.
+To avoid making any arbitrary choice, meta-variable inlining is ignored if both changes could be inlined in the other. This brings back the important property that merging a change with itself does not change anything.
 
 \paragraph{Color propagation}
 While merging, we propagate the colors that are on the input nodes to the output. To do so we follow the discipline described in Section~\ref{sec:colors}, without any difficulties. When code replace a meta-variable because of inlining, it keeps its original color but is now under an insertion context that also have the color of the original meta-variable. By color composition rule, this is the only way to create black color during the syntactic phase. One could notice that meta-variable inlining will often create black colors that we want to avoid. This is intended as color ambiguities are a lot easier to resolve than syntactic conflicts.
@@ -1054,7 +1095,7 @@ Following the principles exposed above, our algorithm follows these steps:
  \item Merge the facing insertion trees together. This can only occur when two in-tree modifications face each other: $(\change{d_l}{i_l}) \merge (\change{d_r}{i_r})$ (otherwise, insertions are processed at step 2 because they are either identical or conflict for ordering).
  In that case try to perform inlinings of $i_l$ into $d_r$ and $i_r$ into $d_l$. If exactly one succeeds, let's say $i_l$, remember inside $d_r$ the associations $i_l$ subtree / $d_r$ meta-variable as temporarily $\MvConflict$ conflict and keep $i_r$ alone as the merged insertion. Else, recursively align $i_l$ with $i_r$, yielding $\OrdConflict(i_l, i_r)$ on (sub)nodes that were distinct.
  
- To ease checking later, during this step, we keep for each meta-variable $\alpha$ a list $\Gamma^*(\alpha)$ of sub-trees that were inlined inside it, and remember which meta-variables occured in a failed inlining.
+ To ease checking later, during this step, we keep for each meta-variable $\alpha$ a list $\Gamma^*(\alpha)$ of sub-trees that were inlined inside it, and remember which meta-variables occurred in a failed inlining.
 
  \item Merge the facing deletion trees together. For that we align deleted trees with each other. If they do not match, we can stop here as it means that the domain intersection of inputs is empty. 
  
@@ -1068,7 +1109,7 @@ Following the principles exposed above, our algorithm follows these steps:
  Substitutions inside substitutions may be required. So we first substitute inside $\Delta$ and $\Gamma$ before replacing a meta-variable. This can lead to cycles on edge cases. We resolve cycles in $\Gamma$ as $\top$ because we want to keep conflicts on degenerate cases, and in $\Delta$ as a fresh meta-variable because we can notice that cycles only occur for meta-variables aliasing each other (otherwise only infinitely long syntax tree would be in the domain intersection).
 \end{enumerate}
 
-This algorithm is implemented (in the repository mentionned Section~\ref{sec:codegen}) but not fully formalized yet. You can find an unfinished formal specification in Appendix~\ref{app:syntactic_merge_spec}.
+This algorithm is implemented (in the repository mentioned Section~\ref{sec:codegen}) but not fully formalized yet. You can find an unfinished formal specification in Appendix~\ref{app:syntactic_merge_spec}.
 
 \subsubsection{Properties of the generated merged difference tree}
 \label{sec:merge_properties}
@@ -1206,7 +1247,7 @@ global state.\footnote{Technically, we could say that named functions are consta
   higher-order language, right? That's fine because your language is
   first order. Yet, the introduction
   emphasizes that you chose a sublanguage of Rust to play with
-  functional programs: this looks a bit contradictory.}\gb{See footnote. This paper is way too technical already. When I said that we chose Rust for functional bahaviours, I was mostly thinking of algebraic datatypes and of the ``every piece of code yields a value'' idiom} We denote
+  functional programs: this looks a bit contradictory.}\gb{See footnote. This paper is way too technical already. When I said that we chose Rust for functional behaviors, I was mostly thinking of algebraic datatypes and of the ``every piece of code yields a value'' idiom} We denote
 $\mathbb{G}(f)$ the body of function $f$ taken from global
 state. Types do not play any role in reduction rules, but we will
 assume that programs are already well typed. The initial state is
@@ -1531,7 +1572,7 @@ During the execution of the correlation oracle, ambiguities are
 detected whenever the black color is found in the value. To avoid
 stopping at the first ambiguity and be able to warn the user about
 more than one problem at the same time, we can continue the execution
-on a black value and locally replace it with white, signalling an
+on a black value and locally replace it with white, signaling an
 error to be manually resolved later. A merge is valid if it never
 create such black value.
 
@@ -1541,7 +1582,7 @@ must be resolved before having a valid merge. For our tool to be
 practical, the manual ambiguity resolution should be easy and rather
 quick as soon as the programmer who initiated the merge understand how
 the commits interact at each ambiguity point. In this internship, I
-propose resolution tactics that let a programer alter the merge
+propose resolution tactics that let a programmer alter the merge
 candidate to progressively remove conflicts and ambiguities. As for
 the semantic check, this part is purely theoretical as I had no time
 for implementing it.
@@ -1553,13 +1594,13 @@ last merged candidate as the final merged program.
 
 Currently we only have few resolution tactics but I think that they
 are powerful enough for resolving all conflicts. However they trust
-the programer to ensure invariants and are quite low level so more
+the programmer to ensure invariants and are quite low level so more
 automated tactics could be added in future work.
 
 \paragraph{Declare preserving semantic change}
 %
 Some changes are refactorings that do not modify the semantics, or are
-bugfixes that do not change the intended semantics that rest of the
+bug fixes that do not change the intended semantics that rest of the
 program rely on. The automatic ambiguity detection will be triggered
 by these changes because it is unable to notice the constant implicit
 semantic preservation. To mark these ambiguity as false positive, we
@@ -1619,7 +1660,7 @@ But these untyped differences can, when applied, produce programs that do not ne
 
 \gb{Je viens de découvrir l'existance d'un papier \cite{vassena2016generic} que je n'arrive pas a télécharger même avec un proxy dans l'ENS... Apparemment il essaye de déduire un algo de fusion d'une différence similaire à \cite{lempsink2009type} qui ne marche pas si bien que ça (d'après \cite{miraldo2019efficient}). Quoi qu'il en soit vu que ça traite de fusion sur arbre syntaxique, ça ferait un très bon related work. Qu'est ce que je suis censé faire dans un cas comme ça ? Je ne vais pas citer des travaux auxquels je n'ai pas accès... Avoir le pdf pourrait régler le problème.}
 
-Completely different studies focus on how to semantically characterize changes instead of caring about their syntax. To do so, they introduce logical framworks that interleave the two considered programs and enable reasonning about states facing each other. Relational Hoare logic \cite{benton2004simple} is one of such framework. As it cannot prove anything on programs that do not crash at the same time and we thought that bugfixes are important changes, we prefered to use the correlation oracle formalism \cite{girka2017verifiable} developped later that adress this issue. The difference language proposed along correlation oracles require manual difference labelling (and proving) and would have required a quadratic human work in the number of considered changes for implementing a merge algorithm. Therefore we chose to use the formalism without its proposed difference system.
+Completely different studies focus on how to semantically characterize changes instead of caring about their syntax. To do so, they introduce logical frameworks that interleave the two considered programs and enable reasoning about states facing each other. Relational Hoare logic \cite{benton2004simple} is one of such framework. As it cannot prove anything on programs that do not crash at the same time and we thought that bug fixes are important changes, we preferred to use the correlation oracle formalism \cite{girka2017verifiable} developed later that address this issue. The difference language proposed along correlation oracles require manual difference labelling (and proving) and would have required a quadratic human work in the number of considered changes for implementing a merge algorithm. Therefore we chose to use the formalism without its proposed difference system.
 
 Prior work \cite{girka2015mechanically} already used the general idea of letting a difference syntax tree drive the semantic interleaving, but did not try any kind of merging on its language specific difference language.
 
@@ -1641,10 +1682,10 @@ The implied function of a difference tree is formally defined as follows: let us
 
 We denote by $h :: t$ a sequence containing at least one element, and by $[]$ the empty sequence.
 
-A judgment $\Gamma \vdash t(d) = i$ means that under meta-variable replacements $\Gamma$, the difference tree $t$ applied to $d$ is well defined and returns $i$. The judgement $\Gamma \vdash c(d)$ means that the change $c$ is compatible with the original tree $d$ under meta-variable replacements $\Gamma$.
+A judgment $\Gamma \vdash t(d) = i$ means that under meta-variable replacements $\Gamma$, the difference tree $t$ applied to $d$ is well defined and returns $i$. The judgment $\Gamma \vdash c(d)$ means that the change $c$ is compatible with the original tree $d$ under meta-variable replacements $\Gamma$.
 
-For any judgement, if we denote $\overrightarrow{x} = (x_0, \ldots, x_n)$, then $\overrightarrow{\Gamma \vdash x(y) = z}$ corresponds to $\forall k \in [\![ 0, n ]\!], \Gamma \vdash x_k(y_k) = z_k$ (and similarly for any judgement).
-\gb{I really think that vector of judgements are more readable than $\forall (t^k, d_t^k) \in \overrightarrow{(t, d_t)}, \Gamma \vdash t^k(d_t^k) = i_t^k$ everywhere. Maybe I didn't understood the comment...}
+For any judgment, if we denote $\overrightarrow{x} = (x_0, \ldots, x_n)$, then $\overrightarrow{\Gamma \vdash x(y) = z}$ corresponds to $\forall k \in [\![ 0, n ]\!], \Gamma \vdash x_k(y_k) = z_k$ (and similarly for any judgment).
+\gb{I really think that vector of judgments are more readable than $\forall (t^k, d_t^k) \in \overrightarrow{(t, d_t)}, \Gamma \vdash t^k(d_t^k) = i_t^k$ everywhere. Maybe I didn't understood the comment...}
 
 Then, apply the following syntax-driven rules:
 
@@ -1741,7 +1782,7 @@ functions $\Gamma$ and $\Delta$ from meta-variables to respectively
 insertion and deletion trees, that are heavily constrained and in
 practice inferred during the merge as seen in Section~\ref{sec:syntactic_merge_algo}.
 
-The specification is based on several judgements:
+The specification is based on several judgments:
 \begin{itemize}
  \item The main one $\Gamma, \Delta \vdash t_l \merge t_r = t$ states that under meta-variable replacements $\Gamma$ and $\Delta$ the syntactic merge of $t_l$ and $t_r$ is well defined and has the output $t$. This declines for difference trees and sequences. 
  \item $\Gamma \vdash i \subset d = d'$ means that under replacements $\Gamma$, $i$ can be inlined into $d$ forming the deletion tree $d'$. Its negative counterpart is $\Gamma \vdash i \not\subset d$. 
@@ -1949,7 +1990,7 @@ Besides, this section follows the same notations as Appendix~\ref{app:diff_appli
  \RightLabel{\textsc{OrdConflMerge}}
  \UnaryInfC{$\Gamma, \Delta \vdash (\OrdConflict(i_l) :: r_l) \merge (\OrdConflict(i_r) :: r_r) = \OrdConflict(\Gamma(i_l) \mathbin{@} \Gamma(i_r)) :: r$}
 \end{prooftree}
-With $\mathbin{@}$ beeing list concatenation.
+With $\mathbin{@}$ being list concatenation.
 
 \paragraph{Inclusion of insertion inside a deletion}\phantom{ }
 
