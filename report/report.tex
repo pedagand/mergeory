@@ -1,7 +1,7 @@
 \documentclass[a4paper,11pt]{article}
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
-\usepackage[top=2.5cm, bottom=2.5cm, left=2.5cm, right=2.5cm]{geometry}
+\usepackage[top=1.5cm, bottom=1.5cm, left=1.5cm, right=1.5cm]{geometry}
 
 \title{Semantically checked source code merge}
 \author{Guillaume Bertholon, supervised by Yann Régis Gianas, IRIF -- Université de Paris}
@@ -732,7 +732,7 @@ expansive part of the algorithm is computing sequence alignments, all the rest i
 
 It is actually computing a difference between original and modified programs because we start from the trivial difference $\change{d}{i}$ and every step except step 3 does not lose any information. Step 3 elisions do not cause any trouble because step 4 only keep elisions that can be completed in presence of the source (or modified) program. By losing information, step 3 actually widens the domain of the final difference but does not change the result on tree $d$.
 
-\subsection{Implementation considerations: how to extend a syntax tree}
+\subsection{Implementation considerations: extending syntax trees}
 \label{sec:codegen}
 Implementing an algorithm that requires extending a syntax tree can be tedious in practice because we want to attach new information and/or create holes on a fixed structure while keeping the typedness of the tree.
 
@@ -777,9 +777,9 @@ However, insertions and deletion do not behave exactly in the same way regarding
 Before merging, we apply the singleton color corresponding to the
 commit on the difference tree, recursively as follows:
 \begin{align*}
-{\color{red}tree} &= S(\overrightarrow{\color{red}tree}, \overrightarrow{\color{red}seqelt}) \typsep \id \typsep {\setstcolor{red}\setulcolor{red}\change{change}{\color{red}change}}\\
-{\color{red}seqelt} &= {\color{red}tree} \typsep {\setstcolor{red}\mathst{change}} \typsep {\color{red}\mathul{change}}\\
-{\color{red}change} &= {\color{red}S(\overrightarrow{change}, \overrightarrow{change})} \typsep {\color{red}\alpha}\\
+{\color{orange}tree} &= S(\overrightarrow{\color{orange}tree}, \overrightarrow{\color{orange}seqelt}) \typsep \id \typsep {\setstcolor{orange}\setulcolor{orange}\change{change}{\color{orange}change}}\\
+{\color{orange}seqelt} &= {\color{orange}tree} \typsep {\setstcolor{orange}\mathst{change}} \typsep {\color{orange}\mathul{change}}\\
+{\color{orange}change} &= {\color{orange}S(\overrightarrow{change}, \overrightarrow{change})} \typsep {\color{orange}\alpha}\\
 \end{align*}
 
 Note that unchanged parts are never colored, and that syntax nodes are not colored in the spine but are in the changed sub-trees. This reflects the fact that in the spine and inside holes, code comes from the original source code, while elsewhere it is introduced by the commit. \yrg{I am wondering if you should not use the background color to colorize terms...}\gb{Combining background would be hard, while in the overview example I double strike-trough and give distinct colors inside changes}
@@ -1192,18 +1192,14 @@ Then, if we denote by $\kappa_{\neg \mathbf{kw}}$ any sequence of instructions w
 
 \subsection{The colored difference oracle}
 \label{sec:colored-diff-oracle}
-From this language and its semantics, we define what can be a
-correlation oracle that will be able to tell if a program trace
-exhibits an ambiguity created by the fusion.
-%
-\yrg{You should first recall what a correlation oracle is, explain
-that you want to characterize ``new'' values (values coming from
-commits) and that you need the original execution trace to do so.}
+From this language and its semantics, we want to define an analysis that will be able to tell if a program trace exhibits semantic ambiguities created by the fusion.
 
-We cannot do the verification directly on the merge candidate because
-we need to gather interferences created by deleted code.
-\yrg{This sentence will be mysterious to the reader.}
+To do so, we need to characterize values that are changed by the commits, and check that these are not also changed by another one, leveraging the awareness colors gathered on the code during the syntactic step.
 
+\subsubsection{A correlation oracle to syncronize original and merged programs}
+
+We cannot do this verification directly on the colored merged program because
+deleting code can also change values in imperative programs. Listing~\ref{lst:del_interference} gives a short example of a semantic ambiguity that could be missed if deleted code is ignored.
 \begin{lstlisting}[label=lst:del_interference, caption={Example of an ambiguity that would be missed if we don't analyze deleted code.}]
 fn f() -> bool {
     let mut res = @\setstcolor{orange}\st{true} $\rightarrow$ {\color{orange}\ul{false}}@;
@@ -1213,24 +1209,19 @@ fn f() -> bool {
 \end{lstlisting}
 
 Therefore, in order to take into account the deleted code, we reason
-on both the original code known by all committers and the merge
-candidate. We then need to synchronize executions of these two
-programs and use the color algebra to verify that we do not have any
-unchecked ambiguity.
+on both the original code known by all committers and the merged code.
+To do so, we need to interleave executions of these two programs. Then we can use the color algebra to verify that we do not have any unchecked ambiguity.
 
-In general, synchronization between different programs is really hard
+In general, semantic synchronization between programs is really hard
 but here we already have a good syntactic description of the
 differences between them. Indeed, we can directly deduce the interleaving from
 the merged difference tree because it gives implicit correlation
-points. Indeed, each time there is a spine node that does not depend
+points. Each time there is a spine node that does not depend
 on the control flow decisions, we know for sure that both programs
 will at some point execute the same code, and we can synchronize this
 execution. Moreover, for each change, or divergent control flow
 decision, we know precisely where it is located in the spine allowing
 to resynchronize easily when programs start to behave similarly again.
-
-To express the interleaving between two programs, and compute the
-colors of the expressions, we use the correlation oracle framework \cite{girka2017verifiable}.
 
 \begin{figure}[ht]
 \begin{minipage}{.34\textwidth}
@@ -1308,51 +1299,46 @@ fn f(c: bool) -> i32 {
     \draw[dotted, ->] (o10) -- (i10);
 \end{tikzpicture}
 \end{minipage}
-\caption{Execution synchronization of a source and a destination program extracted from a difference tree without colors. For simplification, we show only one state for each line of code.}
+\caption{Execution synchronization of a source and a destination program extracted from a difference tree without colors. For simplification, we show only one state for each line of code and consider that $c = \mathbf{false}$.}
 \label{fig:oracle_sync_from_diff}
 \end{figure}
 
-Formally, the correlation oracle is defined as a program with a state
-that can be projected on either of the correlated programs. Moreover,
-it carries extra information to track the simultaneous executions of
-both programs and the next synchronization point.
+Figure~\ref{fig:oracle_sync_from_diff} shows an example of such syncronization. Lines 2 and 4 are executed by only one program but we can resynchronize afterwards at the next spine node. As the control flow decision changes at line 5, we first let the original program execute line 8, then let the merged one execute line 6 and then resynchronize. At each step we advance in at least one of the programs, sometimes keeping the other stalled.
 
-Here we keep states as tuples $\rtstate{\kappa}{v}{S}$ but all the
-individual components are slightly more complex: $\kappa$ is the
-continuation but its elements can be either deleted
-(\st{$instr$}$^c$), inserted (\ul{$instr$}$^c$), or preserved
-($instr$), depending on whether they occur on the original only, the
-merged candidate only or both. Deleted and inserted instructions carry
-a color with them. For each value $v$ or element of the store $S(x)$,
-they are replaced by a pair of values associated with a color
-$(v_{del}, v_{ins}, c)$. \yrg{You should explain this definition more
-  clearly, and also justify it. For the moment, this paragraph is
-  unfortunately quite obscure and technical...}
+To express the interleaving between two programs, and compute the
+colors of the expressions, we use the correlation oracle framework \cite{girka2017verifiable}.
 
-The projection of a state to its equivalent in the original program
-$\pi_{del}$ removes all the inserted instructions in the continuation,
-and takes first elements of pairs of values, always ignoring
-colors. The projection on the merge candidate $\pi_{ins}$ is similar,
-except that it removes deleted instructions, and that it takes the
-second element inside each pair of values.
+Formally, a correlation oracle is defined as a program with states
+that can be projected on either of the correlated programs.
+Moreover, it carries extra information on the simultaneous executions of
+both programs and compute (dynamically if needed) their synchronization points.
+Intuitively, in our case it corresponds to the black execution line on Figure~\ref{fig:oracle_sync_from_diff}.
+Its execution steps must correspond to executing steps in at least one of the correlated program.
 
-For a store~$S$, we write $S_{del}$ for $\pi_{del} \circ S$, $S_{ins}$
-for $\pi_{ins} \circ S$, and $S_{c}$ for the projection on the color
-of the value of $S$. \yrg{I am not sure that you have defined the
-color of a store.}
+The states of correlation oracles can be enriched with additional information on the co-execution. We use this flexibility for storing and computing our awareness colors on values.
 
-To describe how interleaving is done, we can also give operational
-semantic reductions. \yrg{Where?}
+\subsubsection{Specification of the colored difference oracle}
 
+We now will present the specification of the correlation oracle we use for checking the absence of semantic ambiguities on merged programs written in our Rust subset.
+
+The states of the correlation oracle follow the structure of the states of the language $\rtstate{\kappa}{v}{S}$ but all the individual components need to be adapted for interleaving:
+First, each value stored in the oracle state (either $v$ or inside $S$) must exist in two versions (written $v^-$ and $v^+$) respectively corresponding to the values in execution of the original and the merged program. To track commit provenance, we also add a color $c$ stating which commits are aware of the $v^+$ value. Values in oracle states are triples $(v^-, v^+, c)$.
+Then, the continuation $\kappa$ must encode the interleaving itself. Expressions inside it can be either deleted (\st{$instr$}$^c$), inserted (\ul{$instr$}$^c$), or preserved ($instr$), depending on whether they will be executed in the original program only, the merged program only or both.
+Deleted and inserted expressions carry a color with them that indicate which commit is responsible for the splitted execution (or said differently, responsible for the change).
+
+This definition makes it possible to define the required projections of an oracle state on its equivalent original (resp. merged) program state by removing all inserted (resp. deleted) instructions, and projecting values on their $v^-$ (resp. $v^+$) component.
+For a store~$S$, we write $S^-$, $S^+$ and $S^c$ for the projections of values on the corresponding $v^-$, $v^+$ and color components.
+
+To describe how interleaving is done, we give operational semantic reductions below (sorted by design ideas).
 In all the rules, if an instruction in the continuation should be both
 inserted and deleted according to the rules, it is simply
 discarded. If it should be inserted (resp. deleted) twice with
 different colors, we take the intersection (resp. union) of these
-colors to follow the color composition rules. \yrg{Justify!}
+colors to follow the color composition rules of Section~\ref{sec:colors}.
 
-\paragraph{Reusing rules from underlying language}
-The rules from the underlying language can be reused for instructions
-that only expand inside the continuation. In this case, we preserve
+\paragraph{Simply expanding instructions}
+The rules from the underlying language can directly be reused for instructions
+that only expand inside the continuation, because they do nothing apart from destructuring. In this case, we preserve
 the deleted/inserted/preserved status and the color on the expansion.
 
 For instance, this gives the following reduction rules (non-exhaustive list):
@@ -1363,10 +1349,6 @@ For instance, this gives the following reduction rules (non-exhaustive list):
 \rtstate{\mathul{x = e}^k \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{\mathul{e}^k \cdot \mathul{x = \square}^k \cdot \kappa}{(v^-, (), \top)}{S}\\
 \rtstate{e_1 \diamond e_2 \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{e_1 \cdot \square \diamond e_2 \cdot \kappa}{((), (), \top)}{S}\\
 \end{align*}
-
-\yrg{What are the meaning of $^+$ and $^-$? I am not able to decrypt
-  these rules... Could you explain them? Also, it is a bit strange
-  that $S$ is never changed.}
 
 \paragraph{Instruction producing value}
 
@@ -1392,8 +1374,8 @@ regarding the color of the result. There are three cases:
 This leads to the following reduction rules:
 \begin{align*}
 \rtstate{x \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{\kappa}{S(x)}{S}\\
-\rtstate{\mathst{x}^k \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{\kappa}{(S_{del}(x), v^+, c \cap k)}{S}\\
-\rtstate{\mathul{x}^k \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{\kappa}{(v^-, S_{ins}(x), S_c(x) \cap k)}{S}\\
+\rtstate{\mathst{x}^k \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{\kappa}{(S^-(x), v^+, c \cap k)}{S}\\
+\rtstate{\mathul{x}^k \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{\kappa}{(v^-, S^+(x), S^c(x) \cap k)}{S}\\
 \rtstate{literal \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{\kappa}{(literal, literal, \top)}{S}\\
 \rtstate{\mathst{literal}^k \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{\kappa}{(literal, v^+, c \cap k)}{S}\\
 \rtstate{\mathul{literal}^k \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{\kappa}{(v^-, literal, k)}{S}\\
@@ -1406,11 +1388,11 @@ This leads to the following reduction rules:
 \end{align*}
 
 \paragraph{Assignment instructions}
-With the same ideas as instruction producing a value, assignment instructions are treated as follows:
+With the same ideas as instruction producing a value but this time inside the store, assignment instructions are treated as follows:
 \begin{align*}
 \rtstate{x = \square \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{\kappa}{((), (), \top)}{S[x \leftarrow (v^-, v^+, c)]}\\
-\rtstate{\mathst{x = \square}^k \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{\kappa}{((), v^+, c \cap k)}{S[x \leftarrow (v^-, S_{ins}(x), S_c(x) \cap k)]}\\
-\rtstate{\mathul{x = \square}^k \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{\kappa}{(v^-, (), k)}{S[x \leftarrow (S_{del}(x), v^+, c \cap k)]}\\
+\rtstate{\mathst{x = \square}^k \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{\kappa}{((), v^+, c \cap k)}{S[x \leftarrow (v^-, S^+(x), S^c(x) \cap k)]}\\
+\rtstate{\mathul{x = \square}^k \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \rtstate{\kappa}{(v^-, (), k)}{S[x \leftarrow (S^-(x), v^+, c \cap k)]}\\
 \end{align*}
 
 \paragraph{Function calls} Function calls do not need any special treatment, they can be considered as instructions simply expanding the function body into the continuation. The arguments keep their colors at the call point.
@@ -1426,9 +1408,9 @@ To make a static analysis, this function inlining approach might become too expa
 
 \paragraph{Conditionals instructions} Conditional instruction are a bit harder to handle because they can split the execution between the correlated programs even when the branches themselves are totally in the spine. Indeed, both programs can show different value for the condition, and therefore take different paths. Also they could take the same value but only by chance and still be under the influence of some non-white color. In both case, we choose to split the execution and resynchronize only at the end of the branches.
 \begin{align*}
-\vrtstate{\mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false} \cdot  \kappa}{(\mathbf{true}, \mathbf{true}, \top)}{S} &\rightarrow \vrtstate{b_{true} \cdot \kappa}{((), (), \top)}{S}\\
-\vrtstate{\mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false} \cdot  \kappa}{(\mathbf{false}, \mathbf{false}, \top)}{S} &\rightarrow \vrtstate{b_{false} \cdot \kappa}{((), (), \top)}{S}\\
-\vrtstate{\mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false} \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \vrtstate{\mathst{\mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false}}^c \cdot \mathul{\mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false}}^c \cdot \kappa}{((), (), \top)}{S}\\
+\rtstate{\mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false} \cdot  \kappa}{(\mathbf{true}, \mathbf{true}, \top)}{S} &\rightarrow \rtstate{b_{true} \cdot \kappa}{((), (), \top)}{S}\\
+\rtstate{\mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false} \cdot  \kappa}{(\mathbf{false}, \mathbf{false}, \top)}{S} &\rightarrow \rtstate{b_{false} \cdot \kappa}{((), (), \top)}{S}\\
+\rtstate{\mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false} \cdot \kappa}{(v^-, v^+, c)}{S} &\rightarrow \vrtstate{\mathst{\mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false}}^c \cdot \mathul{\mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false}}^c \cdot \kappa}{((), (), \top)}{S}\\
 \end{align*}
 
 To reduce a conditional that is deleted, we can simply take the matching branch, but if it is inserted, we need to also take into account the color of the condition. This leads to these rules:
@@ -1471,10 +1453,22 @@ Now when we encounter a \textbf{match}, that is destructuring an enum value, we 
 \vrtstate{\mathul{\usebox\boxmatch}^k \cdot \kappa}{(v^-, D(\overrightarrow{v_D^+}), c(\overrightarrow{c_D}))}{S} &\rightarrow \rtstate{\mathul{e_D}^{c \cap k} \cdot \kappa}{(v^-, (), k)}{S\left[\overrightarrow{x_D \leftarrow (S_{del}(x_D), v_D^+, c_D)}\right]}\\
 \end{align*}
 
-\yrg{At this point, you should state the theorem corresponding to the
-  soundness of these reduction rules. It does not matter that you did
-  not prove them correct as long as you convince us that the target
-  properties is indeed a valid oracle.}
+\paragraph{Continue after crash}
+Executing some instructions (division by zero for instance) may crash one of the two correlated program but not the other. This is not a problem.
+
+At a crash in the merged program we can end the analysis as no new ambiguities will be discovered. The crash point itself may or may not be declared ambiguous depending on the color of the instruction and the operands.
+
+If the original program crashes however, we have to continue executing the merged program alone as only the effect of remaining deleted instructions is gone. To simulate that, we mark all the continuation as inserted with color white (following composition rules for already inserted instructions). The white color is chosen as we consider that fixing a crash will never break invariants of other commits. This is an assumption that might be questionned.
+
+\paragraph{Interpreting a colored difference with this oracle formalism}
+We can interpret non-conflicting self-contained differences as code for colored diffrence oracles.
+Indeed, removed and inserted code directly map to removed and inserted expressions, and we only have to add a last reduction rule that splits the execution paths when needed.
+$$\rtstate{\mathst{e_d}^k \rightarrow \mathul{e_i}^k \cdot \kappa}{(v^-, v^+, c)}{S} \rightarrow \rtstate{\mathst{e_d}^k \cdot \mathul{e_i}^k \cdot \kappa}{((), (), \top)}{S}$$
+This was expected as we designed the merging algorithm and the way it propagates colors to match the semantic analysis given here.
+
+\paragraph{Soundness of the reduction rules}
+The soundness of the rules above is directly given by the interpretation of the color of a value, and therefore of an ambiguity. A value must have a given tint if and only if the corresponding commit is aware of it (or at least of all meaningful invariants linked to it) in the current program state.
+All the unforseen interactions between concurrent commits might be source of bugs, but fortunately, all of them will generate black values. This is because by definition unforseen interaction occur when either two independantly modified values are combined or newly introduced code uses independantly modified value.
 
 \paragraph{Ambiguity detection}
 
@@ -1485,11 +1479,6 @@ more than one problem at the same time, we can continue the execution
 on a black value and locally replace it with white, signalling an
 error to be manually resolved later. A merge is valid if it never
 create such black value.
-\begin{align*}
- \rtstate{\kappa}{(v^-, v^+, \bot)}{S} &\overset{!}{\rightarrow} \rtstate{\kappa}{(v^-, v^+, \top)}{S}
-\end{align*}
-
-\yrg{What is the meaning of the ! here?}
 
 \subsection{Resolving conflicts and ambiguities}
 The colored difference oracle reports a list of ambiguity points, that
@@ -1516,7 +1505,7 @@ automated tactics could be added in future work.
 %
 Some changes are refactorings that do not modify the semantics, or are
 bugfixes that do not change the intended semantics that rest of the
-program rely on.  The automatic ambiguity detection will be triggered
+program rely on. The automatic ambiguity detection will be triggered
 by these changes because it is unable to notice the constant implicit
 semantic preservation. To mark these ambiguity as false positive, we
 can use the \textit{preserving} tactic, that replace the color of a
