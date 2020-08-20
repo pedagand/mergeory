@@ -394,16 +394,6 @@ as Greek letters) to abstract away sub-trees that are irrelevant for
 the commit and ease fusion later. These notions will be explained in
 further detail in Section~\ref{sec:syntax_tree_def}.
 
-To keep track of which commit introduced which modification we use
-colors. Each commit is associated with a tint. If a change has a given
-tint, then the corresponding commit is aware (or unaffected) by
-it. The color that we call white is given to the expressions of the
-source program and is considered as having all the tints at once as
-their values is supposed to be known by all the committers. In the
-example, left commit has blue tint, and right commit has orange
-tint. We can see in their difference that they taint the code they
-introduced and the modification they made.
-
 \noindent
 \begin{minipage}{\textwidth}
 \begin{minipage}{.32\textwidth}
@@ -487,9 +477,19 @@ fn f(c: bool) -> i32 {
 \end{lstlisting}
 \end{minipage}
 
+To keep track of which commit introduced which modification we use
+colors. Each commit is associated with a tint. If a change has a given
+tint, then the corresponding commit is aware (or unaffected) by
+it. The color that we call white is given to the expressions of the
+source program and is considered as having all the tints at once as
+their values is supposed to be known by all the committers. In the
+example, left commit has blue tint, and right commit has orange
+tint. We can see in their difference that they taint the code they
+introduced and the modification they made.
+
 After having generated individual syntactic differences, we can merge
 them and remove holes by reusing the original program, producing the
-code above in the middle. This process is designed such that it never
+code in the middle of Listing~\ref{lst:overview_diffs}. This process is designed such that it never
 makes any arbitrary choices, and can sometimes generate conflicts when
 no canonical choice exists. However, it tries whenever possible to
 push the changes following moved code to ease refactoring fusions (see Lines~$15$ and~$16$). This process propagates awareness colors.
