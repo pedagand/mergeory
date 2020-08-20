@@ -182,18 +182,40 @@ to make it easily adaptable to a large set of programming languages.
 % What should be done now ?
 % What is the good \emph{next} question ?}
 
-At the end of the internship, we have developped a new merging process that produces a non-surprising syntactic fusion of changes and then forces programmers to review all potential bad interactions between concurrent commits. The syntactic merging part is supported by an implementation.
+At the end of the internship, we have developped a new merging process
+that produces a non-surprising~\yrg{predictable?} syntactic fusion of
+changes and then forces programmers to review all potential bad
+interactions between concurrent commits. The syntactic merging part is
+supported by an implementation.
 
-This might become a starting point for further works that also try to avoid unintended behaviour introduction during code merging.
+This achievement could become a starting point for further work that
+also tries to avoid unintended behaviours introduced during code
+merging.
 
-However, our approach still need improvements to provide more theoretical guarantees, and be usable in the real world. 
+However, our approach still need improvements to provide more
+theoretical guarantees, and be usable in the real world.
 
-For the syntactic merging algorithm a lot of properties remain to be proven. The given algorithm does not come yet with a proof that it respect the intended specifications; specifications that might themselves need some improvements. 
-Moreover, the average user feelings about the produced merged differences have not been tested, and better merging paradigms can still be found.
+For the syntactic merging algorithm a lot of properties remain to be
+proven. The given algorithm does not come yet with a proof that it
+respect the intended specifications; specifications that might
+themselves need some improvements.
 
-On the semantic check part, what we give is only a theoretical foundation because runtime trace analysis cannot reasonnably be run on all possible inputs to give full program guarantees. However, our work opens the way for a static analysis that check our runtime properties to remove this flaw, and finally provide a running implementation of the system.
+Moreover, the average user's feelings about the produced merged
+differences have not been tested thoroughly, and better merging
+paradigms can still be found.
 
-For the conflict and ambiguity resolution system, the tactics given in this paper are rather weak and low-level, pushing all the checking burden on the programmer. More automated strategies could be added to ease the workflow and maybe even remove most false-positive ambiguities.
+On the semantic check part, what we give is only a theoretical
+foundation because runtime trace analysis cannot reasonnably be run on
+all possible inputs to give full program guarantees. However, our work
+opens the way for a static analysis that checks our runtime properties
+to remove this flaw, and finally provides a running implementation of
+the system.
+
+For the conflict and ambiguity resolution system, the tactics given in
+this paper are rather weak and low-level, pushing all the checking
+burden on the programmer. More automated strategies could be added to
+ease the workflow and maybe even remove most false-positive
+ambiguities.
 
 \section{Overview}
 \label{sec:overview}
