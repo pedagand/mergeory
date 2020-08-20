@@ -80,20 +80,23 @@ In software engineering, people rarely work alone on large
 projects. Therefore, quite often they want to merge their work with
 what has been done by others in the meantime.
 %
-To automate these fusions, and keep track of the changes, developers use dedicated tools named \textit{version control systems}. The most used one nowadays is Git \cite{git}.
+To automate these fusions, and keep track of the changes, developers
+use dedicated tools named \textit{version control systems}. The most
+used one nowadays is Git \cite{git}.
 
-A \textit{commit} is an atomic action of changing several source code
-files that makes sense by itself (whatever this may mean for the
-programmer). Typical commits include refactorings, bugfixes or the
-introduction of new features.
+In the terminology of software evolution, a \textit{commit} is an
+atomic action of changing several source code files that makes sense
+by itself (whatever this may mean for the programmer). Typical commits
+include refactorings, bugfixes or the introduction of new features.
 
 Programmers make commits simultaneously, being unaware of what other
 programmers may have done at the same time. However, the final product
 is a fusion of what they all did. This space of unawareness can lead
 to subtle bugs, that cannot be seen if people only review changes and
 not the final code\footnote{Modern coding techniques involve
-  continuous integration testing \cite{fowler2006continuous} to mitigate that, but tests cases are
-  not perfect, so we want to expose another approach.}.
+  continuous integration testing \cite{fowler2006continuous} to
+  mitigate that, but tests cases are not perfect, so we want to expose
+  another approach.}.
 
 \subsection*{The research problem}
 
@@ -103,21 +106,29 @@ not the final code\footnote{Modern coding techniques involve
 % If so, why are you the first researcher in the universe who consider it ?
 % If not, why did you think that you could bring an original contribution ?}
 
-The current tools merging concurrent changes to source code are
-purely textual: as long as two modifications modify distinct lines of
+The current tools to merge concurrent changes are purely textual and
+line-oriented: as long as two modifications modify distinct lines of
 code, a system like Git accepts to merge them
 automatically. Unfortunately, even if two modifications are physically
 separated, they may interact, especially when one modification breaks
-the assumptions on top of which the other has been conceived.
-We will show on running examples that this can be a source of bugs.
+the assumptions on top of which the other has been conceived.  We will
+show on running examples that this can be a source of bugs.
 
-Instead, we want to developp a semantically sound notion of commits 
-merge which captures that kind of unforeseen interactions 
-between concurrent modifications.
+Instead, we want to develop a semantically sound notion of commits
+merge which detects that kind of unforeseen interactions between
+concurrent modifications.
 
-This can help programmers to make software more robust, as they will be able to trust that a merge operation will not silently introduce unwanted behaviours.
+This new detection of conflicts can help programmers to make software
+more robust, as they will be able to trust that a merge operation will
+not silently introduce unwanted behaviours.
 
-The study of the semantics of differences between two programs is not new \cite{benton2004simple}, but some work has been done recently to introduce the notion of correlation oracle \cite{girka2017verifiable} that we use here. However, to my knowledge it was never applied to the specific problem of giving semantic guarantees for the merging operation in version control systems.
+The study of the semantics of differences between two programs is not
+new \cite{benton2004simple}, but some work has been done recently to
+introduce the notion of correlation oracle \cite{girka2017verifiable}
+to represent a rich set of verifiable relations between reduction
+traces. However, to my knowledge, relational analysis has never been
+applied to the specific problem of giving semantic guarantees for the
+merging operation in version control systems.
 
 \subsection*{Your contribution}
 
