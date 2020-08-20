@@ -5,6 +5,7 @@
 
 \title{Semantically checked source code merge}
 \author{Guillaume Bertholon, supervised by Yann Régis Gianas, IRIF -- Université de Paris}
+\date{MPRI internship report - 2020}
 
 \usepackage{listings-rust}
 \lstset{
@@ -183,7 +184,7 @@ to make it easily adaptable to a large set of programming languages.
 % What is the good \emph{next} question ?}
 
 At the end of the internship, we have developed a new merging process
-that produces a non-surprising~\yrg{predictable?} syntactic fusion of
+that produces a predictable syntactic fusion of
 changes and then forces programmers to review all potential bad
 interactions between concurrent commits. The syntactic merging part is
 supported by an implementation.
@@ -1179,7 +1180,6 @@ In a setup where all commits come from a common base, when all relevant commits 
 Having two commits syntactically merged does not mean that the result
 is a valid semantic combination that respect the intentions of all
 original committers. We can see an example of such collision in Listing~\ref{lst:double-incr}.
-
 \begin{lstlisting}[label=lst:double-incr, caption={Double fix of the same function by different commits. The syntactic fusion does not create a conflict but semantically we will most probably create a bug here.}]
 fn compute_something(x: i32) -> i32 {
     let mut a = x * x;
@@ -1193,7 +1193,7 @@ semantic of the fusion for possible ambiguities.
 
 In this section, we first will show that self-contained
 non-conflicting difference trees can be interpreted as correlation
-oracles~\cite{girka2017verifiable} between the original code and a merged candidate,
+oracles~\cite{girka2018differential} between the original code and a merged candidate,
 that is specific relation between the two programs' execution
 traces. Secondly, we show that we can derive a runtime analysis that
 ensures that there is no unresolved ambiguity introduced by the fusion
@@ -1402,7 +1402,7 @@ fn f(c: bool) -> i32 {
 Figure~\ref{fig:oracle_sync_from_diff} shows an example of such synchronization. Lines 2 and 4 are executed by only one program but we can resynchronize afterwards at the next spine node. As the control flow decision changes at line 5, we first let the original program execute line 8, then let the merged one execute line 6 and then resynchronize. At each step we advance in at least one of the programs, sometimes keeping the other stalled.
 
 To express the interleaving between two programs, and compute the
-colors of the expressions, we use the correlation oracle framework \cite{girka2017verifiable}.
+colors of the expressions, we use the correlation oracle framework \cite{girka2018differential}.
 
 Formally, a correlation oracle is defined as a program with states
 that can be projected on either of the correlated programs.
