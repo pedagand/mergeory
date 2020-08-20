@@ -1025,11 +1025,10 @@ properties. These properties are not proved, but follow from the design principl
 All the nodes that are inside the spine of both commits are preserved.
 
 \paragraph{Deletion tree intersection}
-If some code is deleted in one of the commits with color $c$, it must also be deleted in the merged result a color $c' \supseteq c$. Moreover, if two commits delete the same code, the result
-pushes meta-variables as far as possible down the deleted tree.
+If some code is deleted in one of the commits with color $c$, it must also be deleted in the merged result with a color $c' \supseteq c$.
 
 \paragraph{Domain}
-First, we can notice that in absence of conflicts, the domain of the
+We can notice that in absence of conflicts, the domain of the
 merged difference is the intersection of the domains of both
 inputs. Mathematically, we have: $\dom(t_1 \merge t_2) = \dom(t_1)
 \cap \dom(t_2)$. This comes from spine preservation combined with
@@ -1039,15 +1038,11 @@ merged difference.}\gb{Isn't the interpretation of differences as functions from
 
 \paragraph{Idempotence}
 $t \merge t = t$. This comes from the fact that we do not let
-conflicts happen when both tree agree on a common value. The property
-can be extended to differently colored tree as: $t^{c_1} \merge
+conflicts or change inlining happen when both inputs agree on a common value. The property can be extended to differently colored tree as: $t^{c_1} \merge
 t^{c_2} = t^{c_1 \cup c_2}$.
 
 \paragraph{Commutativity}
-$t_1 \merge t_2 = t_2 \merge t_1$, it comes from the symmetry in rules
-and shows that we cannot treat differently the left and the right
-commits, thus never favoring one side against the other. There is a
-little limitation though, we must consider that the order inside
+$t_1 \merge t_2 = t_2 \merge t_1$, this shows that we cannot treat differently the left and the right commits, thus never favoring one side against the other. There is a little limitation though, we must consider that the order inside
 conflicts does not matter: $\InsConflict(i_1, i_2) = \InsConflict(i_2,
 i_1)$, $\OrdConflict([\overrightarrow{i}]) =
 \OrdConflict(\sigma[\overrightarrow{i}])$ for any permutation $\sigma$
@@ -1055,14 +1050,11 @@ and $\MvConflict(\alpha, \MvConflict(\beta, d, i_\beta), i_\alpha) =
 \MvConflict(\beta, \MvConflict(\alpha, d, i_\alpha), i_\beta)$.
 
 \paragraph{Preserve introduced nodes}
-For all nodes that are introduced in one of the commits, we know that
-it will be found at least once in the merged result colored with at
-least as many tints. However, we cannot say anything about location of
-these introduced nodes because their code might have been displaced by
-meta-variable inlining.
+For all nodes that are introduced in one of the commits, we know that it will be found at least once in the merged result. However, we cannot say anything about location of these introduced nodes because their code might have been displaced by meta-variable inlining.
 
 \paragraph{Compatible with composition}
-If $d \in \dom(t_1 \circ t_2)$, then if $t_1 \circ t_2 = t_2 \circ
+We denote by $\circ$ the sequential composition of changes: this means that $(t_1 \circ t_2)(d) = t_1(t_2(d))$. Note that the domain of such composition might be empty.
+If $d \in \dom(t_1 \circ t_2)$ and $t_1 \circ t_2 = t_2 \circ
 t_1$, we have $(t_1 \merge t_2)(d) = (t_1 \circ t_2)(d)$. Here the
 precondition will be true for differences without code moves. This
 means that on orthogonal changes, the merge operation is the same as
@@ -1090,7 +1082,7 @@ In a setup where all commits come from a common base, when all relevant commits 
 
 Having two commits syntactically merged does not mean that the result
 is a valid semantic combination that respect the intentions of all
-original committers. We can see an example of such collision in Listing~5.
+original committers. We can see an example of such collision in Listing~\ref{lst:double-incr}.
 
 \begin{lstlisting}[label=lst:double-incr, caption={Double fix of the same function by different commits. The syntactic fusion does not create a conflict but semantically we will most probably create a bug here.}]
 fn compute_something(x: i32) -> i32 {
@@ -1110,12 +1102,7 @@ that is specific relation between the two programs' execution
 traces. Secondly, we show that we can derive a runtime analysis that
 ensures that there is no unresolved ambiguity introduced by the fusion
 operation. In future work, this runtime analysis could be refined into
-a static analysis.
-
-If we combine this invariant with the fact that the fusion never lose
-any introduced change, we obtain the certainty that the intents of all
-original commits are respected, because both changes and implicit
-environment assumptions are preserved.
+a static analysis. Finally, we will describe a possible conflict resolution system that interacts with our analysis.
 
 \subsection{Operational semantics of the studied language}
 
@@ -1128,19 +1115,19 @@ allows us to explore both functional and imperative coding styles.  We ignore al
 
 Syntactically, with $\ident$ the set of variable and function
 identifiers, $\typ$ the set of type identifiers, $\diamond$
-(resp. $\star$) the set of primitive binary (resp. unary) functions, and $\boxed{a}^*$ the repetition of 0 or more times $a$,
+(resp. $\star$) the set of primitive binary (resp. unary) functions, and $\boxed{a}^*$ the repetition of zero or more times $a$,
 the syntax for our toy language is defined by the following grammar:
-
 \begin{align*}
 program &::= \boxed{item}^*\\
 item &::= func \typsep enum\\
 enum &::= \mathbf{enum}\ \typ\ \{ \boxed{\ident(\boxed{\typ,}^*),}^* \}\\
 func &::= \mathbf{fn}\ \ident(\boxed{\ident: \typ}^*) \rightarrow \typ\ block\\
 block &::= \{ \boxed{expr;}^* expr \}\\
-expr &::= \ident \typsep literal \typsep \star expr \typsep expr \diamond expr \typsep \ident = expr \typsep \ident(\boxed{expr}^*) \typsep block\\
+expr &::= \ident \typsep literal \typsep \star expr \typsep expr \diamond expr \typsep \ident = expr \typsep \ident(\boxed{expr,}^*) \typsep block\\
 &\typsep \mathbf{if}\ expr\ block\ \mathbf{else}\ block \typsep \mathbf{while}\ expr\ block \typsep \mathbf{match}\ expr\ \{ \boxed{\ident(\boxed{\ident,}^*) \Rightarrow expr,}^* \}\\
 &\typsep \mathbf{continue} \typsep \mathbf{break} \typsep \textbf{return}\ expr\\
-literal &::= () \typsep \mathbf{true} \typsep \mathbf {false} \typsep \mathbb{Z}
+literal &::= () \typsep \mathbf{true} \typsep \mathbf {false} \typsep \mathbb{Z}\\
+value &::= literal \typsep \ident(\boxed{value,}^*)\\
 \end{align*}
 
 \yrg{What do the boxes mean? Is that a standard format? If so, could
@@ -1151,24 +1138,20 @@ literal &::= () \typsep \mathbf{true} \typsep \mathbf {false} \typsep \mathbb{Z}
 To define the semantics, we define the program state as a tuple
 $\rtstate{\kappa}{v}{S}$ where $\kappa$ is the continuation, $v$ the
 value of the last computed expression and $S$ the local store
-stack. \yrg{You should informally explain why the value of the last
-  computed expression is needed and why local stores follow a
-  discipline of stack. In particular, one could wonder why there is no
-  heap in this program state.}
-
-\yrg{What is the syntax for values?}
-
-For function calls, we can push a new store on top of the previous
-one~\yrg{Is it optional to push a new store? When executing a function
-  call?}, only the topmost store can be used and updated as it
-corresponds to the current function.
+stack.
+The value of the last computed expression is needed in program states because any expression can itself be a complex branching subprogram returning the value we need to continue (as functionnal programming style requires). Instructions in continuation refer to this previous value with the pseudo-expression $\square$.
+When a function is called, we push a new store on top of the previous
+one. Only the topmost store can be used and updated as it
+corresponds to the stack frame of the current function.
+For simplicity reasons, our language does not feature references, so the heap is omitted, however it should work similarly to a global store indexed by adresses.
 
 We also keep the set of constructors, and the set of functions as a
-global state.~\yrg{That global environment is hardly compatible with a
+global state.\footnote{Technically, we could say that named functions are constants of the global environment and that there exist a meta-language operation extracting the code out of a function value into colored continuation elements. As this induce more complexity in the explanations we stick to first-order programs (no anonymous lambda abstraction).}
+\yrg{That global environment is hardly compatible with a
   higher-order language, right? That's fine because your language is
-  first order (no anonymous lambda abstraction). Yet, the introduction
+  first order. Yet, the introduction
   emphasizes that you chose a sublanguage of Rust to play with
-  functional programs: this looks a bit contradictory.}\gb{Technically, we could say that functions are constants of the global environment and that there exist a meta-language operation  extracting the code out of a ``functionnal'' value into colored continuation elements. But this induce more complexity in the explanations, and I think is not really important to show. This paper is way too technical already. When I said that we chose Rust for functional bahaviours, I was mostly thinking of algebraic datatypes and of the ``every piece of code yields a value'' idiom} We denote
+  functional programs: this looks a bit contradictory.}\gb{See footnote. This paper is way too technical already. When I said that we chose Rust for functional bahaviours, I was mostly thinking of algebraic datatypes and of the ``every piece of code yields a value'' idiom} We denote
 $\mathbb{G}(f)$ the body of function $f$ taken from global
 state. Types do not play any role in reduction rules, but we will
 assume that programs are already well typed. The initial state is
@@ -1177,14 +1160,10 @@ $\overrightarrow{x_a}$:
 $\rtstate{\mathbb{G}(f)}{()}{\{\overrightarrow{x_a \leftarrow
     v_a}\}}$.
 
-Then the program follows the reduction rules below:
+Then, if we denote by $\kappa_{\neg \mathbf{kw}}$ any sequence of instructions without the keyword $\mathbf{kw}$, the program follows the reduction rules below:
 \begin{align*}
-\rtstate{\{\overrightarrow{stmt;}\ expr\} \cdot \kappa}{v}{S} &\rightarrow \rtstate{\overrightarrow{stmt} \cdot expr \cdot \kappa}{()}{S}
-\textrm{\yrg{stmt is undefined.}}
-\\
-\rtstate{x = e \cdot \kappa}{v}{S} &\rightarrow \rtstate{e \cdot x = \square \cdot \kappa}{()}{S}
-\textrm{\yrg{$\square$ is undefined.}}
-\\
+\rtstate{\{\overrightarrow{e_s;}\ e\} \cdot \kappa}{v}{S} &\rightarrow \rtstate{\overrightarrow{e_s} \cdot e \cdot \kappa}{()}{S}\\
+\rtstate{x = e \cdot \kappa}{v}{S} &\rightarrow \rtstate{e \cdot x = \square \cdot \kappa}{()}{S}\\
 \rtstate{x = \square \cdot \kappa}{v}{S} &\rightarrow \rtstate{\kappa}{()}{S[x \leftarrow v]}\\
 \rtstate{x \cdot \kappa}{v}{S} &\rightarrow \rtstate{\kappa}{S(x)}{S}\\
 \rtstate{literal \cdot \kappa}{v}{S} &\rightarrow \rtstate{\kappa}{literal}{S}\\
@@ -1202,20 +1181,12 @@ Then the program follows the reduction rules below:
 \rtstate{\mathbf{if}\ \square\ b_{true}\ \mathbf{else}\ b_{false} \cdot  \kappa}{\mathbf{false}}{S} &\rightarrow \rtstate{b_{false} \cdot \kappa}{()}{S}\\
 \rtstate{\mathbf{while}\ e_{cond}\ b \cdot \kappa}{v}{S} &\rightarrow \rtstate{\mathbf{if}\ e_{cond}\ \{ b;\ \mathbf{while}\ e_{cond}\ b \}\  \mathbf{else}\ \{\} \cdot \kappa}{()}{S}\\
 \rtstate{\mathbf{match}\ e_{scrut}\ \{ \overrightarrow{C(\overrightarrow{x_C,}) \Rightarrow e_C,} \} \cdot \kappa}{v}{S} &\rightarrow \rtstate{e_{scrut} \cdot \mathbf{match}\ \square\ \{ \overrightarrow{C(\overrightarrow{x_C,}) \Rightarrow e_C,} \} \cdot \kappa}{()}{S}\\
-\rtstate{\mathbf{match}\ \square\ \{ \overrightarrow{C(\overrightarrow{x_C,}) \Rightarrow e_C,} \} \cdot \kappa}{D(\overrightarrow{v_D})}{S} &\rightarrow \rtstate{e_D \cdot \kappa}{()}{S[\overrightarrow{x_D \leftarrow v_D}]}
-\textrm{\yrg{What are $e_D$, $x_D$?}}
-\\
-\rtstate{\mathbf{continue} \cdot \overrightarrow{\kappa_{\neg while}} \cdot \textbf{while}\ e_{cond}\ b \cdot \kappa}{v}{S} &\rightarrow \rtstate{\textbf{while}\ e_{cond}\ b \cdot \kappa}{()}{S}
-\textrm{\yrg{You should explain what $\kappa_{\neg while}$ means.}}
-\\
-\rtstate{\mathbf{break} \cdot \overrightarrow{\kappa_{\neg while}} \cdot \textbf{while}\ e_{cond}\ b \cdot \kappa}{v}{S} &\rightarrow \rtstate{\kappa}{()}{S}
-\textrm{\yrg{You should explain what $\kappa_{\neg while}$ means.}}
-\\
+\rtstate{\mathbf{match}\ \square\ \{ \overrightarrow{C(\overrightarrow{x_C,}) \Rightarrow e_C,}\ D(\overrightarrow{x_D,}) \Rightarrow e_D \} \cdot \kappa}{D(\overrightarrow{v_D,})}{S} &\rightarrow \rtstate{e_D \cdot \kappa}{()}{S[\overrightarrow{x_D \leftarrow v_D}]}\\
+\rtstate{\mathbf{continue} \cdot \kappa_{\neg \textbf{while}} \cdot \textbf{while}\ e_{cond}\ b \cdot \kappa}{v}{S} &\rightarrow \rtstate{\textbf{while}\ e_{cond}\ b \cdot \kappa}{()}{S}\\
+\rtstate{\mathbf{break} \cdot \kappa_{\neg \textbf{while}} \cdot \textbf{while}\ e_{cond}\ b \cdot \kappa}{v}{S} &\rightarrow \rtstate{\kappa}{()}{S}\\
 \rtstate{\mathbf{return}\ e \cdot \kappa}{v}{S} &\rightarrow \rtstate{e \cdot \mathbf{return}\ \square \cdot \kappa}{()}{S}
 \\
-\rtstate{\mathbf{return}\ \square \cdot \overrightarrow{\kappa_{\neg eof}} \cdot \textbf{eof} \cdot \kappa}{v}{S} &\rightarrow \rtstate{\textbf{eof} \cdot \kappa}{v}{S}
-\textrm{\yrg{You should explain what $\kappa_{\neg \textbf{eof}}$ means.}}
-\\
+\rtstate{\mathbf{return}\ \square \cdot \kappa_{\neg \textbf{eof}} \cdot \textbf{eof} \cdot \kappa}{v}{S} &\rightarrow \rtstate{\textbf{eof} \cdot \kappa}{v}{S}\\
 \rtstate{\textbf{eof} \cdot \kappa}{v}{S_f :: S} &\rightarrow \rtstate{\kappa}{v}{S}\\
 \end{align*}
 
