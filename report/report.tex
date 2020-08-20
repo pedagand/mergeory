@@ -136,10 +136,15 @@ merging operation in version control systems.
 % Be careful, do \emph{not} give technical details, only rough ideas !
 % Pay a special attention to the description  of the \emph{scientific} approach.}
 
-Resolving the problem by a pure semantic merging was considered hard for reasons explained in Section~\ref{sec:overview}. Therefore, we tried to split the problem, and resolve each step independantly.
-This internship propse a merging tool based on two distinct main components, which also are the two main contributions: (i) an algorithm which implements a principled notion of
-syntactic merge at the level of syntax trees (Section~\ref{sec:syntactic-merge}) ; (ii) a semantic notion of unambiguous merge
-at the level of execution traces (Section~\ref{sec:semantic-merge}).
+Resolving the problem by a purely semantic merging was considered hard
+for reasons explained in Section~\ref{sec:overview}. Therefore, we
+tried to split the problem, and solve each step independently. This
+internship proposes a merging tool based on two distinct main
+components, which also are the two main contributions: (i) an
+algorithm which implements a principled notion of syntactic merge at
+the level of syntax trees (Section~\ref{sec:syntactic-merge}) ; (ii) a
+semantic notion of unambiguous merge at the level of execution traces
+(Section~\ref{sec:semantic-merge}).
 
 \subsection*{Arguments supporting its validity}
 
@@ -147,11 +152,28 @@ at the level of execution traces (Section~\ref{sec:semantic-merge}).
 % Experiments ? Proofs ?
 % Comment the robustness of your solution: how does it rely/depend on the working assumptions ?}
 
-Our syntactic merge algorithm works on any language that can be parsed into a syntax tree, provide good fusion in presence of refactorings, and does never favor a commit over another. As we shall discuss in Section~\ref{sec:related-work}, it improves on existing approaches of syntactic merge. Moreover, we were able to provide a working implementation that behaves as expected on tested cases, and provides provenance color annotations for the next step.
-Section~\ref{sec:merge_properties} shows additionnal good properties that should derive from the exposed design principles but whose proof is left for future work.
+Our syntactic merge algorithm works on any language that can be parsed
+into a syntax tree, provides good fusion in presence of refactorings,
+and never favors a commit over another. As we shall discuss in
+Section~\ref{sec:related-work}, it improves on existing approaches of
+syntactic merge. Moreover, we were able to provide a working
+implementation that behaves as expected on tested cases, and provides
+provenance color annotations for the next step.
+Section~\ref{sec:merge_properties} shows additional good properties
+that should derive from the exposed design principles but whose formal
+proof is left for future work.
 
-For semantic guarantees, we offer a practical, expressive, and original notion of unambiguous merge, and derive a runtime analysis for checking it. We ensure that whenever a commit break invariants on which another commit relied on, the user will be forced to take action. As we do not have much information about the intentions of changes, this can generate too much conflicts, but always enough. We then provide a simple way of patching the merged program to resolve these conflicts.
-Unfortunately, this part is specific to a particular programming language, but we demonstrate how it should work for languages that provide both functionnal and imperative features, to make it easily adaptable.
+For semantic guarantees, we offer a practical, expressive, and
+original notion of unambiguous merge, and derive a runtime analysis
+for checking it. We ensure that whenever a commit break invariants on
+which another commit relied on, the user will be forced to take
+action. As we do not have much information about the intents behind
+source code changes, this can generate many conflicts, but always
+enough. We then provide a simple way of patching the merged program to
+resolve these conflicts.  Unfortunately, this part is specific to a
+particular programming language, but we demonstrate how it should work
+for languages that provide both functional and imperative features,
+to make it easily adaptable to a large set of programming languages.
 
 \subsection*{Summary and future work}
 
