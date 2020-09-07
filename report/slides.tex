@@ -1067,6 +1067,29 @@ $\merge$
 \end{onlyenv}
 \end{frame}
 
+\begin{frame}{Merging syntactic differences: Principles and advancement}
+\begin{block}{Theoretical guarantees wanted}
+ \begin{itemize}
+  \item No change is ever lost
+  \item Commutative ($t \merge u = u \merge t$)
+  \item Idempotent ($t \merge t = t$)
+  \item Identity is neutral ($t \merge id = t$)
+  \item Intersect domains ($\dom(t \merge u) \supseteq \dom(t) \cap \dom(u)$)
+  \item Compatible with composition and inverse
+ \end{itemize}
+\end{block}
+
+\begin{exampleblock}<2->{Work achieved}
+ \begin{itemize}
+  \item Manual quadratic effort
+  \item Implementation that works on examples ($\approx 5000$ LoC)
+  \item Work in progress formal specification
+  \item No proof of correctness yet
+ \end{itemize}
+\end{exampleblock}
+\end{frame}
+
+
 \begin{frame}[fragile]{Merging syntactic differences: Example}
 \begin{columns}
 \begin{column}{0.33\textwidth}
@@ -1222,16 +1245,16 @@ fn f() -> bool {
 \center{\color{red}Original}
 \vspace{0.5em}
 \begin{lstlisting}[rulecolor=\color{red!20}]
-fn f(c: bool) -> i32 {
-    let w = 40;
-    let x = 2 + w;
+fn f(c: bool) -> i32 {@\only<1>{\color{red}$\bullet$}@
+    let w = 40;@\only<2>{\color{red}$\bullet$}@
+    let x = 2 + w;@\only<3-4>{\color{red}$\bullet$}@
     
-    let y = if c {
+    let y = if c@\alt<5>{\color{red}$\bullet$}{ }@{
         2
     } else {
-        x
-    };
-    x * y
+        x@\only<6-7>{\color{red}$\bullet$}@
+    };@\only<8>{\color{red}$\bullet$}@
+    x * y@\only<9>{\color{red}$\bullet$}@
 }
 \end{lstlisting}
 \end{column}
@@ -1239,16 +1262,16 @@ fn f(c: bool) -> i32 {
 \center{Difference}
 \vspace{0.5em}
 \begin{lstlisting}
-fn f(c: bool) -> i32 {
-    @\color{red}\st{let w = 40;}@
-    let x = @\color{red}\st{2+w}@ @$\rightarrow$@ @{\color{olive}\ul{42}}@;
-    @\color{olive}\ul{let z = !c;}@
-    let y = if @\color{red}\st{c}@ @$\rightarrow$@ @{\color{olive}\ul{z}}@ {
-        @{\color{red}\st{2}} $\rightarrow$ {\color{olive}\ul{1}}@
+fn f(c: bool) -> i32 {@\only<1>{$\bullet$}@
+    @\color{red}\st{let w = 40;}@@\only<2>{$\bullet$}@
+    let x = @\color{red}\st{2+w}@ @$\rightarrow$@ @{\color{olive}\ul{42}}@;@\only<3>{$\bullet$}@
+    @\color{olive}\ul{let z = !c;}@@\only<4>{$\bullet$}@
+    let y = if @\color{red}\st{c}@ @$\rightarrow$@ @{\color{olive}\ul{z}}\alt<5-6>{\only<6>{\color{olive}}$\bullet$}{ }@{
+        @{\color{red}\st{2}} $\rightarrow$ {\color{olive}\ul{1}}\only<7>{\color{olive}$\bullet$}@
     } else {
-        @{\color{red}\st{x}} $\rightarrow$ {\color{olive}\ul{x * x}}@
-    };
-    x * y
+        @{\color{red}\st{x}} $\rightarrow$ {\color{olive}\ul{x * x}}\only<6-7>{\color{red}$\bullet$}@
+    };@\only<8>{$\bullet$}@
+    x * y@\only<9>{$\bullet$}@
 }
 \end{lstlisting}
 \end{column}
@@ -1256,50 +1279,63 @@ fn f(c: bool) -> i32 {
 \center{\color{olive}Modified}
 \vspace{0.5em}
 \begin{lstlisting}[rulecolor=\color{olive!20}]
-fn f(c: bool) -> i32 {
+fn f(c: bool) -> i32 {@\only<1-2>{\color{olive}$\bullet$}@
     
-    let x = 42;
-    let z = !c;
-    let y = if z {
-        1
+    let x = 42;@\only<3>{\color{olive}$\bullet$}@
+    let z = !c;@\only<4>{\color{olive}$\bullet$}@
+    let y = if z@\alt<5-6>{\color{olive}$\bullet$}{ }@{
+        1@\only<7>{\color{olive}$\bullet$}@
     } else {
         x * x
-    };
-    x * y
+    };@\only<8>{\color{olive}$\bullet$}@
+    x * y@\only<9>{\color{olive}$\bullet$}@
 }
 \end{lstlisting}
 \end{column}
 \end{columns}
 \setstcolor{red}\setulcolor{olive}
 \begin{center}
+\alt<1>{\tikzstyle{hl1} = [opacity=1]}{\tikzstyle{hl1} = []}
+\alt<2>{\tikzstyle{hl2} = [opacity=1]}{\tikzstyle{hl2} = []}
+\alt<3>{\tikzstyle{hl3} = [opacity=1]}{\tikzstyle{hl3} = []}
+\alt<4>{\tikzstyle{hl4} = [opacity=1]}{\tikzstyle{hl4} = []}
+\alt<5>{\tikzstyle{hl5} = [opacity=1]}{\tikzstyle{hl5} = []}
+\alt<6>{\tikzstyle{hl6} = [opacity=1]}{\tikzstyle{hl6} = []}
+\alt<7>{\tikzstyle{hl7} = [opacity=1]}{\tikzstyle{hl7} = []}
+\alt<8>{\tikzstyle{hl8} = [opacity=1]}{\tikzstyle{hl8} = []}
+\alt<9>{\tikzstyle{hl9} = [opacity=1]}{\tikzstyle{hl9} = []}
 \begin{tikzpicture}
-    \node (o1) {1};
-    \node[right of=o1] (o2) {\st{2}};
-    \node[right of=o2] (o3) {3};
-    \node[right of=o3] (o4) {\ul{4}};
-    \node[right of=o4] (o5) {5};
-    \node[right of=o5] (o8) {\st{8}};
-    \node[right of=o8] (o6) {\ul{6}};
-    \node[right of=o6] (o10) {10};
+    \node[opacity=0.6, hl1] (o1) {1};
+    \node[right of=o1, opacity=0.6, hl2] (o2) {\st{2}};
+    \node[right of=o2, opacity=0.6, hl3] (o3) {3};
+    \node[right of=o3, opacity=0.6, hl4] (o4) {\ul{4}};
+    \node[right of=o4, opacity=0.6, hl5] (o5) {5};
+    \node[right of=o5, opacity=0.6, hl6] (o8) {\st{8}};
+    \node[right of=o8, opacity=0.6, hl7] (o6) {\ul{6}};
+    \node[right of=o6, opacity=0.6, hl8] (o9) {9};
+    \node[right of=o9, opacity=0.6, hl9] (o10) {10};
     \draw[->] (o1) -- (o2);
     \draw[->] (o2) -- (o3);
     \draw[->] (o3) -- (o4);
     \draw[->] (o4) -- (o5);
     \draw[->] (o5) -- (o8);
     \draw[->] (o8) -- (o6);
-    \draw[->] (o6) -- (o10);
+    \draw[->] (o6) -- (o9);
+    \draw[->] (o9) -- (o10);
 
-    \node[red, above of=o1] (d1) {1};
-    \node[red, above of=o2] (d2) {2};
-    \node[red, above of=o3] (d3) {3};
-    \node[red, above of=o5] (d5) {5};
-    \node[red, above of=o8] (d8) {8};
-    \node[red, above of=o10] (d10) {10};
+    \node[red, above of=o1, opacity=0.6, hl1] (d1) {1};
+    \node[red, above of=o2, opacity=0.6, hl2] (d2) {2};
+    \node[red, above of=o3, opacity=0.6, hl3, hl4] (d3) {3};
+    \node[red, above of=o5, opacity=0.6, hl5] (d5) {5};
+    \node[red, above of=o8, opacity=0.6, hl6, hl7] (d8) {8};
+    \node[red, above of=o9, opacity=0.6, hl8] (d9) {9};
+    \node[red, above of=o10, opacity=0.6, hl9] (d10) {10};
     \draw[red, ->] (d1) -- (d2);
     \draw[red, ->] (d2) -- (d3);
     \draw[red, ->] (d3) -- (d5);
     \draw[red, ->] (d5) -- (d8);
-    \draw[red, ->] (d8) -- (d10);
+    \draw[red, ->] (d8) -- (d9);
+    \draw[red, ->] (d9) -- (d10);
     \draw[dotted, ->] (o1) -- (d1);
     \draw[dotted, ->] (o2) -- (d2);
     \draw[dotted, ->] (o3) -- (d3);
@@ -1307,19 +1343,22 @@ fn f(c: bool) -> i32 {
     \draw[dotted, ->] (o5) -- (d5);
     \draw[dotted, ->] (o8) -- (d8);
     \draw[dotted, ->] (o6) -- (d8);
+    \draw[dotted, ->] (o9) -- (d9);
     \draw[dotted, ->] (o10) -- (d10);
 
-    \node[olive, below of=o1] (i1) {1};
-    \node[olive, below of=o3] (i3) {3};
-    \node[olive, below of=o4] (i4) {4};
-    \node[olive, below of=o5] (i5) {5};
-    \node[olive, below of=o6] (i6) {6};
-    \node[olive, below of=o10] (i10) {10};
+    \node[olive, below of=o1, opacity=0.6, hl1, hl2] (i1) {1};
+    \node[olive, below of=o3, opacity=0.6, hl3] (i3) {3};
+    \node[olive, below of=o4, opacity=0.6, hl4] (i4) {4};
+    \node[olive, below of=o5, opacity=0.6, hl5, hl6] (i5) {5};
+    \node[olive, below of=o6, opacity=0.6, hl7] (i6) {6};
+    \node[olive, below of=o9, opacity=0.6, hl8] (i9) {9};
+    \node[olive, below of=o10, opacity=0.6, hl9] (i10) {10};
     \draw[olive, ->] (i1) -- (i3);
     \draw[olive, ->] (i3) -- (i4);
     \draw[olive, ->] (i4) -- (i5);
     \draw[olive, ->] (i5) -- (i6);
-    \draw[olive, ->] (i6) -- (i10);
+    \draw[olive, ->] (i6) -- (i9);
+    \draw[olive, ->] (i9) -- (i10);
     \draw[dotted, ->] (o1) -- (i1);
     \draw[dotted, ->] (o2) -- (i1);
     \draw[dotted, ->] (o3) -- (i3);
@@ -1327,6 +1366,7 @@ fn f(c: bool) -> i32 {
     \draw[dotted, ->] (o5) -- (i5);
     \draw[dotted, ->] (o8) -- (i5);
     \draw[dotted, ->] (o6) -- (i6);
+    \draw[dotted, ->] (o9) -- (i9);
     \draw[dotted, ->] (o10) -- (i10);
 \end{tikzpicture}
 \end{center}
