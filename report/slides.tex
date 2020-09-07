@@ -293,11 +293,8 @@ Can we design a merging procedure preserving the semantics of both modifications
 \begin{column}{0.45\textwidth}
 \begin{block}<2->{Syntactic fusion}
 \begin{itemize}
- \item Align changes from different commits
- \begin{itemize}
- \item Compute individual differences and merge them
- \item Based on syntax tree
- \end{itemize}
+ \item Align changes by syntax
+ \item Difference then fusion
  \item Keep provenance anotations
 \end{itemize}
 \end{block}
@@ -313,7 +310,7 @@ Can we design a merging procedure preserving the semantics of both modifications
 \end{columns}
 \end{frame}
 
-\section{Syntactic fusion}
+\section{Syntactic difference}
 \sectiontitleframe
 
 \begin{frame}{Computing syntactic difference: Spine alignment}
@@ -795,6 +792,9 @@ fn answer() -> i32 {
 \end{columns}
 \end{onlyenv}
 \end{frame}
+
+\section{Syntactic fusion}
+\sectiontitleframe
 
 \begin{frame}{Awareness colors}
 \begin{block}{Base ideas}
