@@ -51,6 +51,7 @@ make_tables! {
     trait_item: ast::hash::TraitItem,
     impl_item: ast::hash::ImplItem,
     foreign_item: ast::hash::ForeignItem,
+    attributes: ast::hash::Attribute,
 }
 
 pub struct HashTagged<T> {

@@ -15,6 +15,7 @@ syn_codegen! {
             Vec<TraitItem> as Vec<HashTagged<TraitItem>>,
             Vec<ImplItem> as Vec<HashTagged<ImplItem>>,
             Vec<ForeignItem> as Vec<HashTagged<ForeignItem>>,
+            Vec<Attribute> as Vec<HashTagged<Attribute>>,
 
             // TokenStream and Literal are non parsed part of the input
             // We use their string representation for hashing
@@ -43,6 +44,7 @@ syn_codegen! {
             Vec<TraitItem> as Vec<MaybeElided<TraitItem>>,
             Vec<ImplItem> as Vec<MaybeElided<ImplItem>>,
             Vec<ForeignItem> as Vec<MaybeElided<ForeignItem>>,
+            Vec<Attribute> as Vec<MaybeElided<Attribute>>,
 
             proc_macro2::TokenStream as String,
             proc_macro2::Literal as String,
@@ -65,6 +67,7 @@ syn_codegen! {
             Vec<TraitItem> as AlignableSeq<TraitItem>,
             Vec<ImplItem> as AlignableSeq<ImplItem>,
             Vec<ForeignItem> as AlignableSeq<ForeignItem>,
+            Vec<Attribute> as AlignableSeq<Attribute>,
 
             proc_macro2::TokenStream as String,
             proc_macro2::Literal as String,
@@ -87,6 +90,7 @@ syn_codegen! {
             Vec<TraitItem> as AlignedSeq<TraitItem, super::elided::TraitItem>,
             Vec<ImplItem> as AlignedSeq<ImplItem, super::elided::ImplItem>,
             Vec<ForeignItem> as AlignedSeq<ForeignItem, super::elided::ForeignItem>,
+            Vec<Attribute> as AlignedSeq<Attribute, super::elided::Attribute>,
 
             proc_macro2::TokenStream as String,
             proc_macro2::Literal as String,
@@ -107,6 +111,7 @@ syn_codegen! {
                 Vec<TraitItem> as Vec<ChangeNode<TraitItem>>,
                 Vec<ImplItem> as Vec<ChangeNode<ImplItem>>,
                 Vec<ForeignItem> as Vec<ChangeNode<ForeignItem>>,
+                Vec<Attribute> as Vec<ChangeNode<Attribute>>,
 
                 proc_macro2::TokenStream as String,
                 proc_macro2::Literal as String,
@@ -126,6 +131,7 @@ syn_codegen! {
             Vec<TraitItem> as AlignedSeq<TraitItem, change::TraitItem>,
             Vec<ImplItem> as AlignedSeq<ImplItem, change::ImplItem>,
             Vec<ForeignItem> as AlignedSeq<ForeignItem, change::ForeignItem>,
+            Vec<Attribute> as AlignedSeq<Attribute, change::Attribute>,
 
             proc_macro2::TokenStream as String,
             proc_macro2::Literal as String,
@@ -158,6 +164,7 @@ syn_codegen! {
                 Vec<TraitItem> as InsSeq<TraitItem>,
                 Vec<ImplItem> as InsSeq<ImplItem>,
                 Vec<ForeignItem> as InsSeq<ForeignItem>,
+                Vec<Attribute> as InsSeq<Attribute>,
 
                 proc_macro2::TokenStream as String,
                 proc_macro2::Literal as String,
@@ -176,6 +183,7 @@ syn_codegen! {
                 Vec<TraitItem> as Vec<DelNode<TraitItem, super::ins::TraitItem>>,
                 Vec<ImplItem> as Vec<DelNode<ImplItem, super::ins::ImplItem>>,
                 Vec<ForeignItem> as Vec<DelNode<ForeignItem, super::ins::ForeignItem>>,
+                Vec<Attribute> as Vec<DelNode<Attribute, super::ins::Attribute>>,
 
                 proc_macro2::TokenStream as String,
                 proc_macro2::Literal as String,
@@ -193,6 +201,7 @@ syn_codegen! {
                 Vec<TraitItem> as MergeSpineSeq<TraitItem, super::del::TraitItem, super::ins::TraitItem>,
                 Vec<ImplItem> as MergeSpineSeq<ImplItem, super::del::ImplItem, super::ins::ImplItem>,
                 Vec<ForeignItem> as MergeSpineSeq<ForeignItem, super::del::ForeignItem, super::ins::ForeignItem>,
+                Vec<Attribute> as MergeSpineSeq<Attribute, super::del::Attribute, super::ins::Attribute>,
 
                 proc_macro2::TokenStream as String,
                 proc_macro2::Literal as String,
@@ -210,6 +219,7 @@ syn_codegen! {
                 Vec<TraitItem> as ISpineSeq<TraitItem, super::del::TraitItem, super::ins::TraitItem>,
                 Vec<ImplItem> as ISpineSeq<ImplItem, super::del::ImplItem, super::ins::ImplItem>,
                 Vec<ForeignItem> as ISpineSeq<ForeignItem, super::del::ForeignItem, super::ins::ForeignItem>,
+                Vec<Attribute> as ISpineSeq<Attribute, super::del::Attribute, super::ins::Attribute>,
 
                 proc_macro2::TokenStream as String,
                 proc_macro2::Literal as String,
@@ -226,6 +236,7 @@ syn_codegen! {
             Vec<TraitItem> as SpineSeq<TraitItem, del::TraitItem, ins::TraitItem>,
             Vec<ImplItem> as SpineSeq<ImplItem, del::ImplItem, ins::ImplItem>,
             Vec<ForeignItem> as SpineSeq<ForeignItem, del::ForeignItem, ins::ForeignItem>,
+            Vec<Attribute> as SpineSeq<Attribute, del::Attribute, ins::Attribute>,
 
             proc_macro2::TokenStream as String,
             proc_macro2::Literal as String,

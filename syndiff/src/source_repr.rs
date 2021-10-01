@@ -36,6 +36,15 @@ impl VerbatimMacro for syn::Stmt {
     }
 }
 
+impl VerbatimMacro for syn::Attribute {
+    fn verbatim_macro(mac: TokenStream) -> syn::Attribute {
+        use syn::parse_quote;
+        // FIXME: This is flawed!
+        // We should use the same style (outer/inner) as the original attribute
+        parse_quote!(#[syndiff = #mac])
+    }
+}
+
 pub struct ToSourceRepr(Option<ColorSet>);
 
 impl<O> Convert<Metavariable, O> for ToSourceRepr

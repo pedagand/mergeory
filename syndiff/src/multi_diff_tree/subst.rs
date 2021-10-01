@@ -346,7 +346,15 @@ macro_rules! impl_del_equiv_type_for_ins {
         })*
     }
 }
-impl_del_equiv_type_for_ins!(Expr, Stmt, Item, TraitItem, ImplItem, ForeignItem);
+impl_del_equiv_type_for_ins!(
+    Expr,
+    Stmt,
+    Item,
+    TraitItem,
+    ImplItem,
+    ForeignItem,
+    Attribute
+);
 
 pub struct SolvedConflictsRemover(pub Substituter);
 

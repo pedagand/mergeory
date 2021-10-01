@@ -84,7 +84,15 @@ macro_rules! impl_forgettable_weight {
         })*
     }
 }
-impl_forgettable_weight!(Expr, Stmt, Item, TraitItem, ImplItem, ForeignItem);
+impl_forgettable_weight!(
+    Expr,
+    Stmt,
+    Item,
+    TraitItem,
+    ImplItem,
+    ForeignItem,
+    Attribute
+);
 
 pub fn compute_weight<In, Out>(input: In) -> Out
 where
