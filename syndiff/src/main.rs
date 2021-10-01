@@ -1,3 +1,5 @@
+use std::cmp::min;
+use std::convert::TryInto;
 use std::env;
 use std::fs;
 use std::process;
@@ -5,7 +7,7 @@ use std::process;
 use quote::quote;
 use std::io::Write;
 use std::process::{Command, Stdio};
-use syndiff::multi_diff_tree::remove_metavars;
+use syndiff::multi_diff_tree::{count_conflicts, remove_metavars};
 use syndiff::source_repr::{colored_source_repr, source_repr};
 use syndiff::{compute_diff, merge_diffs};
 
@@ -14,10 +16,12 @@ fn main() {
     let mut modified_filenames = Vec::new();
     let mut standalone_mode = false;
     let mut colored_mode = false;
+    let mut quiet = false;
     for arg in env::args().skip(1) {
         match arg.as_ref() {
             "-s" | "--standalone" => standalone_mode = true,
             "-c" | "--colored" => colored_mode = true,
+            "-q" | "--quiet" => quiet = true,
             _ => {
                 if origin_filename.is_none() {
                     origin_filename = Some(arg);
@@ -30,7 +34,7 @@ fn main() {
 
     let origin_filename = origin_filename.unwrap_or_else(|| {
         eprintln!("Usage: syndiff <original_file> <modified_files>*");
-        process::exit(1);
+        process::exit(-1);
     });
     let origin_src = parse_src(&origin_filename);
 
@@ -42,42 +46,48 @@ fn main() {
 
     if diff_trees.is_empty() {
         eprintln!("Usage: syndiff <original_file> <modified_files>*");
-        process::exit(1);
+        process::exit(-1);
     }
 
-    let result_tree: syn::File = if diff_trees.len() == 1 && !standalone_mode {
-        source_repr(diff_trees.pop().unwrap())
+    let (result_tree, nb_conflicts): (syn::File, u64) = if diff_trees.len() == 1 && !standalone_mode
+    {
+        (source_repr(diff_trees.pop().unwrap()), 0)
     } else {
         let merged_diffs = merge_diffs(diff_trees).unwrap();
+        let nb_conflicts = count_conflicts(&merged_diffs);
         let out_tree = if standalone_mode {
             remove_metavars(merged_diffs, origin_src).unwrap()
         } else {
             merged_diffs
         };
         if colored_mode {
-            colored_source_repr(out_tree)
+            (colored_source_repr(out_tree), nb_conflicts)
         } else {
-            source_repr(out_tree)
+            (source_repr(out_tree), nb_conflicts)
         }
     };
 
-    // Pretty print the result
-    let mut rustfmt = Command::new("rustfmt")
-        .stdin(Stdio::piped())
-        .spawn()
-        .expect("Failed to start rustfmt");
-    let rustfmt_in = rustfmt
-        .stdin
-        .as_mut()
-        .expect("Failed to open rustfmt stdin");
-    write!(rustfmt_in, "{}", quote!(#result_tree)).unwrap();
-    rustfmt.wait().unwrap();
+    if !quiet {
+        // Pretty print the result
+        let mut rustfmt = Command::new("rustfmt")
+            .stdin(Stdio::piped())
+            .spawn()
+            .expect("Failed to start rustfmt");
+        let rustfmt_in = rustfmt
+            .stdin
+            .as_mut()
+            .expect("Failed to open rustfmt stdin");
+        write!(rustfmt_in, "{}", quote!(#result_tree)).unwrap();
+        rustfmt.wait().unwrap();
+    }
+
+    process::exit(min(nb_conflicts, 127).try_into().unwrap())
 }
 
 fn parse_src(src_filename: &str) -> syn::File {
     let code = fs::read_to_string(src_filename).unwrap_or_else(|err| {
         eprintln!("Unable to read {}: {}", src_filename, err);
-        process::exit(1)
+        process::exit(-1)
     });
 
     syn::parse_file(&code).unwrap_or_else(|err| {
@@ -94,6 +104,6 @@ fn parse_src(src_filename: &str) -> syn::File {
                 src_filename, err_start.line, err_end.line, err
             )
         }
-        process::exit(1)
+        process::exit(-2)
     })
 }

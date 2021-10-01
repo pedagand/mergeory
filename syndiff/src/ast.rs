@@ -233,7 +233,7 @@ syn_codegen! {
             Reserved as (),
         }
 
-        use crate::family_traits::{Convert, Merge, Split, VisitMut};
+        use crate::family_traits::{Convert, Merge, Split, Visit, VisitMut};
 
         use crate::multi_diff_tree::with_color::WithColor;
         family_impl!(Convert<super::diff, self> for WithColor);
@@ -288,6 +288,11 @@ syn_codegen! {
         family_impl!(Convert<syn, ins> for InferFromSyn);
         #[extra_call(proc_macro2::TokenStream, proc_macro2::Literal, proc_macro2::Span, Reserved)]
         family_impl!(Convert<syn, self> for InferFromSyn);
+
+        use crate::multi_diff_tree::conflict_counter::ConflictCounter;
+        family_impl!(Visit<del> for ConflictCounter);
+        family_impl!(Visit<ins> for ConflictCounter);
+        family_impl!(Visit<self> for ConflictCounter);
 
         use crate::source_repr::ToSourceRepr;
         #[extra_call(proc_macro2::TokenStream, proc_macro2::Literal, proc_macro2::Span, Reserved)]

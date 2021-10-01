@@ -14,7 +14,7 @@ fn check_merge(test_name: &str, nb: usize) {
         .output()
         .expect("Failed to launch syndiff");
     eprint!("{}", String::from_utf8_lossy(&diff_out.stderr));
-    assert!(diff_out.status.success());
+    assert!(diff_out.status.code().unwrap() >= 0);
     assert!(diff_out.stderr.is_empty())
 }
 
