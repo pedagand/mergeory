@@ -1,7 +1,7 @@
 fn f() {
-    deleted ! [ mv ! [ 0 ] ; ];
-    deleted ! [ mv ! [ 1 ] ; ];
-    deleted ! [ let x = mv ! [ 2 ] ; ];
+    deleted ! [mv ! [0] ;];
+    deleted ! [mv ! [1] ;];
+    deleted ! [let x = mv ! [2] ;];
     let y = changed![{ x }, { answer() }] * unchanged![];
     unchanged![];
 }

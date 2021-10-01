@@ -1,4 +1,4 @@
-inserted ! [ mv ! [ 0 ] ; ];
+inserted ! [mv ! [0] ;];
 changed![
     {
         fn zero() -> i32 {
@@ -10,4 +10,4 @@ changed![
     }
 ];
 unchanged![];
-deleted ! [ mv ! [ 0 ] ; ];
+deleted ! [mv ! [0] ;];

@@ -1,4 +1,4 @@
-inserted ! [ mv ! [ 0 ] ; ];
+inserted ! [mv ! [0] ;];
 unchanged![0];
 changed![
     {

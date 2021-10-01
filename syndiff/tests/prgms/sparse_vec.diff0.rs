@@ -3,14 +3,14 @@ unchanged![];
 unchanged![];
 changed![
     {
-        #[doc = "/**\n * A `SparseVec` is a dynamic array of items of type `T` which allow holes\n * inside its structure. New items are stored preferentially in existing holes\n * instead of making the array bigger.\n * This allows fast deletion without modification of the indices of other\n * items.\n */"]
+        #[doc = "\n * A `SparseVec` is a dynamic array of items of type `T` which allow holes\n * inside its structure. New items are stored preferentially in existing holes\n * instead of making the array bigger.\n * This allows fast deletion without modification of the indices of other\n * items.\n "]
         pub struct SparseVec<T> {
             first_empty: usize,
             array: Vec<Entry<T>>,
         }
     },
     {
-        #[doc = "/**\n * A `SparseVec` is a dynamic array of items of type `T` which allow holes\n * inside its structure. New items are stored preferentially in existing holes\n * instead of making the array bigger.\n * This allows fast deletion without modification of the indices of other\n * items.\n */"]
+        #[doc = "\n * A `SparseVec` is a dynamic array of items of type `T` which allow holes\n * inside its structure. New items are stored preferentially in existing holes\n * instead of making the array bigger.\n * This allows fast deletion without modification of the indices of other\n * items.\n "]
         pub struct SparseVec<T> {
             first_empty: usize,
             array: Vec<Entry<T>>,
@@ -64,7 +64,7 @@ impl<T> SparseVec<T> {
                     use core::mem::replace;
                 ];
                 let old_entry = changed![{ replace(mv![3], mv![4]) }, { *mv![3] }];
-                inserted ! [ * mv ! [ 3 ] = mv ! [ 4 ] ; ];
+                inserted ! [* mv ! [3] = mv ! [4] ;];
                 unchanged![];
                 unchanged![];
             }

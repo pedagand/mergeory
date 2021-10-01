@@ -1,6 +1,6 @@
-inserted ! [ mv ! [ 0 ] ; ];
+inserted ! [mv ! [0] ;];
 unchanged![1];
-deleted ! [ mv ! [ 0 ] ; ];
+deleted ! [mv ! [0] ;];
 changed![
     {
         fn two() -> i32 {

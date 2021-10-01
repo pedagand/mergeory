@@ -1,4 +1,4 @@
-deleted ! [ mv ! [ 0 ] ; ];
+deleted ! [mv ! [0] ;];
 unchanged![];
 changed![
     {

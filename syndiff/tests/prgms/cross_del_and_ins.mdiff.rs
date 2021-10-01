@@ -24,5 +24,5 @@ changed![
         mv![2];
     }
 ];
-deleted ! [ mv ! [ 0 ] ; ];
-deleted ! [ mv_conflict ! [ 1 , { fn two ( ) -> i32 { 2 } } , { mv ! [ 2 ] ; } ] ; ];
+deleted ! [mv ! [0] ;];
+deleted ! [mv_conflict ! [1 , { fn two () -> i32 { 2 } } , { mv ! [2] ; }] ;];
