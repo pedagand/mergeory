@@ -41,7 +41,14 @@ impl VerbatimMacro for syn::Attribute {
         use syn::parse_quote;
         // FIXME: This is flawed!
         // We should use the same style (outer/inner) as the original attribute
-        parse_quote!(#[syndiff = #mac])
+        parse_quote!(#[diff = #mac])
+    }
+}
+
+impl VerbatimMacro for syn::Arm {
+    fn verbatim_macro(mac: TokenStream) -> syn::Arm {
+        use syn::parse_quote;
+        parse_quote!(#mac => match_arm![],)
     }
 }
 

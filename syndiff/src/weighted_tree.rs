@@ -1,4 +1,3 @@
-use crate::ast;
 use crate::elided_tree::MaybeElided;
 use crate::family_traits::Convert;
 
@@ -71,28 +70,6 @@ macro_rules! skip_maybe_elided {
     }
 }
 skip_maybe_elided!(ComputeWeight, ForgetWeight);
-
-// We need a way to refer to a uniquely defined type without scope annotations
-pub trait ForgettableWeight {
-    type WithoutWeight;
-}
-
-macro_rules! impl_forgettable_weight {
-    { $($ast_typ:ident),* } => {
-        $(impl ForgettableWeight for ast::weighted::$ast_typ {
-            type WithoutWeight = ast::elided::$ast_typ;
-        })*
-    }
-}
-impl_forgettable_weight!(
-    Expr,
-    Stmt,
-    Item,
-    TraitItem,
-    ImplItem,
-    ForeignItem,
-    Attribute
-);
 
 pub fn compute_weight<In, Out>(input: In) -> Out
 where

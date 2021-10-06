@@ -3,7 +3,7 @@ use super::merge_ins::MetavarStatus;
 use super::{
     ColorSet, Colored, DelNode, InsNode, InsSeq, InsSeqNode, SpineNode, SpineSeq, SpineSeqNode,
 };
-use crate::ast;
+use crate::ast::multi_diff::DelEquivType;
 use crate::diff_tree::Metavariable;
 use crate::family_traits::{Convert, Merge, VisitMut};
 use std::any::Any;
@@ -62,11 +62,11 @@ impl Substituter {
     fn ins_subst<I: DelEquivType>(&mut self, mv: Metavariable) -> InsNode<I>
     where
         Substituter: VisitMut<InsNode<I>>,
-        Substituter: VisitMut<DelNode<I::Del, I>>,
+        Substituter: VisitMut<DelNode<I::DelEquivType, I>>,
         IdMerger: Merge<InsNode<I>, InsNode<I>, InsNode<I>>,
-        InferInsFromDel: Convert<DelNode<I::Del, I>, InsNode<I>>,
+        InferInsFromDel: Convert<DelNode<I::DelEquivType, I>, InsNode<I>>,
         InsNode<I>: Clone + 'static,
-        DelNode<I::Del, I>: Clone + 'static,
+        DelNode<I::DelEquivType, I>: Clone + 'static,
     {
         let subst = match std::mem::replace(&mut self.ins_subst[mv.0], ComputableSubst::Processing)
         {
@@ -153,11 +153,11 @@ where
 impl<I: DelEquivType> VisitMut<InsNode<I>> for Substituter
 where
     Substituter: VisitMut<I>,
-    Substituter: VisitMut<DelNode<I::Del, I>>,
+    Substituter: VisitMut<DelNode<I::DelEquivType, I>>,
     IdMerger: Merge<InsNode<I>, InsNode<I>, InsNode<I>>,
-    InferInsFromDel: Convert<I::Del, I>,
+    InferInsFromDel: Convert<I::DelEquivType, I>,
     InsNode<I>: Clone + 'static,
-    DelNode<I::Del, I>: Clone + 'static,
+    DelNode<I::DelEquivType, I>: Clone + 'static,
 {
     fn visit_mut(&mut self, node: &mut InsNode<I>) {
         match node {
@@ -334,27 +334,6 @@ where
         )
     }
 }
-
-pub trait DelEquivType {
-    type Del;
-}
-
-macro_rules! impl_del_equiv_type_for_ins {
-    { $($ast_typ:ident),* } => {
-        $(impl DelEquivType for ast::multi_diff::ins::$ast_typ {
-            type Del = ast::multi_diff::del::$ast_typ;
-        })*
-    }
-}
-impl_del_equiv_type_for_ins!(
-    Expr,
-    Stmt,
-    Item,
-    TraitItem,
-    ImplItem,
-    ForeignItem,
-    Attribute
-);
 
 pub struct SolvedConflictsRemover(pub Substituter);
 

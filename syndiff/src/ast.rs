@@ -10,12 +10,7 @@ syn_codegen! {
         #[derive(Hash, PartialEq, Eq)]
         extend_family! {
             Expr as HashTagged<Expr>,
-            Vec<Stmt> as Vec<HashTagged<Stmt>>,
-            Vec<Item> as Vec<HashTagged<Item>>,
-            Vec<TraitItem> as Vec<HashTagged<TraitItem>>,
-            Vec<ImplItem> as Vec<HashTagged<ImplItem>>,
-            Vec<ForeignItem> as Vec<HashTagged<ForeignItem>>,
-            Vec<Attribute> as Vec<HashTagged<Attribute>>,
+            for<T> Vec<T> as Vec<HashTagged<T>>,
 
             // TokenStream and Literal are non parsed part of the input
             // We use their string representation for hashing
@@ -39,12 +34,7 @@ syn_codegen! {
 
         extend_family! {
             Expr as MaybeElided<Expr>,
-            Vec<Stmt> as Vec<MaybeElided<Stmt>>,
-            Vec<Item> as Vec<MaybeElided<Item>>,
-            Vec<TraitItem> as Vec<MaybeElided<TraitItem>>,
-            Vec<ImplItem> as Vec<MaybeElided<ImplItem>>,
-            Vec<ForeignItem> as Vec<MaybeElided<ForeignItem>>,
-            Vec<Attribute> as Vec<MaybeElided<Attribute>>,
+            for<T> Vec<T> as Vec<MaybeElided<T>>,
 
             proc_macro2::TokenStream as String,
             proc_macro2::Literal as String,
@@ -62,12 +52,7 @@ syn_codegen! {
 
         extend_family! {
             Expr as Weighted<Expr>,
-            Vec<Stmt> as AlignableSeq<Stmt>,
-            Vec<Item> as AlignableSeq<Item>,
-            Vec<TraitItem> as AlignableSeq<TraitItem>,
-            Vec<ImplItem> as AlignableSeq<ImplItem>,
-            Vec<ForeignItem> as AlignableSeq<ForeignItem>,
-            Vec<Attribute> as AlignableSeq<Attribute>,
+            for<T> Vec<T> as AlignableSeq<T>,
 
             proc_macro2::TokenStream as String,
             proc_macro2::Literal as String,
@@ -75,6 +60,7 @@ syn_codegen! {
             Reserved as (),
         }
 
+        family_link!(self -> super::elided as WithoutWeight);
         family_impl!(Convert<super::elided, self> for ComputeWeight);
         family_impl!(Convert<self, super::elided> for ForgetWeight);
     }
@@ -85,12 +71,7 @@ syn_codegen! {
 
         extend_family! {
             Expr as DiffNode<Expr, super::elided::Expr>,
-            Vec<Stmt> as AlignedSeq<Stmt, super::elided::Stmt>,
-            Vec<Item> as AlignedSeq<Item, super::elided::Item>,
-            Vec<TraitItem> as AlignedSeq<TraitItem, super::elided::TraitItem>,
-            Vec<ImplItem> as AlignedSeq<ImplItem, super::elided::ImplItem>,
-            Vec<ForeignItem> as AlignedSeq<ForeignItem, super::elided::ForeignItem>,
-            Vec<Attribute> as AlignedSeq<Attribute, super::elided::Attribute>,
+            for<T> Vec<T> as AlignedSeq<T, super::elided::T>,
 
             proc_macro2::TokenStream as String,
             proc_macro2::Literal as String,
@@ -106,12 +87,7 @@ syn_codegen! {
             use crate::diff_tree::ChangeNode;
             extend_family! {
                 Expr as ChangeNode<Expr>,
-                Vec<Stmt> as Vec<ChangeNode<Stmt>>,
-                Vec<Item> as Vec<ChangeNode<Item>>,
-                Vec<TraitItem> as Vec<ChangeNode<TraitItem>>,
-                Vec<ImplItem> as Vec<ChangeNode<ImplItem>>,
-                Vec<ForeignItem> as Vec<ChangeNode<ForeignItem>>,
-                Vec<Attribute> as Vec<ChangeNode<Attribute>>,
+                for<T> Vec<T> as Vec<ChangeNode<T>>,
 
                 proc_macro2::TokenStream as String,
                 proc_macro2::Literal as String,
@@ -126,12 +102,7 @@ syn_codegen! {
 
         extend_family! {
             Expr as DiffNode<Expr, change::Expr>,
-            Vec<Stmt> as AlignedSeq<Stmt, change::Stmt>,
-            Vec<Item> as AlignedSeq<Item, change::Item>,
-            Vec<TraitItem> as AlignedSeq<TraitItem, change::TraitItem>,
-            Vec<ImplItem> as AlignedSeq<ImplItem, change::ImplItem>,
-            Vec<ForeignItem> as AlignedSeq<ForeignItem, change::ForeignItem>,
-            Vec<Attribute> as AlignedSeq<Attribute, change::Attribute>,
+            for<T> Vec<T> as AlignedSeq<T, change::T>,
 
             proc_macro2::TokenStream as String,
             proc_macro2::Literal as String,
@@ -159,12 +130,7 @@ syn_codegen! {
             #[derive(Clone)]
             extend_family! {
                 Expr as InsNode<Expr>,
-                Vec<Stmt> as InsSeq<Stmt>,
-                Vec<Item> as InsSeq<Item>,
-                Vec<TraitItem> as InsSeq<TraitItem>,
-                Vec<ImplItem> as InsSeq<ImplItem>,
-                Vec<ForeignItem> as InsSeq<ForeignItem>,
-                Vec<Attribute> as InsSeq<Attribute>,
+                for<T> Vec<T> as InsSeq<T>,
 
                 proc_macro2::TokenStream as String,
                 proc_macro2::Literal as String,
@@ -178,12 +144,7 @@ syn_codegen! {
             #[derive(Clone)]
             extend_family! {
                 Expr as DelNode<Expr, super::ins::Expr>,
-                Vec<Stmt> as Vec<DelNode<Stmt, super::ins::Stmt>>,
-                Vec<Item> as Vec<DelNode<Item, super::ins::Item>>,
-                Vec<TraitItem> as Vec<DelNode<TraitItem, super::ins::TraitItem>>,
-                Vec<ImplItem> as Vec<DelNode<ImplItem, super::ins::ImplItem>>,
-                Vec<ForeignItem> as Vec<DelNode<ForeignItem, super::ins::ForeignItem>>,
-                Vec<Attribute> as Vec<DelNode<Attribute, super::ins::Attribute>>,
+                for<T> Vec<T> as Vec<DelNode<T, super::ins::T>>,
 
                 proc_macro2::TokenStream as String,
                 proc_macro2::Literal as String,
@@ -196,12 +157,7 @@ syn_codegen! {
             use crate::multi_diff_tree::align_spine::{MergeSpineNode, MergeSpineSeq};
             extend_family! {
                 Expr as MergeSpineNode<Expr, super::del::Expr, super::ins::Expr>,
-                Vec<Stmt> as MergeSpineSeq<Stmt, super::del::Stmt, super::ins::Stmt>,
-                Vec<Item> as MergeSpineSeq<Item, super::del::Item, super::ins::Item>,
-                Vec<TraitItem> as MergeSpineSeq<TraitItem, super::del::TraitItem, super::ins::TraitItem>,
-                Vec<ImplItem> as MergeSpineSeq<ImplItem, super::del::ImplItem, super::ins::ImplItem>,
-                Vec<ForeignItem> as MergeSpineSeq<ForeignItem, super::del::ForeignItem, super::ins::ForeignItem>,
-                Vec<Attribute> as MergeSpineSeq<Attribute, super::del::Attribute, super::ins::Attribute>,
+                for<T> Vec<T> as MergeSpineSeq<T, super::del::T, super::ins::T>,
 
                 proc_macro2::TokenStream as String,
                 proc_macro2::Literal as String,
@@ -214,12 +170,7 @@ syn_codegen! {
             use crate::multi_diff_tree::merge_ins::{ISpineNode, ISpineSeq};
             extend_family! {
                 Expr as ISpineNode<Expr, super::del::Expr, super::ins::Expr>,
-                Vec<Stmt> as ISpineSeq<Stmt, super::del::Stmt, super::ins::Stmt>,
-                Vec<Item> as ISpineSeq<Item, super::del::Item, super::ins::Item>,
-                Vec<TraitItem> as ISpineSeq<TraitItem, super::del::TraitItem, super::ins::TraitItem>,
-                Vec<ImplItem> as ISpineSeq<ImplItem, super::del::ImplItem, super::ins::ImplItem>,
-                Vec<ForeignItem> as ISpineSeq<ForeignItem, super::del::ForeignItem, super::ins::ForeignItem>,
-                Vec<Attribute> as ISpineSeq<Attribute, super::del::Attribute, super::ins::Attribute>,
+                for<T> Vec<T> as ISpineSeq<T, super::del::T, super::ins::T>,
 
                 proc_macro2::TokenStream as String,
                 proc_macro2::Literal as String,
@@ -231,18 +182,15 @@ syn_codegen! {
         use crate::multi_diff_tree::{SpineNode, SpineSeq};
         extend_family! {
             Expr as SpineNode<Expr, del::Expr, ins::Expr>,
-            Vec<Stmt> as SpineSeq<Stmt, del::Stmt, ins::Stmt>,
-            Vec<Item> as SpineSeq<Item, del::Item, ins::Item>,
-            Vec<TraitItem> as SpineSeq<TraitItem, del::TraitItem, ins::TraitItem>,
-            Vec<ImplItem> as SpineSeq<ImplItem, del::ImplItem, ins::ImplItem>,
-            Vec<ForeignItem> as SpineSeq<ForeignItem, del::ForeignItem, ins::ForeignItem>,
-            Vec<Attribute> as SpineSeq<Attribute, del::Attribute, ins::Attribute>,
+            for<T> Vec<T> as SpineSeq<T, del::T, ins::T>,
 
             proc_macro2::TokenStream as String,
             proc_macro2::Literal as String,
             proc_macro2::Span as (),
             Reserved as (),
         }
+
+        family_link!(ins -> del as DelEquivType);
 
         use crate::family_traits::{Convert, Merge, Split, Visit, VisitMut};
 

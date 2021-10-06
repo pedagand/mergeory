@@ -3,14 +3,14 @@ unchanged![];
 unchanged![];
 changed![
     {
-        # [syndiff = mv ! [0]]
+        # [diff = mv ! [0]]
         pub struct SparseVec<T> {
             first_empty: usize,
             array: Vec<Entry<T>>,
         }
     },
     {
-        # [syndiff = mv ! [0]]
+        # [diff = mv ! [0]]
         pub struct SparseVec<T> {
             first_empty: usize,
             array: Vec<Entry<T>>,
@@ -68,7 +68,7 @@ impl<T> SparseVec<T> {
                 unchanged![];
                 unchanged![];
             }
-            Entry::Empty(_) => unchanged![],
+            unchanged![] => match_arm![],
         }
     }
     unchanged![];

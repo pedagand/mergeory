@@ -1,9 +1,8 @@
+use crate::ast::weighted::WithoutWeight;
 use crate::elided_tree::MaybeElided;
 use crate::family_traits::{Convert, Merge};
 use crate::hash_tree::HashSum;
-use crate::weighted_tree::{
-    forget_weight, AlignableSeq, ForgetWeight, ForgettableWeight, Weighted,
-};
+use crate::weighted_tree::{forget_weight, AlignableSeq, ForgetWeight, Weighted};
 use std::collections::VecDeque;
 
 pub enum DiffNode<Spine, Change> {
@@ -39,7 +38,7 @@ pub struct SpineZipper {
     cost: u32,
 }
 
-impl<In: ForgettableWeight, Out> Merge<Weighted<In>, Weighted<In>, DiffNode<Out, In::WithoutWeight>>
+impl<In: WithoutWeight, Out> Merge<Weighted<In>, Weighted<In>, DiffNode<Out, In::WithoutWeight>>
     for SpineZipper
 where
     SpineZipper: Merge<In, In, Out>,
@@ -95,7 +94,7 @@ where
     }
 }
 
-impl<In: ForgettableWeight, Out>
+impl<In: WithoutWeight, Out>
     Merge<AlignableSeq<In>, AlignableSeq<In>, AlignedSeq<Out, In::WithoutWeight>> for SpineZipper
 where
     SpineZipper: Merge<Weighted<In>, Weighted<In>, DiffNode<Out, In::WithoutWeight>>,

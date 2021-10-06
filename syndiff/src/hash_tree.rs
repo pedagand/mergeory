@@ -1,5 +1,5 @@
-use crate::ast;
 use crate::family_traits::Convert;
+use std::any::Any;
 use std::collections::hash_map::{DefaultHasher, HashMap};
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
@@ -7,51 +7,19 @@ use std::rc::Rc;
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]
 pub struct HashSum(u64);
 
-macro_rules! make_tables {
-    { $($name:ident: $type:ty,)* } => {
-        #[derive(Default)]
-        pub struct HashTables {
-            $($name: HashMap<HashSum, Rc<$type>>,)*
-        }
+pub type HashTable = HashMap<HashSum, Rc<dyn Any>>;
 
-        pub trait HasHashTable: Sized + Hash + PartialEq {
-            fn get_table(hash_tables: &HashTables) -> &HashMap<HashSum, Rc<Self>>;
-            fn get_table_mut(hash_tables: &mut HashTables) -> &mut HashMap<HashSum, Rc<Self>>;
-        }
-
-        $(impl HasHashTable for $type {
-            fn get_table(hash_tables: &HashTables) -> &HashMap<HashSum, Rc<$type>> {
-                &hash_tables.$name
+pub fn tables_intersection(table1: HashTable, table2: HashTable) -> HashTable {
+    table1
+        .into_iter()
+        .filter(|(h, v1)| match table2.get(h) {
+            Some(v2) => {
+                assert!(v1.type_id() == v2.type_id());
+                true
             }
-            fn get_table_mut(hash_tables: &mut HashTables) -> &mut HashMap<HashSum, Rc<$type>> {
-                &mut hash_tables.$name
-            }
-        })*
-
-        pub fn tables_intersection(table1: HashTables, table2: HashTables) -> HashTables {
-            HashTables {
-                $($name: table1.$name.into_iter().filter(|(h, v1)| {
-                    match table2.$name.get(h) {
-                        Some(v2) => {
-                            assert!(v1 == v2);
-                            true
-                        }
-                        None => false,
-                    }
-                }).collect(),)*
-            }
-        }
-    }
-}
-
-make_tables! {
-    expr: ast::hash::Expr,
-    stmt: ast::hash::Stmt,
-    item: ast::hash::Item,
-    trait_item: ast::hash::TraitItem,
-    impl_item: ast::hash::ImplItem,
-    foreign_item: ast::hash::ForeignItem,
-    attributes: ast::hash::Attribute,
+            None => false,
+        })
+        .collect()
 }
 
 pub struct HashTagged<T> {
@@ -85,28 +53,30 @@ impl<T> PartialEq for HashTagged<T> {
 }
 impl<T> Eq for HashTagged<T> {}
 
-pub struct TreeHasher(HashTables);
+pub struct TreeHasher(HashTable);
 
-impl<In, Out: HasHashTable> Convert<In, HashTagged<Out>> for TreeHasher
+impl<In, Out> Convert<In, HashTagged<Out>> for TreeHasher
 where
     TreeHasher: Convert<In, Out>,
+    Out: Hash + PartialEq + 'static,
 {
     fn convert(&mut self, input: In) -> HashTagged<Out> {
         let converted_input = self.convert(input);
         let hash_tagged = HashTagged::from(converted_input);
-        let existing_item = Out::get_table_mut(&mut self.0)
+        let existing_item = self
+            .0
             .entry(hash_tagged.hash)
             .or_insert_with(|| hash_tagged.data.clone());
-        assert!(*existing_item == hash_tagged.data);
+        assert!(existing_item.downcast_ref::<Out>().unwrap() == &*hash_tagged.data);
         hash_tagged
     }
 }
 
-pub fn hash_tree<In, Out>(input: In) -> (Out, HashTables)
+pub fn hash_tree<In, Out>(input: In) -> (Out, HashTable)
 where
     TreeHasher: Convert<In, Out>,
 {
-    let mut tree_hasher = TreeHasher(HashTables::default());
+    let mut tree_hasher = TreeHasher(HashTable::default());
     let hashed_tree = tree_hasher.convert(input);
     (hashed_tree, tree_hasher.0)
 }
