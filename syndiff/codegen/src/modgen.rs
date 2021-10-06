@@ -1,5 +1,5 @@
 use crate::family::Family;
-use crate::{auto_impl, extend};
+use crate::{auto_impl, extend, type_link};
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::fold::Fold;
@@ -18,6 +18,14 @@ impl<'a> Fold for ModuleTransformer<'a> {
                 } else if item.mac.path.is_ident("family_impl") {
                     let span = item.span();
                     Item::Verbatim(auto_impl::family_impl(
+                        item.mac.tokens,
+                        &item.attrs,
+                        span,
+                        self.0,
+                    ))
+                } else if item.mac.path.is_ident("family_link") {
+                    let span = item.span();
+                    Item::Verbatim(type_link::link_families(
                         item.mac.tokens,
                         &item.attrs,
                         span,

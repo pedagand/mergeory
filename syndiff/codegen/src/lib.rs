@@ -20,6 +20,7 @@ mod extend;
 mod family;
 mod modgen;
 mod syn_family;
+mod type_link;
 
 /// Main macro of the crate, that declares a mutually recursive family and
 /// generate code for it.
@@ -445,4 +446,63 @@ pub fn extend_family(_: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn family_impl(_: TokenStream) -> TokenStream {
     panic!("family_impl! can only be used inside mrsop_codegen! modules");
+}
+
+/// Create a new trait that links each type of a (maybe) extended mutually
+/// recursive family to its counterpart in another derivation of the same
+/// family.
+///
+/// The syntax of `family_link!` looks like:
+/// * `family_link!(mod_from -> mod_to as LinkName)`
+///
+/// It will generate a trait `LinkName` with the signature
+/// ```
+/// trait LinkName {
+///     type LinkName;
+/// }
+/// ```
+/// and implement it for every generated type of mod_from with its counterpart
+/// in mod_to as the associated type.
+///
+/// If you want to skip the implementation for some types of the family
+/// you can also exclude the generation of the impl for one of them with the
+/// `#[omit(Type)]` attribute on the `family_link!` call.
+///
+/// # Example
+/// ```
+/// # use mrsop_codegen::mrsop_codegen;
+/// mrsop_codegen! {
+///     pub enum A {
+///         Empty,
+///         Another(i32, Box<A>),
+///         List(Vec<A>),
+///     }
+///
+///     mod i32_tag {
+///         use std::rc::Rc;
+///
+///         struct Tagged<T> {
+///             data: Rc<T>,
+///             tag: i32,
+///         }
+///
+///         extend_family!(Box<A> as Tagged<A>, A as Tagged<A>);
+///         family_link!(self -> super as UntaggedType);
+///     }
+/// }
+/// # fn main() {}
+/// ```
+/// In the code above, the `family_link!` expansion will produce the following code:
+/// ```ignore
+/// pub trait UntaggedType {
+///     type UntaggedType;
+/// }
+///
+/// impl UntaggedType for self::A {
+///     type UntaggedType = super::A;
+/// }
+/// ```
+#[proc_macro]
+pub fn family_link(_: TokenStream) -> TokenStream {
+    panic!("family_link! can only be used inside mrsop_codegen! modules");
 }
