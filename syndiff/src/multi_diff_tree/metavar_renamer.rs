@@ -41,10 +41,13 @@ where
         match node {
             DelNode::InPlace(subnode) => self.visit_mut(subnode),
             DelNode::Elided(metavar) => self.visit_mut(metavar),
-            DelNode::MetavariableConflict(metavar, del, ins) => {
+            DelNode::MetavariableConflict(metavar, del, repl) => {
                 self.visit_mut(metavar);
                 VisitMut::<DelNode<D, I>>::visit_mut(self, del);
-                self.visit_mut(ins);
+                match repl {
+                    None => (),
+                    Some(ins) => self.visit_mut(ins),
+                }
             }
         }
     }

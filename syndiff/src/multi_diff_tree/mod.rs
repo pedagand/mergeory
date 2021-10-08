@@ -108,7 +108,7 @@ where
 pub enum DelNode<D, I> {
     InPlace(Colored<D>),
     Elided(Colored<Metavariable>),
-    MetavariableConflict(Metavariable, Box<DelNode<D, I>>, InsNode<I>),
+    MetavariableConflict(Metavariable, Box<DelNode<D, I>>, Option<InsNode<I>>),
 }
 
 #[derive(Clone)]

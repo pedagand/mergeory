@@ -17,14 +17,8 @@ pub enum ISpineSeqNode<S, D, I> {
 }
 pub struct ISpineSeq<S, D, I>(pub Vec<ISpineSeqNode<S, D, I>>);
 
-pub enum MetavarStatus {
-    Keep,
-    Replace(Box<dyn Any>),
-    Conflict,
-}
-
 pub struct InsMerger {
-    metavars_status: Vec<Option<MetavarStatus>>,
+    metavars_status: Vec<Vec<Option<Box<dyn Any>>>>,
 }
 
 impl<I> Merge<InsNode<I>, InsNode<I>, InsNode<I>> for InsMerger
@@ -126,24 +120,17 @@ where
         match (del, ins) {
             (DelNode::Elided(mv), ins) => {
                 // Here we may have to clone the insert tree once to check for potential conflicts
-                let mv_id = mv.node.0;
-                let cur_status = std::mem::take(&mut self.metavars_status[mv_id]);
-                self.metavars_status[mv_id] = Some(match cur_status {
-                    None => MetavarStatus::Replace(Box::new(vec![ins.clone()])),
-                    Some(MetavarStatus::Replace(mut repl_ins)) => {
-                        let repl_ins_list: &mut Vec<_> = repl_ins.downcast_mut().unwrap();
-                        repl_ins_list.push(ins.clone());
-                        MetavarStatus::Replace(repl_ins)
-                    }
-                    Some(MetavarStatus::Keep) | Some(MetavarStatus::Conflict) => {
-                        MetavarStatus::Conflict
-                    }
-                });
-                DelNode::MetavariableConflict(mv.node, Box::new(DelNode::Elided(mv)), ins)
+                self.metavars_status[mv.node.0].push(Some(Box::new(ins.clone())));
+                DelNode::MetavariableConflict(mv.node, Box::new(DelNode::Elided(mv)), Some(ins))
             }
-            (DelNode::MetavariableConflict(mv, del, conflict_ins), ins) => {
-                self.metavars_status[mv.0] = Some(MetavarStatus::Conflict);
-                DelNode::MetavariableConflict(mv, del, self.merge(conflict_ins, ins))
+            (DelNode::MetavariableConflict(mv, del, None), ins) => {
+                self.metavars_status[mv.0].push(Some(Box::new(ins.clone())));
+                DelNode::MetavariableConflict(mv, del, Some(ins))
+            }
+            (DelNode::MetavariableConflict(mv, del, Some(conflict_ins)), ins) => {
+                let merged_ins = self.merge(conflict_ins, ins);
+                self.metavars_status[mv.0].push(Some(Box::new(merged_ins.clone())));
+                DelNode::MetavariableConflict(mv, del, Some(merged_ins))
             }
             (DelNode::InPlace(del_subtree), InsNode::InPlace(ins_subtree)) => {
                 DelNode::InPlace(Colored {
@@ -189,26 +176,20 @@ where
 impl<D, I> VisitMut<DelNode<D, I>> for InsMerger
 where
     InsMerger: VisitMut<D>,
+    InsNode<I>: Clone + 'static,
 {
     fn visit_mut(&mut self, del: &mut DelNode<D, I>) {
         match del {
             DelNode::InPlace(del_subtree) => self.visit_mut(&mut del_subtree.node),
             DelNode::Elided(mv) => {
-                let mv_id = mv.node.0;
-                self.metavars_status[mv_id] = Some(match &self.metavars_status[mv_id] {
-                    None | Some(MetavarStatus::Keep) => MetavarStatus::Keep,
-                    Some(MetavarStatus::Replace(_)) | Some(MetavarStatus::Conflict) => {
-                        MetavarStatus::Conflict
-                    }
-                });
-                *del = DelNode::MetavariableConflict(
-                    mv.node,
-                    Box::new(DelNode::Elided(*mv)),
-                    InsNode::Elided(mv.node),
-                )
+                self.metavars_status[mv.node.0].push(None);
+                *del = DelNode::MetavariableConflict(mv.node, Box::new(DelNode::Elided(*mv)), None)
             }
-            DelNode::MetavariableConflict(mv, del, _) => {
-                self.metavars_status[mv.0] = Some(MetavarStatus::Conflict);
+            DelNode::MetavariableConflict(mv, del, repl) => {
+                self.metavars_status[mv.0].push(match repl {
+                    None => None,
+                    Some(ins) => Some(Box::new(ins.clone())),
+                });
                 VisitMut::<DelNode<D, I>>::visit_mut(self, del)
             }
         }
@@ -343,21 +324,14 @@ where
     }
 }
 
-pub fn merge_ins<I, O>(input: I, nb_vars: usize) -> (O, Vec<MetavarStatus>)
+pub fn merge_ins<I, O>(input: I, nb_vars: usize) -> (O, Vec<Vec<Option<Box<dyn Any>>>>)
 where
     InsMerger: Convert<I, O>,
 {
     let mut merger = InsMerger {
         metavars_status: Vec::new(),
     };
-    merger.metavars_status.resize_with(nb_vars, || None);
+    merger.metavars_status.resize_with(nb_vars, Vec::new);
     let output = merger.convert(input);
-    (
-        output,
-        merger
-            .metavars_status
-            .into_iter()
-            .collect::<Option<Vec<MetavarStatus>>>()
-            .expect("Found a metavariable without status"),
-    )
+    (output, merger.metavars_status)
 }

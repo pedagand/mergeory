@@ -153,10 +153,15 @@ where
         match input {
             DelNode::InPlace(del) => self.convert(del),
             DelNode::Elided(mv) => self.convert(mv),
-            DelNode::MetavariableConflict(mv, del, ins) => {
+            DelNode::MetavariableConflict(mv, del, repl) => {
                 let del = Convert::<DelNode<D, I>, O>::convert(self, *del);
-                let ins = self.convert(ins);
-                O::verbatim_macro(quote!(mv_conflict![#mv, {#del}, {#ins}]))
+                match repl {
+                    None => O::verbatim_macro(quote!(mv_conflict![#mv, {#del}])),
+                    Some(ins) => {
+                        let ins = self.convert(ins);
+                        O::verbatim_macro(quote!(mv_conflict![#mv, {#del}, {#ins}]))
+                    }
+                }
             }
         }
     }

@@ -12,10 +12,13 @@ where
         match node {
             DelNode::InPlace(del) => self.visit(&del.node),
             DelNode::Elided(_) => (),
-            DelNode::MetavariableConflict(_, del, ins) => {
+            DelNode::MetavariableConflict(_, del, repl) => {
                 self.0 += 1;
                 self.visit(del);
-                self.visit(ins);
+                match repl {
+                    None => (),
+                    Some(ins) => self.visit(ins),
+                }
             }
         }
     }

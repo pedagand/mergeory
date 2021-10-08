@@ -236,9 +236,12 @@ where
         match node {
             DelNode::InPlace(del) => self.visit_mut(del),
             DelNode::Elided(_) => panic!("A metavariable was not removed in deletion tree"),
-            DelNode::MetavariableConflict(_, del, ins) => {
-                self.visit_mut(ins);
+            DelNode::MetavariableConflict(_, del, repl) => {
                 VisitMut::<DelNode<D, I>>::visit_mut(self, del);
+                match repl {
+                    None => (),
+                    Some(ins) => self.visit_mut(ins),
+                }
             }
         }
     }

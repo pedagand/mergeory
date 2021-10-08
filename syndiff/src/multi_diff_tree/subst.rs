@@ -1,5 +1,4 @@
 use super::id_merger::IdMerger;
-use super::merge_ins::MetavarStatus;
 use super::{
     ColorSet, Colored, DelNode, InsNode, InsSeq, InsSeqNode, SpineNode, SpineSeq, SpineSeqNode,
 };
@@ -8,20 +7,23 @@ use crate::diff_tree::Metavariable;
 use crate::family_traits::{Convert, Merge, VisitMut};
 use std::any::Any;
 
-enum ComputableSubst<U> {
+enum ComputableSubst<T, U> {
     Pending(U),
     Processing,
-    Computed(Box<dyn Any>),
+    Computed(T),
 }
 
 pub struct Substituter {
-    del_subst: Vec<ComputableSubst<Option<Box<dyn Any>>>>,
-    ins_subst: Vec<ComputableSubst<MetavarStatus>>,
+    del_subst: Vec<ComputableSubst<Box<dyn Any>, Option<Box<dyn Any>>>>,
+    ins_subst: Vec<ComputableSubst<Option<Box<dyn Any>>, Vec<Option<Box<dyn Any>>>>>,
     ins_cycle_stack: Vec<(Metavariable, bool)>,
 }
 
 impl Substituter {
-    pub fn new(del_subst: Vec<Option<Box<dyn Any>>>, ins_subst: Vec<MetavarStatus>) -> Substituter {
+    pub fn new(
+        del_subst: Vec<Option<Box<dyn Any>>>,
+        ins_subst: Vec<Vec<Option<Box<dyn Any>>>>,
+    ) -> Substituter {
         Substituter {
             del_subst: del_subst
                 .into_iter()
@@ -70,20 +72,23 @@ impl Substituter {
     {
         let subst = match std::mem::replace(&mut self.ins_subst[mv.0], ComputableSubst::Processing)
         {
-            ComputableSubst::Computed(repl_ins) => {
-                Some(*repl_ins.downcast::<InsNode<I>>().unwrap())
-            }
-            ComputableSubst::Pending(MetavarStatus::Keep) => {
-                // Build the insertion substitution from the deletion substitution
-                let del_subst = self.del_subst(mv);
-                Some(InferInsFromDel.convert(del_subst))
-            }
-            ComputableSubst::Pending(MetavarStatus::Replace(repl_ins)) => {
+            ComputableSubst::Computed(subst) => subst.map(|x| *x.downcast::<InsNode<I>>().unwrap()),
+            ComputableSubst::Pending(replacements) => {
                 self.ins_cycle_stack.push((mv, false));
-                let mut repl_ins = *repl_ins.downcast::<Vec<InsNode<I>>>().unwrap();
-                for ins in &mut repl_ins {
-                    self.visit_mut(ins)
-                }
+                let mut repl_ins = replacements
+                    .into_iter()
+                    .map(|repl| match repl {
+                        None => {
+                            // Build the insertion substitution from the deletion substitution
+                            InferInsFromDel.convert(self.del_subst(mv))
+                        }
+                        Some(ins) => {
+                            let mut ins = *ins.downcast::<InsNode<I>>().unwrap();
+                            self.visit_mut(&mut ins);
+                            ins
+                        }
+                    })
+                    .collect::<Vec<_>>();
                 let (cycle_mv, cycle) = self.ins_cycle_stack.pop().unwrap();
                 assert!(cycle_mv == mv);
                 if !cycle {
@@ -100,7 +105,6 @@ impl Substituter {
                     None
                 }
             }
-            ComputableSubst::Pending(MetavarStatus::Conflict) => None,
             ComputableSubst::Processing => {
                 // If a cycle occur in ins_subst, we should yield a conflict for all metavariables
                 // in that cycle.
@@ -116,12 +120,12 @@ impl Substituter {
         };
         match subst {
             Some(subst) => {
-                self.ins_subst[mv.0] = ComputableSubst::Computed(Box::new(subst.clone()));
+                self.ins_subst[mv.0] = ComputableSubst::Computed(Some(Box::new(subst.clone())));
                 subst
             }
             None => {
                 // Save conflict and return a simple white metavariable
-                self.ins_subst[mv.0] = ComputableSubst::Pending(MetavarStatus::Conflict);
+                self.ins_subst[mv.0] = ComputableSubst::Computed(None);
                 InsNode::Elided(mv)
             }
         }
@@ -346,22 +350,36 @@ where
         match node {
             DelNode::InPlace(del) => self.visit_mut(&mut del.node),
             DelNode::Elided(_) => (),
-            DelNode::MetavariableConflict(mv, del, ins) => {
+            DelNode::MetavariableConflict(mv, del, repl) => {
                 VisitMut::<DelNode<D, I>>::visit_mut(self, del);
                 match &self.0.ins_subst[mv.0] {
-                    ComputableSubst::Computed(_)
-                    | ComputableSubst::Pending(MetavarStatus::Keep) => {
+                    ComputableSubst::Computed(Some(_)) => {
                         *node =
                             std::mem::replace(&mut **del, DelNode::Elided(Colored::new_white(*mv)))
                     }
-                    ComputableSubst::Pending(MetavarStatus::Conflict)
-                    | ComputableSubst::Pending(MetavarStatus::Replace(_)) => {
-                        // The Replace case is here for dealing with metavariables that are never
-                        // inserted back. They should conflict to keep their insertion trees.
-                        // We might accidentally call this too late and considered unused a
-                        // metavariable replacement used inside another metavariable conflict, but
-                        // all other solutions seem worse.
-                        self.0.visit_mut(ins)
+                    ComputableSubst::Computed(None) => match repl {
+                        None => (),
+                        Some(ins) => self.0.visit_mut(ins),
+                    },
+                    ComputableSubst::Pending(_) => {
+                        match repl {
+                            None => {
+                                *node = std::mem::replace(
+                                    &mut **del,
+                                    DelNode::Elided(Colored::new_white(*mv)),
+                                )
+                            }
+                            Some(ins) => {
+                                // We are dealing here with a subtree inlined into a metavariable
+                                // that was never inserted back.
+                                // Removing the conflict would arbitrarily drop a modification so
+                                // we keep the metavariable conflict.
+                                // We might accidentally call this too late and consider unused a
+                                // metavariable replacement used inside another metavariable
+                                // conflict, but all other solutions seem worse.
+                                self.0.visit_mut(ins)
+                            }
+                        }
                     }
                     ComputableSubst::Processing => {
                         panic!("Still processing a metavariable while removing solved conflicts")
