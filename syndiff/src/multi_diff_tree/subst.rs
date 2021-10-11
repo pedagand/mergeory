@@ -288,6 +288,10 @@ where
     }
 }
 
+impl<T: DelEquivType> DelEquivType for Option<T> {
+    type DelEquivType = Option<T::DelEquivType>;
+}
+
 pub struct ColorReplacer(ColorSet);
 
 impl<D, I> VisitMut<DelNode<D, I>> for ColorReplacer

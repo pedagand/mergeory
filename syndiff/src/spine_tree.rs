@@ -208,6 +208,10 @@ where
     }
 }
 
+impl<T: WithoutWeight> WithoutWeight for Option<T> {
+    type WithoutWeight = Option<T::WithoutWeight>;
+}
+
 pub fn zip_spine<In, Out>(in1: In, in2: In) -> Option<Out>
 where
     SpineZipper: Merge<In, In, Out>,

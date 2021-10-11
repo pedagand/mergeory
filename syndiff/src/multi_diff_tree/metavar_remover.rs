@@ -6,6 +6,7 @@ use crate::family_traits::{Convert, Merge, VisitMut};
 use crate::token_trees::{iter_token_trees, TokenTree};
 use proc_macro2::TokenStream;
 use std::any::Any;
+use syn::punctuated::Punctuated;
 
 pub struct MetavarRemover {
     metavar_replacements: Vec<Option<Box<dyn Any>>>,
@@ -76,6 +77,33 @@ where
     }
 }
 
+impl<D, I, T, P> Merge<Vec<DelNode<D, I>>, Punctuated<T, P>, Vec<DelNode<D, I>>> for MetavarRemover
+where
+    MetavarRemover: Merge<DelNode<D, I>, T, DelNode<D, I>>,
+{
+    fn can_merge(&mut self, diff: &Vec<DelNode<D, I>>, source: &Punctuated<T, P>) -> bool {
+        let mut source_iter = source.iter();
+        for diff_node in diff {
+            match source_iter.next() {
+                Some(source_node) => {
+                    if !self.can_merge(diff_node, source_node) {
+                        return false;
+                    }
+                }
+                None => return false,
+            }
+        }
+        source_iter.next().is_none()
+    }
+
+    fn merge(&mut self, diff: Vec<DelNode<D, I>>, source: Punctuated<T, P>) -> Vec<DelNode<D, I>> {
+        let mut source_iter = source.into_iter();
+        diff.into_iter()
+            .map(|diff_node| self.merge(diff_node, source_iter.next().unwrap()))
+            .collect()
+    }
+}
+
 impl<S, D, I, T> Merge<SpineNode<S, D, I>, T, SpineNode<S, D, I>> for MetavarRemover
 where
     MetavarRemover: Merge<S, T, S>,
@@ -99,13 +127,19 @@ where
     }
 }
 
-impl<S, D, I, T> Merge<SpineSeq<S, D, I>, Vec<T>, SpineSeq<S, D, I>> for MetavarRemover
+pub trait EasilyIterable: IntoIterator {}
+impl<T> EasilyIterable for Vec<T> {}
+impl<T, P> EasilyIterable for Punctuated<T, P> {}
+
+impl<S, D, I, T> Merge<SpineSeq<S, D, I>, T, SpineSeq<S, D, I>> for MetavarRemover
 where
-    MetavarRemover: Merge<SpineNode<S, D, I>, T, SpineNode<S, D, I>>,
-    MetavarRemover: Merge<DelNode<D, I>, T, DelNode<D, I>>,
+    T: EasilyIterable,
+    for<'a> &'a T: IntoIterator<Item = &'a T::Item>,
+    MetavarRemover: Merge<SpineNode<S, D, I>, T::Item, SpineNode<S, D, I>>,
+    MetavarRemover: Merge<DelNode<D, I>, T::Item, DelNode<D, I>>,
 {
-    fn can_merge(&mut self, diff: &SpineSeq<S, D, I>, source: &Vec<T>) -> bool {
-        let mut source_iter = source.iter();
+    fn can_merge(&mut self, diff: &SpineSeq<S, D, I>, source: &T) -> bool {
+        let mut source_iter = source.into_iter();
         for diff_node in &diff.0 {
             match diff_node {
                 SpineSeqNode::Zipped(node) => {
@@ -132,7 +166,7 @@ where
         source_iter.next().is_none()
     }
 
-    fn merge(&mut self, diff: SpineSeq<S, D, I>, source: Vec<T>) -> SpineSeq<S, D, I> {
+    fn merge(&mut self, diff: SpineSeq<S, D, I>, source: T) -> SpineSeq<S, D, I> {
         let mut source_iter = source.into_iter();
         SpineSeq(
             diff.0
@@ -318,6 +352,15 @@ where
     }
 }
 
+impl<T, D, I, P> Convert<Punctuated<T, P>, Vec<DelNode<D, I>>> for InferFromSynColored
+where
+    InferFromSynColored: Convert<T, DelNode<D, I>>,
+{
+    fn convert(&mut self, seq: Punctuated<T, P>) -> Vec<DelNode<D, I>> {
+        seq.into_iter().map(|node| self.convert(node)).collect()
+    }
+}
+
 pub struct InferFromSyn;
 
 impl<T, I> Convert<T, InsNode<I>> for InferFromSyn
@@ -329,11 +372,12 @@ where
     }
 }
 
-impl<T, I> Convert<Vec<T>, InsSeq<I>> for InferFromSyn
+impl<T, I> Convert<T, InsSeq<I>> for InferFromSyn
 where
-    InferFromSyn: Convert<T, InsNode<I>>,
+    T: EasilyIterable,
+    InferFromSyn: Convert<T::Item, InsNode<I>>,
 {
-    fn convert(&mut self, node_seq: Vec<T>) -> InsSeq<I> {
+    fn convert(&mut self, node_seq: T) -> InsSeq<I> {
         InsSeq(
             node_seq
                 .into_iter()
@@ -365,11 +409,12 @@ where
     }
 }
 
-impl<T, S, D, I> Convert<Vec<T>, SpineSeq<S, D, I>> for InferFromSyn
+impl<T, S, D, I> Convert<T, SpineSeq<S, D, I>> for InferFromSyn
 where
-    InferFromSyn: Convert<T, SpineNode<S, D, I>>,
+    T: EasilyIterable,
+    InferFromSyn: Convert<T::Item, SpineNode<S, D, I>>,
 {
-    fn convert(&mut self, node_seq: Vec<T>) -> SpineSeq<S, D, I> {
+    fn convert(&mut self, node_seq: T) -> SpineSeq<S, D, I> {
         SpineSeq(
             node_seq
                 .into_iter()

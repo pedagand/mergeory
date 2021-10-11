@@ -7,6 +7,11 @@ use crate::token_trees::TokenTree;
 use proc_macro2::{Span, TokenStream};
 use quote::ToTokens;
 use std::str::FromStr;
+use syn::punctuated::Punctuated;
+
+impl<T: SynType> SynType for Option<T> {
+    type SynType = Option<T::SynType>;
+}
 
 pub struct InsProjection;
 
@@ -43,6 +48,16 @@ where
 {
     fn convert(&mut self, seq: InsSeq<I>) -> Vec<O> {
         self.convert(seq.0)
+    }
+}
+
+impl<I, O, P> Convert<InsSeq<I>, Punctuated<O, P>> for InsProjection
+where
+    InsProjection: Convert<InsSeqNode<I>, O>,
+    P: Default,
+{
+    fn convert(&mut self, seq: InsSeq<I>) -> Punctuated<O, P> {
+        seq.0.into_iter().map(|node| self.convert(node)).collect()
     }
 }
 
@@ -90,6 +105,19 @@ where
     InsProjection: Convert<SpineSeqNode<S, D, I>, Vec<O>>,
 {
     fn convert(&mut self, seq: SpineSeq<S, D, I>) -> Vec<O> {
+        seq.0
+            .into_iter()
+            .flat_map(|node| self.convert(node))
+            .collect()
+    }
+}
+
+impl<S, D, I, O, P> Convert<SpineSeq<S, D, I>, Punctuated<O, P>> for InsProjection
+where
+    InsProjection: Convert<SpineSeqNode<S, D, I>, Vec<O>>,
+    P: Default,
+{
+    fn convert(&mut self, seq: SpineSeq<S, D, I>) -> Punctuated<O, P> {
         seq.0
             .into_iter()
             .flat_map(|node| self.convert(node))

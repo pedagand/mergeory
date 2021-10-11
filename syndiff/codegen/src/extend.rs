@@ -37,6 +37,7 @@ fn check_compatibility(
     old_typ: &Type,
     cur_typ: &Type,
     generics: &HashSet<Ident>,
+    family: &Family,
     map: &mut GenericTypeMap,
 ) -> bool {
     if old_typ == cur_typ {
@@ -63,7 +64,9 @@ fn check_compatibility(
                             && old.path.leading_colon.is_none()
                             && old.path.segments.len() == 1
                         {
-                            if generics.contains(&old_segment.ident) {
+                            if generics.contains(&old_segment.ident)
+                                && family.contains(&cur_segment.ident)
+                            {
                                 return match map
                                     .0
                                     .insert(old_segment.ident.clone(), cur_segment.ident.clone())
@@ -91,7 +94,7 @@ fn check_compatibility(
                             }
                             match (old_arg, cur_arg) {
                                 (GenericArgument::Type(old_t), GenericArgument::Type(cur_t)) => {
-                                    if !check_compatibility(old_t, cur_t, generics, map) {
+                                    if !check_compatibility(old_t, cur_t, generics, family, map) {
                                         return false;
                                     }
                                 }
@@ -118,11 +121,13 @@ impl Fold for GenericTypeMap {
     }
 }
 
-impl<'a> Fold for &'a TypeReplacement {
+struct TypeReplacer<'a>(&'a TypeReplacement, &'a Family<'a>);
+
+impl<'a> Fold for TypeReplacer<'a> {
     fn fold_type(&mut self, typ: Type) -> Type {
-        for (generics, old_typ, new_typ) in &self.0 {
+        for (generics, old_typ, new_typ) in &self.0 .0 {
             let mut map = GenericTypeMap::default();
-            if check_compatibility(old_typ, &typ, generics, &mut map) {
+            if check_compatibility(old_typ, &typ, generics, self.1, &mut map) {
                 return map.fold_type(new_typ.clone());
             }
         }
@@ -137,7 +142,7 @@ pub fn extend_family(tokens: TokenStream, attrs: &[Attribute], family: &Family) 
     };
 
     let extended_family = family.iter().map(|item| {
-        let mut new_item = (&input).fold_derive_input(item.clone());
+        let mut new_item = TypeReplacer(&input, family).fold_derive_input(item.clone());
         new_item.attrs.extend(attrs.iter().cloned());
         new_item.vis = parse_quote!(pub);
         new_item

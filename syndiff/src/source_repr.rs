@@ -8,6 +8,7 @@ use crate::token_trees::{iter_token_trees, TokenTree};
 use proc_macro2::{Span, TokenStream};
 use quote::{quote, ToTokens};
 use std::str::FromStr;
+use syn::punctuated::Punctuated;
 use syn::Token;
 
 pub trait VerbatimMacro {
@@ -68,6 +69,15 @@ impl VerbatimMacro for proc_macro2::TokenTree {
     }
 }
 
+// FIXME: This implementation prints differences outside of the tree since
+// we cannot always generate a macro at any point of the code.
+impl<T> VerbatimMacro for Option<T> {
+    fn verbatim_macro(mac: TokenStream) -> Option<T> {
+        println!("{}", mac);
+        None
+    }
+}
+
 pub struct ToSourceRepr(Option<ColorSet>);
 
 impl<O> Convert<Metavariable, O> for ToSourceRepr
@@ -116,6 +126,28 @@ where
     }
 }
 
+// FIXME: This implementation prints differences outside of the tree since
+// we cannot always generate a macro at any point of the code.
+impl<I, O, P> Convert<Vec<ChangeNode<I>>, Punctuated<O, P>> for ToSourceRepr
+where
+    ToSourceRepr: Convert<I, O>,
+    O: ToTokens,
+    P: Default,
+{
+    fn convert(&mut self, input: Vec<ChangeNode<I>>) -> Punctuated<O, P> {
+        input
+            .into_iter()
+            .filter_map(|elt| match elt {
+                ChangeNode::InPlace(node) => Some(self.convert(node)),
+                ChangeNode::Elided(mv) => {
+                    println!("mv![{}]", mv);
+                    None
+                }
+            })
+            .collect()
+    }
+}
+
 impl<S, C, O> Convert<DiffNode<S, C>, O> for ToSourceRepr
 where
     ToSourceRepr: Convert<S, O>,
@@ -158,6 +190,54 @@ where
 }
 
 impl_convert_for_seq!(AlignedSeq<S, C>: Aligned<S, C>);
+
+fn change_node_as_string<I, O>(converter: &mut ToSourceRepr, input: ChangeNode<I>) -> String
+where
+    ToSourceRepr: Convert<I, O>,
+    O: ToTokens,
+{
+    match input {
+        ChangeNode::InPlace(c) => format!("{}", converter.convert(c).into_token_stream()),
+        ChangeNode::Elided(mv) => format!("mv![{}]", mv),
+    }
+}
+
+// FIXME: This implementation prints differences outside of the tree since
+// we cannot always generate a macro at any point of the code.
+impl<S, C, O, P> Convert<AlignedSeq<S, C>, Punctuated<O, P>> for ToSourceRepr
+where
+    ToSourceRepr: Convert<S, O>,
+    ToSourceRepr: Convert<C, O>,
+    O: ToTokens,
+    P: Default,
+{
+    fn convert(&mut self, input: AlignedSeq<S, C>) -> Punctuated<O, P> {
+        input
+            .0
+            .into_iter()
+            .filter_map::<O, _>(|elt| match elt {
+                Aligned::Zipped(DiffNode::Spine(spine)) => Some(self.convert(spine)),
+                Aligned::Zipped(DiffNode::Changed(del, ins)) => {
+                    println!(
+                        "changed![{{{}}}, {{{}}}]",
+                        change_node_as_string(self, del),
+                        change_node_as_string(self, ins)
+                    );
+                    None
+                }
+                Aligned::Zipped(DiffNode::Unchanged(_)) => None,
+                Aligned::Deleted(del) => {
+                    println!("deleted![{}]", change_node_as_string(self, del));
+                    None
+                }
+                Aligned::Inserted(ins) => {
+                    println!("inserted![{}]", change_node_as_string(self, ins));
+                    None
+                }
+            })
+            .collect()
+    }
+}
 
 // Implementations to convert multi_diff_tree
 
@@ -256,6 +336,115 @@ where
 
 impl_convert_for_seq!(InsSeq<I>: InsSeqNode<I>);
 
+fn ins_node_as_string<I, O>(converter: &mut ToSourceRepr, input: InsNode<I>) -> String
+where
+    ToSourceRepr: Convert<I, O>,
+    O: ToTokens,
+{
+    match input {
+        InsNode::InPlace(i) => format!("{}", converter.convert(i.node).into_token_stream()),
+        InsNode::Elided(mv) => format!("mv![{}]", mv),
+        InsNode::Conflict(confl) => {
+            let confl_tokens = confl
+                .into_iter()
+                .map(|n| format!("{}", ins_node_as_string(converter, n).into_token_stream()))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("conflict![{}]", confl_tokens)
+        }
+    }
+}
+
+// FIXME: Dirty printing impl
+impl<I, O, P> Convert<InsSeq<I>, Punctuated<O, P>> for ToSourceRepr
+where
+    ToSourceRepr: Convert<I, O>,
+    O: ToTokens,
+    P: Default + ToTokens,
+{
+    fn convert(&mut self, input: InsSeq<I>) -> Punctuated<O, P> {
+        input
+            .0
+            .into_iter()
+            .filter_map(|node| match node {
+                InsSeqNode::Node(InsNode::InPlace(i)) => Some(self.convert(i.node)),
+                InsSeqNode::Node(node) => {
+                    println!("{}", ins_node_as_string(self, node));
+                    None
+                }
+                InsSeqNode::DeleteConflict(ins) => {
+                    println!("delete_conflict![{}]", ins_node_as_string(self, ins));
+                    None
+                }
+                InsSeqNode::InsertOrderConflict(ins_vec) => {
+                    let punct = format!("{}", P::default().into_token_stream());
+                    let ins_seq_str = ins_vec
+                        .into_iter()
+                        .map(|ins_seq| {
+                            format!(
+                                "{{{}}}",
+                                ins_seq
+                                    .node
+                                    .into_iter()
+                                    .map(|ins| ins_node_as_string(self, ins))
+                                    .collect::<Vec<_>>()
+                                    .join(&punct)
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    println!("insert_order_conflict![{}]", ins_seq_str);
+                    None
+                }
+            })
+            .collect()
+    }
+}
+
+fn del_node_as_string<D, I, O>(converter: &mut ToSourceRepr, input: DelNode<D, I>) -> String
+where
+    ToSourceRepr: Convert<D, O>,
+    ToSourceRepr: Convert<I, O>,
+    O: ToTokens,
+{
+    match input {
+        DelNode::InPlace(i) => format!("{}", converter.convert(i.node).into_token_stream()),
+        DelNode::Elided(mv) => format!("mv![{}]", mv.node),
+        DelNode::MetavariableConflict(mv, del, subst) => {
+            let del = del_node_as_string(converter, *del);
+            match subst {
+                None => format!("mv_conflict![{}, {{{}}}])", mv, del),
+                Some(ins) => {
+                    let ins = ins_node_as_string(converter, ins);
+                    format!("mv_conflict![{}, {{{}}}, {{{}}}])", mv, del, ins)
+                }
+            }
+        }
+    }
+}
+
+// FIXME: Dirty printing impl
+impl<D, I, O, P> Convert<Vec<DelNode<D, I>>, Punctuated<O, P>> for ToSourceRepr
+where
+    ToSourceRepr: Convert<D, O>,
+    ToSourceRepr: Convert<I, O>,
+    O: ToTokens,
+    P: Default,
+{
+    fn convert(&mut self, input: Vec<DelNode<D, I>>) -> Punctuated<O, P> {
+        input
+            .into_iter()
+            .filter_map(|node| match node {
+                DelNode::InPlace(del) => Some(self.convert(del.node)),
+                _ => {
+                    println!("{}", del_node_as_string(self, node));
+                    None
+                }
+            })
+            .collect()
+    }
+}
+
 impl<S, D, I, O> Convert<SpineNode<S, D, I>, O> for ToSourceRepr
 where
     ToSourceRepr: Convert<S, O>,
@@ -334,6 +523,78 @@ where
 }
 
 impl_convert_for_seq!(SpineSeq<S, D, I>: SpineSeqNode<S, D, I>);
+
+// FIXME: Dirty prints
+impl<S, D, I, O, P> Convert<SpineSeq<S, D, I>, Punctuated<O, P>> for ToSourceRepr
+where
+    ToSourceRepr: Convert<S, O>,
+    ToSourceRepr: Convert<D, O>,
+    ToSourceRepr: Convert<I, O>,
+    O: ToTokens,
+    P: Default + ToTokens,
+{
+    fn convert(&mut self, input: SpineSeq<S, D, I>) -> Punctuated<O, P> {
+        input
+            .0
+            .into_iter()
+            .filter_map(|node| match node {
+                SpineSeqNode::Zipped(SpineNode::Spine(spine)) => Some(self.convert(spine)),
+                SpineSeqNode::Zipped(SpineNode::Unchanged) => None,
+                SpineSeqNode::Zipped(SpineNode::Changed(del, ins)) => {
+                    println!(
+                        "changed![{{{}}}, {{{}}}]",
+                        del_node_as_string(self, del),
+                        ins_node_as_string(self, ins)
+                    );
+                    None
+                }
+                SpineSeqNode::Deleted(del) => {
+                    println!("deleted![{}]", del_node_as_string(self, del));
+                    None
+                }
+                SpineSeqNode::DeleteConflict(del, ins) => {
+                    println!(
+                        "delete_conflict![{{{}}}, {{{}}}]",
+                        del_node_as_string(self, del),
+                        ins_node_as_string(self, ins)
+                    );
+                    None
+                }
+                SpineSeqNode::Inserted(ins_seq) => {
+                    let punct = format!("{}", P::default().into_token_stream());
+                    let ins_seq_str = ins_seq
+                        .node
+                        .into_iter()
+                        .map(|ins| ins_node_as_string(self, ins))
+                        .collect::<Vec<_>>()
+                        .join(&punct);
+                    println!("inserted![{}]", ins_seq_str);
+                    None
+                }
+                SpineSeqNode::InsertOrderConflict(ins_vec) => {
+                    let punct = format!("{}", P::default().into_token_stream());
+                    let ins_seq_str = ins_vec
+                        .into_iter()
+                        .map(|ins_seq| {
+                            format!(
+                                "{{{}}}",
+                                ins_seq
+                                    .node
+                                    .into_iter()
+                                    .map(|ins| ins_node_as_string(self, ins))
+                                    .collect::<Vec<_>>()
+                                    .join(&punct)
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    println!("insert_order_conflict![{}]", ins_seq_str);
+                    None
+                }
+            })
+            .collect()
+    }
+}
 
 // Miscellaneous implementations to expand ignored stuff
 

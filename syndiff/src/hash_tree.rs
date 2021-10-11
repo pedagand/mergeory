@@ -4,6 +4,7 @@ use std::any::Any;
 use std::collections::hash_map::{DefaultHasher, HashMap};
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
+use syn::punctuated::Punctuated;
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]
 pub struct HashSum(u64);
@@ -28,12 +29,13 @@ pub struct HashTagged<T> {
     pub hash: HashSum,
 }
 
-impl<T: Hash> From<T> for HashTagged<T> {
+impl<T: Hash + 'static> From<T> for HashTagged<T> {
     fn from(data: T) -> HashTagged<T> {
         HashTagged {
             hash: {
                 let mut hasher = DefaultHasher::new();
                 data.hash(&mut hasher);
+                data.type_id().hash(&mut hasher);
                 HashSum(hasher.finish())
             },
             data: Rc::new(data),
@@ -88,6 +90,16 @@ where
             .or_insert_with(|| hash_tagged.data.clone());
         assert!(existing_item.downcast_ref::<Out>().unwrap() == &*hash_tagged.data);
         hash_tagged
+    }
+}
+
+impl<In, Out, P> Convert<Punctuated<In, P>, Vec<Out>> for TreeHasher
+where
+    TreeHasher: Convert<In, Out>,
+    Out: Hash + PartialEq + 'static,
+{
+    fn convert(&mut self, input: Punctuated<In, P>) -> Vec<Out> {
+        input.into_iter().map(|v| self.convert(v)).collect()
     }
 }
 

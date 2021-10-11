@@ -11,8 +11,11 @@ syn_codegen! {
         #[derive(Hash, PartialEq, Eq)]
         extend_family! {
             Expr as HashTagged<Expr>,
+            Option<QSelf> as Option<QSelf>,
+            for<T> Option<T> as HashTagged<Option<T>>,
             for<T> Vec<T> as Vec<HashTagged<T>>,
             proc_macro2::TokenStream as Vec<HashTagged<TokenTree>>,
+            for<T> syn::punctuated::Punctuated<T, _> as Vec<HashTagged<T>>,
 
             // We consider literals as strings for easy hashing
             proc_macro2::Literal as String,
@@ -35,8 +38,11 @@ syn_codegen! {
 
         extend_family! {
             Expr as MaybeElided<Expr>,
+            Option<QSelf> as Option<QSelf>,
+            for<T> Option<T> as MaybeElided<Option<T>>,
             for<T> Vec<T> as Vec<MaybeElided<T>>,
             proc_macro2::TokenStream as Vec<MaybeElided<TokenTree>>,
+            for<T> syn::punctuated::Punctuated<T, _> as Vec<MaybeElided<T>>,
 
             proc_macro2::Literal as String,
             proc_macro2::Span as (),
@@ -56,8 +62,11 @@ syn_codegen! {
 
         extend_family! {
             Expr as Weighted<Expr>,
+            Option<QSelf> as Option<QSelf>,
+            for<T> Option<T> as Weighted<Option<T>>,
             for<T> Vec<T> as AlignableSeq<T>,
             proc_macro2::TokenStream as AlignableSeq<TokenTree>,
+            for<T> syn::punctuated::Punctuated<T, _> as AlignableSeq<T>,
 
             proc_macro2::Literal as String,
             proc_macro2::Span as (),
@@ -78,8 +87,11 @@ syn_codegen! {
 
         extend_family! {
             Expr as DiffNode<Expr, super::elided::Expr>,
+            Option<QSelf> as Option<QSelf>,
+            for<T> Option<T> as DiffNode<Option<T>, Option<super::elided::T>>,
             for<T> Vec<T> as AlignedSeq<T, super::elided::T>,
             proc_macro2::TokenStream as AlignedSeq<TokenTree, super::elided::TokenTree>,
+            for<T> syn::punctuated::Punctuated<T, _> as AlignedSeq<T, super::elided::T>,
 
             proc_macro2::Literal as String,
             proc_macro2::Span as (),
@@ -97,8 +109,11 @@ syn_codegen! {
 
             extend_family! {
                 Expr as ChangeNode<Expr>,
+                Option<QSelf> as Option<QSelf>,
+                for<T> Option<T> as ChangeNode<Option<T>>,
                 for<T> Vec<T> as Vec<ChangeNode<T>>,
                 proc_macro2::TokenStream as Vec<ChangeNode<TokenTree>>,
+                for<T> syn::punctuated::Punctuated<T, _> as Vec<ChangeNode<T>>,
 
                 proc_macro2::Literal as String,
                 proc_macro2::Span as (),
@@ -113,8 +128,11 @@ syn_codegen! {
 
         extend_family! {
             Expr as DiffNode<Expr, change::Expr>,
+            Option<QSelf> as Option<QSelf>,
+            for<T> Option<T> as DiffNode<Option<T>, Option<change::T>>,
             for<T> Vec<T> as AlignedSeq<T, change::T>,
             proc_macro2::TokenStream as AlignedSeq<TokenTree, change::TokenTree>,
+            for<T> syn::punctuated::Punctuated<T, _> as AlignedSeq<T, change::T>,
 
             proc_macro2::Literal as String,
             proc_macro2::Span as (),
@@ -147,8 +165,11 @@ syn_codegen! {
             #[derive(Clone)]
             extend_family! {
                 Expr as InsNode<Expr>,
+                Option<QSelf> as Option<QSelf>,
+                for<T> Option<T> as InsNode<Option<T>>,
                 for<T> Vec<T> as InsSeq<T>,
                 proc_macro2::TokenStream as InsSeq<TokenTree>,
+                for<T> syn::punctuated::Punctuated<T, _> as InsSeq<T>,
 
                 proc_macro2::Literal as String,
                 proc_macro2::Span as (),
@@ -163,8 +184,11 @@ syn_codegen! {
             #[derive(Clone)]
             extend_family! {
                 Expr as DelNode<Expr, super::ins::Expr>,
+                Option<QSelf> as Option<QSelf>,
+                for<T> Option<T> as DelNode<Option<T>, Option<super::ins::T>>,
                 for<T> Vec<T> as Vec<DelNode<T, super::ins::T>>,
                 proc_macro2::TokenStream as Vec<DelNode<TokenTree, super::ins::TokenTree>>,
+                for<T> syn::punctuated::Punctuated<T, _> as Vec<DelNode<T, super::ins::T>>,
 
                 proc_macro2::Literal as String,
                 proc_macro2::Span as (),
@@ -178,9 +202,13 @@ syn_codegen! {
 
             extend_family! {
                 Expr as MergeSpineNode<Expr, super::del::Expr, super::ins::Expr>,
+                Option<QSelf> as Option<QSelf>,
+                for<T> Option<T> as MergeSpineNode<Option<T>, Option<super::del::T>, Option<super::ins::T>>,
                 for<T> Vec<T> as MergeSpineSeq<T, super::del::T, super::ins::T>,
                 proc_macro2::TokenStream as
                     MergeSpineSeq<TokenTree, super::del::TokenTree, super::ins::TokenTree>,
+                for<T> syn::punctuated::Punctuated<T, _> as
+                    MergeSpineSeq<T, super::del::T, super::ins::T>,
 
                 proc_macro2::Literal as String,
                 proc_macro2::Span as (),
@@ -194,9 +222,13 @@ syn_codegen! {
 
             extend_family! {
                 Expr as ISpineNode<Expr, super::del::Expr, super::ins::Expr>,
+                Option<QSelf> as Option<QSelf>,
+                for<T> Option<T> as ISpineNode<Option<T>, Option<super::del::T>, Option<super::ins::T>>,
                 for<T> Vec<T> as ISpineSeq<T, super::del::T, super::ins::T>,
                 proc_macro2::TokenStream as
                     ISpineSeq<TokenTree, super::del::TokenTree, super::ins::TokenTree>,
+                for<T> syn::punctuated::Punctuated<T, _> as
+                    ISpineSeq<T, super::del::T, super::ins::T>,
 
                 proc_macro2::Literal as String,
                 proc_macro2::Span as (),
@@ -209,8 +241,11 @@ syn_codegen! {
 
         extend_family! {
             Expr as SpineNode<Expr, del::Expr, ins::Expr>,
+            Option<QSelf> as Option<QSelf>,
+            for<T> Option<T> as SpineNode<Option<T>, Option<del::T>, Option<ins::T>>,
             for<T> Vec<T> as SpineSeq<T, del::T, ins::T>,
             proc_macro2::TokenStream as SpineSeq<TokenTree, del::TokenTree, ins::TokenTree>,
+            for<T> syn::punctuated::Punctuated<T, _> as SpineSeq<T, del::T, ins::T>,
 
             proc_macro2::Literal as String,
             proc_macro2::Span as (),
