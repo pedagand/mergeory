@@ -3,6 +3,8 @@ use super::{
     ColorSet, Colored, DelNode, InsNode, InsSeq, InsSeqNode, SpineNode, SpineSeq, SpineSeqNode,
 };
 use crate::family_traits::{Convert, Merge, VisitMut};
+use crate::token_trees::TokenTree;
+use proc_macro2::TokenStream;
 use std::any::Any;
 
 pub struct MetavarRemover {
@@ -152,6 +154,21 @@ where
                 })
                 .collect(),
         )
+    }
+}
+
+impl<S, D, I> Merge<SpineSeq<S, D, I>, TokenStream, SpineSeq<S, D, I>> for MetavarRemover
+where
+    MetavarRemover: Merge<SpineSeq<S, D, I>, Vec<TokenTree>, SpineSeq<S, D, I>>,
+{
+    fn can_merge(&mut self, seq: &SpineSeq<S, D, I>, tokens: &TokenStream) -> bool {
+        let token_vec: Vec<_> = tokens.clone().into_iter().map(|tt| tt.into()).collect();
+        self.can_merge(seq, &token_vec)
+    }
+
+    fn merge(&mut self, seq: SpineSeq<S, D, I>, tokens: TokenStream) -> SpineSeq<S, D, I> {
+        let token_vec: Vec<_> = tokens.into_iter().map(|tt| tt.into()).collect();
+        self.merge(seq, token_vec)
     }
 }
 
@@ -326,6 +343,20 @@ where
     }
 }
 
+impl<I> Convert<TokenStream, InsSeq<I>> for InferFromSyn
+where
+    InferFromSyn: Convert<TokenTree, InsNode<I>>,
+{
+    fn convert(&mut self, tokens: TokenStream) -> InsSeq<I> {
+        InsSeq(
+            tokens
+                .into_iter()
+                .map(|node| InsSeqNode::Node(self.convert(node.into())))
+                .collect(),
+        )
+    }
+}
+
 impl<T, S, D, I> Convert<T, SpineNode<S, D, I>> for InferFromSyn
 where
     InferFromSyn: Convert<T, S>,
@@ -344,6 +375,20 @@ where
             node_seq
                 .into_iter()
                 .map(|node| SpineSeqNode::Zipped(self.convert(node)))
+                .collect(),
+        )
+    }
+}
+
+impl<S, D, I> Convert<TokenStream, SpineSeq<S, D, I>> for InferFromSyn
+where
+    InferFromSyn: Convert<TokenTree, SpineNode<S, D, I>>,
+{
+    fn convert(&mut self, tokens: TokenStream) -> SpineSeq<S, D, I> {
+        SpineSeq(
+            tokens
+                .into_iter()
+                .map(|node| SpineSeqNode::Zipped(self.convert(node.into())))
                 .collect(),
         )
     }

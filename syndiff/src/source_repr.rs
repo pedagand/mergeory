@@ -4,6 +4,7 @@ use crate::family_traits::Convert;
 use crate::multi_diff_tree::{
     ColorSet, Colored, DelNode, InsNode, InsSeq, InsSeqNode, SpineNode, SpineSeq, SpineSeqNode,
 };
+use crate::token_trees::TokenTree;
 use proc_macro2::{Span, TokenStream};
 use quote::{quote, ToTokens};
 use std::str::FromStr;
@@ -52,6 +53,21 @@ impl VerbatimMacro for syn::Arm {
     }
 }
 
+impl VerbatimMacro for TokenTree {
+    fn verbatim_macro(mac: TokenStream) -> TokenTree {
+        TokenTree::Group(
+            proc_macro2::Delimiter::None,
+            mac.into_iter().map(TokenTree::from).collect(),
+        )
+    }
+}
+
+impl VerbatimMacro for proc_macro2::TokenTree {
+    fn verbatim_macro(mac: TokenStream) -> proc_macro2::TokenTree {
+        proc_macro2::Group::new(proc_macro2::Delimiter::None, mac).into()
+    }
+}
+
 pub struct ToSourceRepr(Option<ColorSet>);
 
 impl<O> Convert<Metavariable, O> for ToSourceRepr
@@ -61,6 +77,28 @@ where
     fn convert(&mut self, mv: Metavariable) -> O {
         O::verbatim_macro(quote!(mv![#mv]))
     }
+}
+
+macro_rules! impl_convert_for_seq {
+    ($seq:ident<$($T:ident),*> : $it:ty) => {
+        impl<$($T,)* O> Convert<$seq<$($T),*>, Vec<O>> for ToSourceRepr
+        where
+            ToSourceRepr: Convert<Vec<$it>, Vec<O>>,
+        {
+            fn convert(&mut self, input: $seq<$($T),*>) -> Vec<O> {
+                self.convert(input.0)
+            }
+        }
+
+        impl<$($T),*> Convert<$seq<$($T),*>, TokenStream> for ToSourceRepr
+        where
+            ToSourceRepr: Convert<Vec<$it>, TokenStream>,
+        {
+            fn convert(&mut self, input: $seq<$($T),*>) -> TokenStream {
+                self.convert(input.0)
+            }
+        }
+    };
 }
 
 // Implementations for converting diff_tree
@@ -98,30 +136,28 @@ where
     }
 }
 
-impl<S, C, O> Convert<AlignedSeq<S, C>, Vec<O>> for ToSourceRepr
+impl<S, C, O> Convert<Aligned<S, C>, O> for ToSourceRepr
 where
     ToSourceRepr: Convert<DiffNode<S, C>, O>,
     ToSourceRepr: Convert<C, O>,
     O: ToTokens + VerbatimMacro,
 {
-    fn convert(&mut self, input: AlignedSeq<S, C>) -> Vec<O> {
-        input
-            .0
-            .into_iter()
-            .map(|elt| match elt {
-                Aligned::Zipped(spine) => self.convert(spine),
-                Aligned::Deleted(del) => {
-                    let del: O = self.convert(del);
-                    O::verbatim_macro(quote!(deleted![#del]))
-                }
-                Aligned::Inserted(ins) => {
-                    let ins: O = self.convert(ins);
-                    O::verbatim_macro(quote!(inserted![#ins]))
-                }
-            })
-            .collect()
+    fn convert(&mut self, input: Aligned<S, C>) -> O {
+        match input {
+            Aligned::Zipped(spine) => self.convert(spine),
+            Aligned::Deleted(del) => {
+                let del: O = self.convert(del);
+                O::verbatim_macro(quote!(deleted![#del]))
+            }
+            Aligned::Inserted(ins) => {
+                let ins: O = self.convert(ins);
+                O::verbatim_macro(quote!(inserted![#ins]))
+            }
+        }
     }
 }
+
+impl_convert_for_seq!(AlignedSeq<S, C>: Aligned<S, C>);
 
 // Implementations to convert multi_diff_tree
 
@@ -186,41 +222,39 @@ where
     }
 }
 
-impl<I, O> Convert<InsSeq<I>, Vec<O>> for ToSourceRepr
+impl<I, O> Convert<InsSeqNode<I>, O> for ToSourceRepr
 where
     ToSourceRepr: Convert<InsNode<I>, O>,
     O: ToTokens + VerbatimMacro,
 {
-    fn convert(&mut self, input: InsSeq<I>) -> Vec<O> {
-        input
-            .0
-            .into_iter()
-            .map(|node| match node {
-                InsSeqNode::Node(node) => self.convert(node),
-                InsSeqNode::DeleteConflict(ins) => {
-                    let ins = self.convert(ins);
-                    O::verbatim_macro(quote!(delete_conflict![#ins]))
-                }
-                InsSeqNode::InsertOrderConflict(ins_vec) => {
-                    let ins_seq_iter = ins_vec.into_iter().map(|ins_seq| {
-                        if self.0.is_none() {
-                            let ins_iter = ins_seq.node.into_iter().map(|ins| self.convert(ins));
-                            quote!({#(#ins_iter)*})
-                        } else {
-                            let ins_colors = ins_seq.colors;
-                            let ins_iter = ins_seq
-                                .node
-                                .into_iter()
-                                .map(|ins| ToSourceRepr(Some(ins_colors)).convert(ins));
-                            quote!((#ins_colors, {#(#ins_iter)*}))
-                        }
-                    });
-                    O::verbatim_macro(quote!(insert_order_conflict![#(#ins_seq_iter),*]))
-                }
-            })
-            .collect()
+    fn convert(&mut self, input: InsSeqNode<I>) -> O {
+        match input {
+            InsSeqNode::Node(node) => self.convert(node),
+            InsSeqNode::DeleteConflict(ins) => {
+                let ins = self.convert(ins);
+                O::verbatim_macro(quote!(delete_conflict![#ins]))
+            }
+            InsSeqNode::InsertOrderConflict(ins_vec) => {
+                let ins_seq_iter = ins_vec.into_iter().map(|ins_seq| {
+                    if self.0.is_none() {
+                        let ins_iter = ins_seq.node.into_iter().map(|ins| self.convert(ins));
+                        quote!({#(#ins_iter)*})
+                    } else {
+                        let ins_colors = ins_seq.colors;
+                        let ins_iter = ins_seq
+                            .node
+                            .into_iter()
+                            .map(|ins| ToSourceRepr(Some(ins_colors)).convert(ins));
+                        quote!((#ins_colors, {#(#ins_iter)*}))
+                    }
+                });
+                O::verbatim_macro(quote!(insert_order_conflict![#(#ins_seq_iter),*]))
+            }
+        }
     }
 }
+
+impl_convert_for_seq!(InsSeq<I>: InsSeqNode<I>);
 
 impl<S, D, I, O> Convert<SpineNode<S, D, I>, O> for ToSourceRepr
 where
@@ -247,69 +281,61 @@ where
     }
 }
 
-impl<S, D, I, O> Convert<SpineSeq<S, D, I>, Vec<O>> for ToSourceRepr
+impl<S, D, I, O> Convert<SpineSeqNode<S, D, I>, O> for ToSourceRepr
 where
     ToSourceRepr: Convert<SpineNode<S, D, I>, O>,
     ToSourceRepr: Convert<DelNode<D, I>, O>,
     ToSourceRepr: Convert<InsNode<I>, O>,
     O: ToTokens + VerbatimMacro,
 {
-    fn convert(&mut self, input: SpineSeq<S, D, I>) -> Vec<O> {
-        input
-            .0
-            .into_iter()
-            .map(|node| match node {
-                SpineSeqNode::Zipped(spine) => self.convert(spine),
-                SpineSeqNode::Deleted(del) => {
-                    let del = self.convert(del);
-                    O::verbatim_macro(quote!(deleted![#del]))
+    fn convert(&mut self, input: SpineSeqNode<S, D, I>) -> O {
+        match input {
+            SpineSeqNode::Zipped(spine) => self.convert(spine),
+            SpineSeqNode::Deleted(del) => {
+                let del = self.convert(del);
+                O::verbatim_macro(quote!(deleted![#del]))
+            }
+            SpineSeqNode::DeleteConflict(del, ins) => {
+                let del = self.convert(del);
+                let ins = self.convert(ins);
+                O::verbatim_macro(quote!(delete_conflict![{#del}, {#ins}]))
+            }
+            SpineSeqNode::Inserted(ins_seq) => {
+                if self.0.is_none() {
+                    let ins_iter = ins_seq.node.into_iter().map(|ins| self.convert(ins));
+                    O::verbatim_macro(quote!(inserted![#(#ins_iter)*]))
+                } else {
+                    let ins_colors = ins_seq.colors;
+                    let ins_iter = ins_seq
+                        .node
+                        .into_iter()
+                        .map(|ins| ToSourceRepr(Some(ins_colors)).convert(ins));
+                    O::verbatim_macro(quote!(inserted![#ins_colors, {#(#ins_iter)*}]))
                 }
-                SpineSeqNode::DeleteConflict(del, ins) => {
-                    let del = self.convert(del);
-                    let ins = self.convert(ins);
-                    O::verbatim_macro(quote!(delete_conflict![{#del}, {#ins}]))
-                }
-                SpineSeqNode::Inserted(ins_seq) => {
+            }
+            SpineSeqNode::InsertOrderConflict(ins_vec) => {
+                let ins_seq_iter = ins_vec.into_iter().map(|ins_seq| {
                     if self.0.is_none() {
                         let ins_iter = ins_seq.node.into_iter().map(|ins| self.convert(ins));
-                        O::verbatim_macro(quote!(inserted![#(#ins_iter)*]))
+                        quote!({#(#ins_iter)*})
                     } else {
                         let ins_colors = ins_seq.colors;
                         let ins_iter = ins_seq
                             .node
                             .into_iter()
                             .map(|ins| ToSourceRepr(Some(ins_colors)).convert(ins));
-                        O::verbatim_macro(quote!(inserted![#ins_colors, {#(#ins_iter)*}]))
+                        quote!((#ins_colors, {#(#ins_iter)*}))
                     }
-                }
-                SpineSeqNode::InsertOrderConflict(ins_vec) => {
-                    let ins_seq_iter = ins_vec.into_iter().map(|ins_seq| {
-                        if self.0.is_none() {
-                            let ins_iter = ins_seq.node.into_iter().map(|ins| self.convert(ins));
-                            quote!({#(#ins_iter)*})
-                        } else {
-                            let ins_colors = ins_seq.colors;
-                            let ins_iter = ins_seq
-                                .node
-                                .into_iter()
-                                .map(|ins| ToSourceRepr(Some(ins_colors)).convert(ins));
-                            quote!((#ins_colors, {#(#ins_iter)*}))
-                        }
-                    });
-                    O::verbatim_macro(quote!(insert_order_conflict![#(#ins_seq_iter),*]))
-                }
-            })
-            .collect()
+                });
+                O::verbatim_macro(quote!(insert_order_conflict![#(#ins_seq_iter),*]))
+            }
+        }
     }
 }
+
+impl_convert_for_seq!(SpineSeq<S, D, I>: SpineSeqNode<S, D, I>);
 
 // Miscellaneous implementations to expand ignored stuff
-
-impl Convert<String, TokenStream> for ToSourceRepr {
-    fn convert(&mut self, input: String) -> TokenStream {
-        TokenStream::from_str(&input).unwrap()
-    }
-}
 
 impl Convert<String, proc_macro2::Literal> for ToSourceRepr {
     fn convert(&mut self, input: String) -> proc_macro2::Literal {

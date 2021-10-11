@@ -9,6 +9,7 @@ pub mod ast;
 pub mod diff_tree;
 pub mod multi_diff_tree;
 pub mod source_repr;
+pub mod token_trees;
 
 use crate::diff_tree::name_metavariables;
 use crate::elided_tree::{elide_tree_with, find_wanted_elisions};

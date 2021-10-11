@@ -62,4 +62,5 @@ check_diff_tests! {
     cross_del_and_ins(2),
     same_change(1),
     double_del(2),
+    print_macro(2),
 }

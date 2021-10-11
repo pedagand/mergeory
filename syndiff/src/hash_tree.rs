@@ -1,4 +1,5 @@
 use crate::family_traits::Convert;
+use crate::token_trees::hash;
 use std::any::Any;
 use std::collections::hash_map::{DefaultHasher, HashMap};
 use std::hash::{Hash, Hasher};
@@ -52,6 +53,24 @@ impl<T> PartialEq for HashTagged<T> {
     }
 }
 impl<T> Eq for HashTagged<T> {}
+
+impl Hash for hash::TokenTree {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self {
+            hash::TokenTree::Group(delim, tok_stream) => {
+                use proc_macro2::Delimiter;
+                state.write_u8(match delim {
+                    Delimiter::Parenthesis => 0,
+                    Delimiter::Brace => 1,
+                    Delimiter::Bracket => 2,
+                    Delimiter::None => 3,
+                });
+                tok_stream.hash(state)
+            }
+            hash::TokenTree::Leaf(tok_str) => tok_str.hash(state),
+        }
+    }
+}
 
 pub struct TreeHasher(HashTable);
 
