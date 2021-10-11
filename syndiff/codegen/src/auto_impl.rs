@@ -191,7 +191,7 @@ fn generate_convert_impl(
     family: &Family,
     extra_calls: &HashSet<Type>,
 ) -> TokenStream {
-    let item_name = &item.ident;
+    let item_name = format_ident!("{}", item.ident, span = span);
     let mut s = Structure::new(item);
     s.bind_with(|_| BindStyle::Move);
 
@@ -231,7 +231,7 @@ fn generate_visit_impl(
     family: &Family,
     extra_calls: &HashSet<Type>,
 ) -> TokenStream {
-    let item_name = &item.ident;
+    let item_name = format_ident!("{}", item.ident, span = span);
     let mut s = Structure::new(item);
 
     let mut_qualif;
@@ -285,7 +285,7 @@ fn generate_merge_impl(
     family: &Family,
     extra_calls: &HashSet<Type>,
 ) -> TokenStream {
-    let item_name = &item.ident;
+    let item_name = format_ident!("{}", item.ident, span = span);
     let mut s = Structure::new(item);
     s.bind_with(|_| BindStyle::Move);
 
@@ -294,7 +294,7 @@ fn generate_merge_impl(
     for vi in s.variants() {
         let pattern1 = vi.pat();
         let mut vi2 = vi.clone();
-        vi2.binding_name(|_, n| format_ident!("__binding2_{}", n));
+        vi2.binding_name(|_, n| format_ident!("__binding2_{}", n, span = span));
         let pattern2 = vi2.pat();
         let pattern = quote_spanned!(span=> (#in1_mod::#pattern1, #in2_mod::#pattern2));
 
@@ -358,7 +358,7 @@ fn generate_split_impl(
     family: &Family,
     extra_calls: &HashSet<Type>,
 ) -> TokenStream {
-    let item_name = &item.ident;
+    let item_name = format_ident!("{}", item.ident, span = span);
     let mut s = Structure::new(item);
     s.bind_with(|_| BindStyle::Move);
 
@@ -366,8 +366,8 @@ fn generate_split_impl(
     for vi in s.variants() {
         let pattern = vi.pat();
         let split_let = vi.bindings().iter().map(|binding| {
-            let bind1 = format_ident!("{}_1", binding.binding);
-            let bind2 = format_ident!("{}_2", binding.binding);
+            let bind1 = format_ident!("{}_1", binding.binding, span = span);
+            let bind2 = format_ident!("{}_2", binding.binding, span = span);
             let field = binding.ast();
             if family.is_inside_type(&field.ty) || contains_type_inside(&field.ty, extra_calls) {
                 quote_spanned!(span=> let (#bind1, #bind2) = self.split(#binding);)
@@ -375,8 +375,10 @@ fn generate_split_impl(
                 quote_spanned!(span=> let #bind1 = #binding.clone(); let #bind2 = #binding;)
             }
         });
-        let construct1 = vi.construct(|_, i| format_ident!("{}_1", &vi.bindings()[i].binding));
-        let construct2 = vi.construct(|_, i| format_ident!("{}_2", &vi.bindings()[i].binding));
+        let construct1 =
+            vi.construct(|_, i| format_ident!("{}_1", &vi.bindings()[i].binding, span = span));
+        let construct2 =
+            vi.construct(|_, i| format_ident!("{}_2", &vi.bindings()[i].binding, span = span));
         split_arms.extend(quote_spanned!(span=> #in_mod::#pattern => {
             #(#split_let)*
             (#out1_mod::#construct1, #out2_mod::#construct2)

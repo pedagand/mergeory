@@ -16,7 +16,7 @@ impl<'a> Fold for ModuleTransformer<'a> {
                 if item.mac.path.is_ident("extend_family") {
                     Item::Verbatim(extend::extend_family(item.mac.tokens, &item.attrs, self.0))
                 } else if item.mac.path.is_ident("family_impl") {
-                    let span = item.span();
+                    let span = item.mac.span();
                     Item::Verbatim(auto_impl::family_impl(
                         item.mac.tokens,
                         &item.attrs,
@@ -24,7 +24,7 @@ impl<'a> Fold for ModuleTransformer<'a> {
                         self.0,
                     ))
                 } else if item.mac.path.is_ident("family_link") {
-                    let span = item.span();
+                    let span = item.mac.span();
                     Item::Verbatim(type_link::link_families(
                         item.mac.tokens,
                         &item.attrs,
