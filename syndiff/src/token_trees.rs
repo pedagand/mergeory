@@ -196,44 +196,51 @@ impl Clone for TokenTree {
 
 use proc_macro2::TokenStream;
 
-impl From<proc_macro2::TokenTree> for TokenTree {
-    fn from(tt: proc_macro2::TokenTree) -> TokenTree {
-        match tt {
-            proc_macro2::TokenTree::Group(tg) => TokenTree::Group(
+pub fn iter_token_trees(tok_stream: TokenStream) -> impl Iterator<Item = TokenTree> {
+    let mut token_acc = String::new();
+    tok_stream.into_iter().filter_map(move |tok| match tok {
+        proc_macro2::TokenTree::Group(tg) => {
+            assert!(token_acc.is_empty());
+            Some(TokenTree::Group(
                 tg.delimiter(),
-                tg.stream().into_iter().map(Self::from).collect(),
-            ),
-            _ => TokenTree::Leaf(tt.to_string()),
+                iter_token_trees(tg.stream()).collect(),
+            ))
         }
-    }
-}
-
-impl From<TokenTree> for proc_macro2::TokenTree {
-    fn from(tt: TokenTree) -> proc_macro2::TokenTree {
-        match tt {
-            TokenTree::Group(delim, tokens) => {
-                proc_macro2::Group::new(delim, tokens.into_iter().map(Self::from).collect()).into()
-            }
-            TokenTree::Leaf(tok_str) => {
-                use std::str::FromStr;
-                let mut tok_stream = TokenStream::from_str(&tok_str).unwrap().into_iter();
-                let leaf_tok = tok_stream.next().unwrap();
-                assert!(tok_stream.next().is_none());
-                leaf_tok
+        proc_macro2::TokenTree::Punct(tp) => {
+            token_acc.push(tp.as_char());
+            match tp.spacing() {
+                proc_macro2::Spacing::Alone => {
+                    Some(TokenTree::Leaf(std::mem::take(&mut token_acc)))
+                }
+                proc_macro2::Spacing::Joint => None,
             }
         }
-    }
+        _ => {
+            token_acc.push_str(&tok.to_string());
+            Some(TokenTree::Leaf(std::mem::take(&mut token_acc)))
+        }
+    })
 }
 
 use quote::ToTokens;
 
 impl ToTokens for TokenTree {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        tokens.extend(self.clone().into_token_stream())
+        tokens.extend(self.to_token_stream())
     }
 
-    fn into_token_stream(self) -> TokenStream {
-        proc_macro2::TokenTree::from(self).into()
+    fn to_token_stream(&self) -> TokenStream {
+        use std::str::FromStr;
+        match self {
+            TokenTree::Group(delim, tokens) => {
+                proc_macro2::TokenTree::Group(proc_macro2::Group::new(
+                    *delim,
+                    tokens.iter().flat_map(TokenTree::to_token_stream).collect(),
+                ))
+                .into()
+            }
+            TokenTree::Leaf(tok_str) => TokenStream::from_str(&tok_str).unwrap(),
+        }
     }
 }
 
@@ -244,9 +251,8 @@ where
     T: Convert<TokenTree, O>,
 {
     fn convert(&mut self, input: TokenStream) -> Vec<O> {
-        input
-            .into_iter()
-            .map(|tok| self.convert(tok.into()))
+        iter_token_trees(input)
+            .map(|tok| self.convert(tok))
             .collect()
     }
 }
@@ -258,7 +264,8 @@ where
     fn convert(&mut self, input: Vec<I>) -> TokenStream {
         input
             .into_iter()
-            .map(|tok| proc_macro2::TokenTree::from(self.convert(tok)))
+            .map(|tt| self.convert(tt))
+            .flat_map(TokenTree::into_token_stream)
             .collect()
     }
 }
@@ -268,12 +275,12 @@ where
     M: Merge<Vec<T>, Vec<TokenTree>, Vec<T>>,
 {
     fn can_merge(&mut self, seq: &Vec<T>, tokens: &TokenStream) -> bool {
-        let token_vec: Vec<_> = tokens.clone().into_iter().map(|tt| tt.into()).collect();
+        let token_vec: Vec<_> = iter_token_trees(tokens.clone()).collect();
         self.can_merge(seq, &token_vec)
     }
 
     fn merge(&mut self, seq: Vec<T>, tokens: TokenStream) -> Vec<T> {
-        let token_vec: Vec<_> = tokens.into_iter().map(|tt| tt.into()).collect();
+        let token_vec: Vec<_> = iter_token_trees(tokens).collect();
         self.merge(seq, token_vec)
     }
 }

@@ -3,7 +3,7 @@ use super::{
     ColorSet, Colored, DelNode, InsNode, InsSeq, InsSeqNode, SpineNode, SpineSeq, SpineSeqNode,
 };
 use crate::family_traits::{Convert, Merge, VisitMut};
-use crate::token_trees::TokenTree;
+use crate::token_trees::{iter_token_trees, TokenTree};
 use proc_macro2::TokenStream;
 use std::any::Any;
 
@@ -162,12 +162,12 @@ where
     MetavarRemover: Merge<SpineSeq<S, D, I>, Vec<TokenTree>, SpineSeq<S, D, I>>,
 {
     fn can_merge(&mut self, seq: &SpineSeq<S, D, I>, tokens: &TokenStream) -> bool {
-        let token_vec: Vec<_> = tokens.clone().into_iter().map(|tt| tt.into()).collect();
+        let token_vec: Vec<_> = iter_token_trees(tokens.clone()).collect();
         self.can_merge(seq, &token_vec)
     }
 
     fn merge(&mut self, seq: SpineSeq<S, D, I>, tokens: TokenStream) -> SpineSeq<S, D, I> {
-        let token_vec: Vec<_> = tokens.into_iter().map(|tt| tt.into()).collect();
+        let token_vec: Vec<_> = iter_token_trees(tokens).collect();
         self.merge(seq, token_vec)
     }
 }
@@ -349,9 +349,8 @@ where
 {
     fn convert(&mut self, tokens: TokenStream) -> InsSeq<I> {
         InsSeq(
-            tokens
-                .into_iter()
-                .map(|node| InsSeqNode::Node(self.convert(node.into())))
+            iter_token_trees(tokens)
+                .map(|node| InsSeqNode::Node(self.convert(node)))
                 .collect(),
         )
     }
@@ -386,9 +385,8 @@ where
 {
     fn convert(&mut self, tokens: TokenStream) -> SpineSeq<S, D, I> {
         SpineSeq(
-            tokens
-                .into_iter()
-                .map(|node| SpineSeqNode::Zipped(self.convert(node.into())))
+            iter_token_trees(tokens)
+                .map(|node| SpineSeqNode::Zipped(self.convert(node)))
                 .collect(),
         )
     }

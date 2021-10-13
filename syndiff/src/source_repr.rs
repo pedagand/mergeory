@@ -4,7 +4,7 @@ use crate::family_traits::Convert;
 use crate::multi_diff_tree::{
     ColorSet, Colored, DelNode, InsNode, InsSeq, InsSeqNode, SpineNode, SpineSeq, SpineSeqNode,
 };
-use crate::token_trees::TokenTree;
+use crate::token_trees::{iter_token_trees, TokenTree};
 use proc_macro2::{Span, TokenStream};
 use quote::{quote, ToTokens};
 use std::str::FromStr;
@@ -57,7 +57,7 @@ impl VerbatimMacro for TokenTree {
     fn verbatim_macro(mac: TokenStream) -> TokenTree {
         TokenTree::Group(
             proc_macro2::Delimiter::None,
-            mac.into_iter().map(TokenTree::from).collect(),
+            iter_token_trees(mac).collect(),
         )
     }
 }

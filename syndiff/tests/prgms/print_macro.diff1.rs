@@ -1,3 +1,3 @@
 fn main() {
-    println ! (unchanged ! [] unchanged ! [] inserted ! [21 *] changed ! [{ 42 } , { 2 }]);
+    println ! (unchanged ! [] unchanged ! [] changed ! [{ 42 } , { 0 }]);
 }
