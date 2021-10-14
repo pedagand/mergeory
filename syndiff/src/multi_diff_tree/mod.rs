@@ -9,12 +9,14 @@ pub(crate) mod merge_del;
 pub(crate) mod merge_ins;
 pub(crate) mod metavar_remover;
 pub(crate) mod metavar_renamer;
+pub(crate) mod patch;
 pub(crate) mod subst;
 pub(crate) mod with_color;
 
 pub use conflict_counter::count_conflicts;
 pub use metavar_remover::remove_metavars;
 pub use metavar_renamer::canonicalize_metavars;
+pub use patch::apply_patch;
 pub use with_color::with_color;
 
 #[derive(Clone, Copy, PartialEq, Eq)]

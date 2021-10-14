@@ -182,6 +182,13 @@ mrsop_codegen! {
         family_impl!(Convert<del, super> for ToSourceRepr);
         family_impl!(Convert<ins, super> for ToSourceRepr);
         family_impl!(Convert<self, super> for ToSourceRepr);
+
+        use crate::multi_diff_tree::patch::InsProjection;
+        family_impl!(Convert<ins, super> for InsProjection);
+        family_impl!(Convert<self, super> for InsProjection);
+        impl crate::ast::multi_diff::SynType for super::TokenTree {
+            type SynType = super::TokenTree;
+        }
     }
 }
 

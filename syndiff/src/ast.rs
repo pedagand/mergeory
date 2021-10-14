@@ -321,5 +321,14 @@ syn_codegen! {
         #[extra_call(proc_macro2::TokenStream, proc_macro2::Literal, proc_macro2::Span, Reserved)]
         #[omit(Block, ExprReference)]
         family_impl!(Convert<self, syn> for ToSourceRepr);
+
+        use crate::multi_diff_tree::patch::InsProjection;
+        #[extra_call(proc_macro2::TokenStream, proc_macro2::Literal, proc_macro2::Span, Reserved)]
+        #[omit(ExprReference)]
+        family_impl!(Convert<ins, syn> for InsProjection);
+        #[extra_call(proc_macro2::TokenStream, proc_macro2::Literal, proc_macro2::Span, Reserved)]
+        #[omit(ExprReference)]
+        family_impl!(Convert<self, syn> for InsProjection);
+        family_link!(syn -> syn as SynType);
     }
 }
