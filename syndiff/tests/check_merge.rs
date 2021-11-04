@@ -2,14 +2,12 @@ use goldenfile::Mint;
 use std::process::Command;
 
 fn check_merge(test_name: &str, nb: usize) {
-    let mut mint = Mint::new("tests/prgms");
-    let diff_file = mint
-        .new_goldenfile(format!("{}.mdiff.rs", test_name))
-        .unwrap();
+    let mut mint = Mint::new(format!("tests/prgms/{}", test_name));
+    let diff_file = mint.new_goldenfile("mdiff.rs").unwrap();
 
     let diff_out = Command::new(env!("CARGO_BIN_EXE_syndiff"))
-        .arg(format!("tests/prgms/{}.orig.rs", test_name))
-        .args((0..nb).map(|i| format!("tests/prgms/{}.edit{}.rs", test_name, i)))
+        .arg(format!("tests/prgms/{}/orig.rs", test_name))
+        .args((0..nb).map(|i| format!("tests/prgms/{}/edit{}.rs", test_name, i)))
         .stdout(diff_file)
         .output()
         .expect("Failed to launch syndiff");

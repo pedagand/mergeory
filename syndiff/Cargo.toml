@@ -1,18 +1,15 @@
 [package]
 name = "syndiff"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Guillaume Bertholon <guillaume.bertholon@ens.fr>"]
-edition = "2018"
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-syn = { version = "1.0", features = ["full", "extra-traits"] }
-quote = "1.0"
-proc-macro2 = { version = "1.0", features = ["span-locations"] }
-mrsop-codegen = { path = "codegen" }
+tree-sitter = "0.19.5"
+tree-sitter-rust = "0.19.0"
 
 [dev-dependencies]
 goldenfile = "1.1"
 
-[workspace]
