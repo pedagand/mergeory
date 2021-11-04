@@ -31,7 +31,6 @@ fn merge_del_nodes<'t>(
                 Some(repl_tree) => {
                     // Perform unification on the metavariable del replacement
                     let new_repl_tree = merge_del_nodes(repl_tree, other.clone(), metavars_del)?;
-                    assert!(metavars_del[mv_id].is_none()); // Unification cycle
                     metavars_del[mv_id] = Some(new_repl_tree)
                 }
                 None => metavars_del[mv_id] = Some(other.clone()),
