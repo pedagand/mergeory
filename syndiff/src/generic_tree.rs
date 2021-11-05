@@ -1,10 +1,43 @@
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+
 pub type NodeKind = u16;
 pub type FieldId = u16;
+
+#[derive(Copy, Clone)]
+pub struct Token<'t> {
+    hash: u64,
+    bytes: &'t [u8],
+}
+
+impl<'t> Token<'t> {
+    pub fn new(bytes: &'t [u8]) -> Self {
+        let mut hasher = DefaultHasher::new();
+        bytes.hash(&mut hasher);
+        Token {
+            hash: hasher.finish(),
+            bytes,
+        }
+    }
+}
+
+impl<'t> Hash for Token<'t> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_u64(self.hash)
+    }
+}
+
+impl<'t> PartialEq for Token<'t> {
+    fn eq(&self, other: &Self) -> bool {
+        self.hash == other.hash
+    }
+}
+impl<'t> Eq for Token<'t> {}
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Tree<'t, T> {
     Node(NodeKind, Vec<T>),
-    Leaf(&'t [u8]), // TODO: Make comparison more efficient by interning
+    Leaf(Token<'t>),
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -39,7 +72,7 @@ impl<'t, T> Tree<'t, T> {
     pub fn convert<U>(&self, conv_fn: impl FnOnce(&[T]) -> Vec<U>) -> Tree<'t, U> {
         match self {
             Tree::Node(kind, children) => Tree::Node(*kind, conv_fn(children)),
-            Tree::Leaf(tok) => Tree::Leaf(tok),
+            Tree::Leaf(tok) => Tree::Leaf(*tok),
         }
     }
 
@@ -105,7 +138,7 @@ impl<'t, T> Tree<'t, T> {
             (Tree::Node(lkind, lch), Tree::Node(rkind, rch)) if lkind == rkind => {
                 Some(Tree::Node(*lkind, merge_child_fn(lch, rch)?))
             }
-            (Tree::Leaf(ltok), Tree::Leaf(rtok)) if ltok == rtok => Some(Tree::Leaf(ltok)),
+            (Tree::Leaf(ltok), Tree::Leaf(rtok)) if ltok == rtok => Some(Tree::Leaf(*ltok)),
             _ => None,
         }
     }
@@ -135,7 +168,7 @@ impl<'t, T> Tree<'t, T> {
                 }
                 Ok(())
             }
-            Tree::Leaf(tok) => output.write_all(tok),
+            Tree::Leaf(tok) => output.write_all(tok.bytes),
         }
     }
 }

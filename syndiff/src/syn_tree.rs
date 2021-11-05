@@ -1,4 +1,4 @@
-use crate::generic_tree::{Subtree, Tree};
+use crate::generic_tree::{Subtree, Token, Tree};
 use tree_sitter::Parser;
 
 pub struct SynNode<'t>(pub Tree<'t, Subtree<SynNode<'t>>>);
@@ -12,7 +12,7 @@ impl<'t> SynNode<'t> {
 fn build_syn_tree<'t>(cursor: &mut tree_sitter::TreeCursor, source: &'t [u8]) -> SynNode<'t> {
     let node = cursor.node();
     if !node.is_named() {
-        return SynNode(Tree::Leaf(&source[node.byte_range()]));
+        return SynNode(Tree::Leaf(Token::new(&source[node.byte_range()])));
     }
     let kind = node.kind_id();
     let mut children = Vec::new();
@@ -25,7 +25,7 @@ fn build_syn_tree<'t>(cursor: &mut tree_sitter::TreeCursor, source: &'t [u8]) ->
                 // Never loose any byte by recreating leaf node
                 children.push(Subtree {
                     field: None,
-                    node: SynNode(Tree::Leaf(&source[cur_byte..start_byte])),
+                    node: SynNode(Tree::Leaf(Token::new(&source[cur_byte..start_byte]))),
                 });
             }
             let subtree = build_syn_tree(cursor, source);
@@ -43,7 +43,7 @@ fn build_syn_tree<'t>(cursor: &mut tree_sitter::TreeCursor, source: &'t [u8]) ->
     if cur_byte < node.end_byte() {
         children.push(Subtree {
             field: None,
-            node: SynNode(Tree::Leaf(&source[cur_byte..node.end_byte()])),
+            node: SynNode(Tree::Leaf(Token::new(&source[cur_byte..node.end_byte()]))),
         })
     }
     SynNode(Tree::Node(kind, children))
