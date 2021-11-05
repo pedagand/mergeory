@@ -1,6 +1,6 @@
 use super::{Color, ColorSet, Colored};
 use crate::diff::{ChangeNode, SpineNode as DiffSpineNode, SpineSeqNode as DiffSpineSeqNode};
-use crate::generic_tree::{FieldId, Subtree, Tree, WriteTree};
+use crate::generic_tree::{FieldId, Subtree, Tree};
 use crate::syn_tree::SynNode;
 use crate::Metavariable;
 
@@ -62,6 +62,27 @@ impl<'t> DelNode<'t> {
             colors,
         })
     }
+
+    fn write_to(&self, output: &mut impl std::io::Write) -> std::io::Result<()> {
+        match self {
+            DelNode::InPlace(node) => node.node.write_to(output, |ch, out| ch.node.write_to(out)),
+            DelNode::Elided(mv) => write!(output, "${}", mv.node.0),
+            DelNode::MetavariableConflict(mv, del, repl) => {
+                write!(output, "MV_CONFLICT![${}: «", mv.0)?;
+                del.write_to(output)?;
+                write!(output, "»")?;
+                match repl {
+                    MetavarInsReplacement::InferFromDel => (),
+                    MetavarInsReplacement::Inlined(ins) => {
+                        write!(output, " <- «")?;
+                        ins.write_to(output)?;
+                        write!(output, "»")?;
+                    }
+                }
+                write!(output, "]")
+            }
+        }
+    }
 }
 
 impl<'t> InsNode<'t> {
@@ -82,6 +103,54 @@ impl<'t> InsNode<'t> {
             tree.0
                 .map_children(|ch| InsSeqNode::Node(ch.as_ref().map(InsNode::from_syn))),
         ))
+    }
+
+    fn write_to(&self, output: &mut impl std::io::Write) -> std::io::Result<()> {
+        match self {
+            InsNode::InPlace(node) => node.node.write_to(output, InsSeqNode::write_to),
+            InsNode::Elided(mv) => write!(output, "${}", mv.0),
+            InsNode::Conflict(confl) => {
+                write!(output, "CONFLICT![")?;
+                for (i, ins) in confl.iter().enumerate() {
+                    if i == 0 {
+                        write!(output, "«")?
+                    } else {
+                        write!(output, ", «")?
+                    }
+                    ins.write_to(output)?;
+                    write!(output, "»")?;
+                }
+                write!(output, "]")
+            }
+        }
+    }
+}
+
+impl<'t> InsSeqNode<'t> {
+    fn write_to(&self, output: &mut impl std::io::Write) -> std::io::Result<()> {
+        match self {
+            InsSeqNode::Node(node) => node.node.write_to(output),
+            InsSeqNode::DeleteConflict(node) => {
+                write!(output, "DELETE_CONFLICT![")?;
+                node.node.write_to(output)?;
+                write!(output, "]")
+            }
+            InsSeqNode::InsertOrderConflict(confl) => {
+                write!(output, "INSERT_ORDER_CONFLICT![")?;
+                for (i, ins_list) in confl.iter().enumerate() {
+                    if i == 0 {
+                        write!(output, "«")?
+                    } else {
+                        write!(output, ", «")?
+                    }
+                    for ins in &ins_list.node {
+                        ins.node.write_to(output)?;
+                    }
+                    write!(output, "»")?;
+                }
+                write!(output, "]")
+            }
+        }
     }
 }
 
@@ -104,6 +173,20 @@ impl<'t> SpineNode<'t> {
             tree.0
                 .map_children(|sub| SpineSeqNode::Zipped(sub.as_ref().map(SpineNode::from_syn))),
         )
+    }
+
+    pub fn write_to(&self, output: &mut impl std::io::Write) -> std::io::Result<()> {
+        match self {
+            SpineNode::Spine(spine) => spine.write_to(output, SpineSeqNode::write_to),
+            SpineNode::Unchanged => write!(output, "·"),
+            SpineNode::Changed(del, ins) => {
+                write!(output, "CHANGED![«")?;
+                del.write_to(output)?;
+                write!(output, "» -> «")?;
+                ins.write_to(output)?;
+                write!(output, "»]")
+            }
+        }
     }
 }
 
@@ -128,119 +211,28 @@ impl<'t> SpineSeqNode<'t> {
             )),
         }
     }
-}
 
-impl<'t> WriteTree for DelNode<'t> {
-    fn write_tree<O: std::io::Write>(&self, output: &mut O) -> std::io::Result<()> {
+    fn write_to(&self, output: &mut impl std::io::Write) -> std::io::Result<()> {
         match self {
-            DelNode::InPlace(node) => node.node.write_tree(output),
-            DelNode::Elided(mv) => write!(output, "${}", mv.node.0),
-            DelNode::MetavariableConflict(mv, del, repl) => {
-                write!(output, "MV_CONFLICT![${}: «", mv.0)?;
-                del.write_tree(output)?;
-                write!(output, "»")?;
-                match repl {
-                    MetavarInsReplacement::InferFromDel => (),
-                    MetavarInsReplacement::Inlined(ins) => {
-                        write!(output, " <- «")?;
-                        ins.write_tree(output)?;
-                        write!(output, "»")?;
-                    }
-                }
-                write!(output, "]")
-            }
-        }
-    }
-}
-
-impl<'t> WriteTree for InsNode<'t> {
-    fn write_tree<O: std::io::Write>(&self, output: &mut O) -> std::io::Result<()> {
-        match self {
-            InsNode::InPlace(node) => node.node.write_tree(output),
-            InsNode::Elided(mv) => write!(output, "${}", mv.0),
-            InsNode::Conflict(confl) => {
-                write!(output, "CONFLICT![")?;
-                for (i, ins) in confl.iter().enumerate() {
-                    if i == 0 {
-                        write!(output, "«")?
-                    } else {
-                        write!(output, ", «")?
-                    }
-                    ins.write_tree(output)?;
-                    write!(output, "»")?;
-                }
-                write!(output, "]")
-            }
-        }
-    }
-}
-
-impl<'t> WriteTree for InsSeqNode<'t> {
-    fn write_tree<O: std::io::Write>(&self, output: &mut O) -> std::io::Result<()> {
-        match self {
-            InsSeqNode::Node(node) => node.node.write_tree(output),
-            InsSeqNode::DeleteConflict(node) => {
-                write!(output, "DELETE_CONFLICT![")?;
-                node.node.write_tree(output)?;
-                write!(output, "]")
-            }
-            InsSeqNode::InsertOrderConflict(confl) => {
-                write!(output, "INSERT_ORDER_CONFLICT![")?;
-                for (i, ins_list) in confl.iter().enumerate() {
-                    if i == 0 {
-                        write!(output, "«")?
-                    } else {
-                        write!(output, ", «")?
-                    }
-                    for ins in &ins_list.node {
-                        ins.write_tree(output)?;
-                    }
-                    write!(output, "»")?;
-                }
-                write!(output, "]")
-            }
-        }
-    }
-}
-
-impl<'t> WriteTree for SpineNode<'t> {
-    fn write_tree<O: std::io::Write>(&self, output: &mut O) -> std::io::Result<()> {
-        match self {
-            SpineNode::Spine(spine) => spine.write_tree(output),
-            SpineNode::Unchanged => write!(output, "·"),
-            SpineNode::Changed(del, ins) => {
-                write!(output, "CHANGED![«")?;
-                del.write_tree(output)?;
-                write!(output, "» -> «")?;
-                ins.write_tree(output)?;
-                write!(output, "»]")
-            }
-        }
-    }
-}
-
-impl<'t> WriteTree for SpineSeqNode<'t> {
-    fn write_tree<O: std::io::Write>(&self, output: &mut O) -> std::io::Result<()> {
-        match self {
-            SpineSeqNode::Zipped(spine) => spine.node.write_tree(output),
+            SpineSeqNode::Zipped(spine) => spine.node.write_to(output),
             SpineSeqNode::Deleted(del_list) => {
                 write!(output, "DELETED![")?;
                 for del in del_list {
-                    del.write_tree(output)?;
+                    del.node.write_to(output)?;
                 }
                 write!(output, "]")
             }
             SpineSeqNode::DeleteConflict(_, del, ins) => {
                 write!(output, "DELETE_CONFLICT![«")?;
-                del.write_tree(output)?;
+                del.write_to(output)?;
                 write!(output, "» -/> «")?;
-                ins.write_tree(output)?;
+                ins.write_to(output)?;
                 write!(output, "»]")
             }
             SpineSeqNode::Inserted(ins_list) => {
                 write!(output, "INSERTED![")?;
                 for ins in &ins_list.node {
-                    ins.write_tree(output)?;
+                    ins.node.write_to(output)?;
                 }
                 write!(output, "]")
             }
@@ -253,7 +245,7 @@ impl<'t> WriteTree for SpineSeqNode<'t> {
                         write!(output, ", «")?
                     }
                     for ins in &ins_list.node {
-                        ins.write_tree(output)?;
+                        ins.node.write_to(output)?;
                     }
                     write!(output, "»")?;
                 }

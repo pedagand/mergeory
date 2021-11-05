@@ -1,11 +1,11 @@
-use crate::generic_tree::{Subtree, Tree, WriteTree};
+use crate::generic_tree::{Subtree, Tree};
 use tree_sitter::Parser;
 
 pub struct SynNode<'t>(pub Tree<'t, Subtree<SynNode<'t>>>);
 
-impl<'t> WriteTree for SynNode<'t> {
-    fn write_tree<O: std::io::Write>(&self, output: &mut O) -> std::io::Result<()> {
-        self.0.write_tree(output)
+impl<'t> SynNode<'t> {
+    pub fn write_to(&self, output: &mut impl std::io::Write) -> std::io::Result<()> {
+        self.0.write_to(output, |ch, out| ch.node.write_to(out))
     }
 }
 

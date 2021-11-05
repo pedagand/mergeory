@@ -122,6 +122,22 @@ impl<'t, T> Tree<'t, T> {
             Tree::Leaf(tok) => (Tree::Leaf(tok), Tree::Leaf(tok)),
         }
     }
+
+    pub fn write_to<O: std::io::Write>(
+        &self,
+        output: &mut O,
+        mut write_child_fn: impl FnMut(&T, &mut O) -> std::io::Result<()>,
+    ) -> std::io::Result<()> {
+        match self {
+            Tree::Node(_, children) => {
+                for ch in children {
+                    write_child_fn(ch, output)?
+                }
+                Ok(())
+            }
+            Tree::Leaf(tok) => output.write_all(tok),
+        }
+    }
 }
 
 impl<T> Subtree<T> {
@@ -196,29 +212,5 @@ impl<'t, T> Tree<'t, Subtree<T>> {
                 .map(|(l, r)| Subtree::merge(l, r, &mut merge_child_fn))
                 .collect()
         })
-    }
-}
-
-pub trait WriteTree {
-    fn write_tree<O: std::io::Write>(&self, output: &mut O) -> std::io::Result<()>;
-}
-
-impl<'t, T: WriteTree> WriteTree for Tree<'t, T> {
-    fn write_tree<O: std::io::Write>(&self, output: &mut O) -> std::io::Result<()> {
-        match self {
-            Tree::Node(_, children) => {
-                for ch in children {
-                    ch.write_tree(output)?;
-                }
-                Ok(())
-            }
-            Tree::Leaf(token) => output.write_all(token),
-        }
-    }
-}
-
-impl<T: WriteTree> WriteTree for Subtree<T> {
-    fn write_tree<O: std::io::Write>(&self, output: &mut O) -> std::io::Result<()> {
-        self.node.write_tree(output)
     }
 }

@@ -3,7 +3,6 @@ use std::fs::read;
 use std::process::exit;
 use syndiff::{
     apply_patch, compute_diff, count_conflicts, merge_diffs, parse_source, remove_metavars,
-    WriteTree,
 };
 use tree_sitter::Parser;
 
@@ -83,7 +82,7 @@ fn main() {
             .into_iter()
             .next()
             .unwrap()
-            .write_tree(&mut std::io::stdout().lock())
+            .write_to(&mut std::io::stdout().lock())
             .unwrap_or_else(|err| {
                 eprintln!("Unable to write output: {}", err);
                 exit(-1)
@@ -96,7 +95,7 @@ fn main() {
             if nb_conflicts == 0 && merge_files_mode {
                 let merged_tree = apply_patch(merged_diffs, &origin_tree).unwrap();
                 merged_tree
-                    .write_tree(&mut std::io::stdout().lock())
+                    .write_to(&mut std::io::stdout().lock())
                     .unwrap_or_else(|err| {
                         eprintln!("Unable to write output: {}", err);
                         exit(-1)
@@ -108,7 +107,7 @@ fn main() {
                     merged_diffs
                 };
                 out_tree
-                    .write_tree(&mut std::io::stdout().lock())
+                    .write_to(&mut std::io::stdout().lock())
                     .unwrap_or_else(|err| {
                         eprintln!("Unable to write output: {}", err);
                         exit(-1)
