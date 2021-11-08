@@ -1,12 +1,16 @@
 use std::cmp::min;
 use std::fs::read;
+use std::path::Path;
 use std::process::exit;
 use syndiff::{
     apply_patch, compute_diff, count_conflicts, merge_diffs, parse_source, remove_metavars,
 };
 use tree_sitter::Parser;
+use tree_sitter_config::Config;
+use tree_sitter_loader::Loader;
 
 fn main() {
+    // TODO: Use clap for argument parsing
     let mut origin_filename = None;
     let mut modified_filenames = Vec::new();
     let mut standalone_mode = false;
@@ -29,18 +33,37 @@ fn main() {
         }
     }
 
-    let mut parser = Parser::new();
-    parser
-        .set_language(tree_sitter_rust::language())
+    let config = Config::load().unwrap();
+    let mut lang_loader = Loader::new().unwrap();
+    lang_loader
+        .find_all_languages(&config.get().unwrap())
         .unwrap_or_else(|err| {
-            eprintln!("Failed initializing parser: {}", err);
-            exit(-1);
+            eprintln!("Error loading parser list: {}", err);
+            exit(-2)
         });
 
     let origin_filename = origin_filename.unwrap_or_else(|| {
         eprintln!("Usage: syndiff <original_file> <modified_files>*");
         exit(-1);
     });
+
+    let (language, _lang_config) = lang_loader
+        .language_configuration_for_file_name(Path::new(&origin_filename))
+        .unwrap_or_else(|err| {
+            eprintln!("Error loading parser: {}", err);
+            exit(-2)
+        })
+        .unwrap_or_else(|| {
+            eprintln!("No parser found for file {}", origin_filename);
+            exit(-2)
+        });
+
+    let mut parser = Parser::new();
+    parser.set_language(language).unwrap_or_else(|err| {
+        eprintln!("Failed initializing parser: {}", err);
+        exit(-2);
+    });
+
     let origin_src = read(&origin_filename).unwrap_or_else(|err| {
         eprintln!("Unable to read {}: {}", origin_filename, err);
         exit(-1)
