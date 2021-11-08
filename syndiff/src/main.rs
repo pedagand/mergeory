@@ -1,3 +1,4 @@
+use clap::{App, Arg};
 use std::cmp::min;
 use std::fs::read;
 use std::path::Path;
@@ -10,28 +11,38 @@ use tree_sitter_config::Config;
 use tree_sitter_loader::Loader;
 
 fn main() {
-    // TODO: Use clap for argument parsing
-    let mut origin_filename = None;
-    let mut modified_filenames = Vec::new();
-    let mut standalone_mode = false;
-    //let mut colored_mode = false;
-    let mut quiet = false;
-    let mut merge_files_mode = false;
-    for arg in std::env::args().skip(1) {
-        match arg.as_ref() {
-            "-s" | "--standalone" => standalone_mode = true,
-            //"-c" | "--colored" => colored_mode = true,
-            "-m" | "--merge-files" => merge_files_mode = true,
-            "-q" | "--quiet" => quiet = true,
-            _ => {
-                if origin_filename.is_none() {
-                    origin_filename = Some(arg);
-                } else {
-                    modified_filenames.push(arg);
-                }
-            }
-        }
-    }
+    let cmd_args = App::new("Syndiff")
+        .version("0.2")
+        .author("Guillaume Bertholon <guillaume.bertholon@ens.fr>")
+        .about("Compare files syntactically and merge file differences")
+        .long_about("Compare files syntactically and merge file differences\n\n\
+            If only two files are given, compute a difference between them \
+            following their syntax tree and including code moves.\n\
+            If more than one modified file is given, compute all the differences between each \
+            modified file and the original and then merge these differences.\n\
+            Exit with the number of conflicts found during the merge (capped to 127).\n\n\
+            Syntax trees are parsed from the provided source files by a tree-sitter grammar.")
+        .arg(
+            Arg::with_name("original_file")
+                .required(true)
+                .help("Path to the original file to diff"),
+        )
+        .arg(
+            Arg::with_name("modified_file")
+                .required(true)
+                .multiple(true)
+                .help("Path to the modified files to diff. If more than one is provided, then merge together the resulting differences")
+        )
+        .arg(Arg::with_name("standalone").short("s").long("standalone").help("Remove all elisions in the output"))
+        .arg(Arg::with_name("colored").short("c").long("colored").help("Display difference node colors"))
+        .arg(Arg::with_name("merge-files").short("m").long("merge-files").help("If there are no conflicts, print the resulting merged file instead of the merged difference"))
+        .arg(Arg::with_name("quiet").short("q").long("quiet").help("Do not print anything, just compute the number of conflicts"))
+        .arg(Arg::with_name("scope").long("scope").takes_value(true).help("Select the tree-sitter language by scope instead of file extension"))
+        .get_matches_safe()
+        .unwrap_or_else(|err| {
+            eprintln!("{}", err);
+            exit(-1)
+        });
 
     let config = Config::load().unwrap();
     let mut lang_loader = Loader::new().unwrap();
@@ -42,19 +53,16 @@ fn main() {
             exit(-2)
         });
 
-    let origin_filename = origin_filename.unwrap_or_else(|| {
-        eprintln!("Usage: syndiff <original_file> <modified_files>*");
-        exit(-1);
-    });
+    let origin_filename = cmd_args.value_of_os("original_file").unwrap();
 
-    let (language, _lang_config) = lang_loader
-        .language_configuration_for_file_name(Path::new(&origin_filename))
+    let language = lang_loader
+        .select_language(
+            Path::new(&origin_filename),
+            Path::new(""),
+            cmd_args.value_of("scope"),
+        )
         .unwrap_or_else(|err| {
             eprintln!("Error loading parser: {}", err);
-            exit(-2)
-        })
-        .unwrap_or_else(|| {
-            eprintln!("No parser found for file {}", origin_filename);
             exit(-2)
         });
 
@@ -65,19 +73,24 @@ fn main() {
     });
 
     let origin_src = read(&origin_filename).unwrap_or_else(|err| {
-        eprintln!("Unable to read {}: {}", origin_filename, err);
+        eprintln!(
+            "Unable to read {}: {}",
+            origin_filename.to_string_lossy(),
+            err
+        );
         exit(-1)
     });
     let origin_tree = parse_source(&origin_src, &mut parser).unwrap_or_else(|| {
-        eprintln!("Unable to parse {}", origin_filename);
+        eprintln!("Unable to parse {}", origin_filename.to_string_lossy());
         exit(-2)
     });
 
-    let modified_src: Vec<_> = modified_filenames
-        .iter()
+    let modified_src: Vec<_> = cmd_args
+        .values_of_os("modified_file")
+        .unwrap()
         .map(|filename| {
             read(filename).unwrap_or_else(|err| {
-                eprintln!("Unable to read {}: {}", filename, err);
+                eprintln!("Unable to read {}: {}", filename.to_string_lossy(), err);
                 exit(-1)
             })
         })
@@ -85,7 +98,7 @@ fn main() {
 
     let diff_trees: Vec<_> = modified_src
         .iter()
-        .zip(&modified_filenames)
+        .zip(cmd_args.values_of_lossy("modified_file").unwrap())
         .map(|(src, filename)| {
             let tree = parse_source(src, &mut parser).unwrap_or_else(|| {
                 eprintln!("Unable to parse {}", filename);
@@ -100,7 +113,10 @@ fn main() {
         exit(-1);
     }
 
-    if diff_trees.len() == 1 && !standalone_mode && !merge_files_mode {
+    if diff_trees.len() == 1
+        && !cmd_args.is_present("standalone")
+        && !cmd_args.is_present("merge_files")
+    {
         diff_trees
             .into_iter()
             .next()
@@ -114,8 +130,8 @@ fn main() {
         let merged_diffs = merge_diffs(&diff_trees).unwrap();
         let nb_conflicts = count_conflicts(&merged_diffs);
 
-        if !quiet {
-            if nb_conflicts == 0 && merge_files_mode {
+        if !cmd_args.is_present("quiet") {
+            if nb_conflicts == 0 && cmd_args.is_present("merge_files") {
                 let merged_tree = apply_patch(merged_diffs, &origin_tree).unwrap();
                 merged_tree
                     .write_to(&mut std::io::stdout().lock())
@@ -124,7 +140,7 @@ fn main() {
                         exit(-1)
                     });
             } else {
-                let out_tree = if standalone_mode {
+                let out_tree = if cmd_args.is_present("standalone") {
                     remove_metavars(merged_diffs, &origin_tree).unwrap()
                 } else {
                     merged_diffs
