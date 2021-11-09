@@ -1,10 +1,10 @@
 use super::alignment::{AlignedNode, AlignedSeqNode};
-use super::hash::{HashSum, HashedNode, ELISION_WEIGHT};
+use super::weight::{HashSum, WeightedNode, ELISION_WEIGHT};
 use super::{ChangeNode, Metavariable, SpineNode, SpineSeqNode};
 use crate::generic_tree::Tree;
 use std::collections::{HashMap, HashSet};
 
-fn collect_node_hashes(tree: &HashedNode, hash_set: &mut HashSet<HashSum>) {
+fn collect_node_hashes(tree: &WeightedNode, hash_set: &mut HashSet<HashSum>) {
     if matches!(tree.node, Tree::Leaf(_)) {
         return; // Do not elide leaf nodes
     }
@@ -53,7 +53,7 @@ fn collect_changed_subtree_hashes(
 }
 
 fn collect_wanted_elisions(
-    tree: &HashedNode,
+    tree: &WeightedNode,
     possible_elisions: &HashSet<HashSum>,
     wanted_elisions: &mut HashSet<HashSum>,
 ) {
@@ -127,7 +127,7 @@ fn find_wanted_elisions(tree: &AlignedNode) -> HashSet<HashSum> {
     &del_elisions & &ins_elisions
 }
 
-fn reduce_weight_for_hash(tree: &mut HashedNode, elisions: &HashSet<HashSum>) {
+fn reduce_weight_for_hash(tree: &mut WeightedNode, elisions: &HashSet<HashSum>) {
     if elisions.contains(&tree.hash) {
         tree.weight = std::cmp::min(tree.weight, ELISION_WEIGHT);
     } else {
@@ -137,9 +137,9 @@ fn reduce_weight_for_hash(tree: &mut HashedNode, elisions: &HashSet<HashSum>) {
 }
 
 pub fn reduce_weight_on_elision_sites<'t>(
-    del: HashedNode<'t>,
-    ins: HashedNode<'t>,
-) -> (HashedNode<'t>, HashedNode<'t>) {
+    del: WeightedNode<'t>,
+    ins: WeightedNode<'t>,
+) -> (WeightedNode<'t>, WeightedNode<'t>) {
     let aligned = AlignedNode::Changed(del, ins);
     let elisions = find_wanted_elisions(&aligned);
     let (mut del, mut ins) = match aligned {
@@ -169,7 +169,7 @@ impl MetavarNameGenerator {
 }
 
 fn elide_tree<'t>(
-    tree: &HashedNode<'t>,
+    tree: &WeightedNode<'t>,
     elisions: &HashSet<HashSum>,
     name_generator: &mut MetavarNameGenerator,
 ) -> ChangeNode<'t> {
@@ -231,8 +231,15 @@ fn elide_changed_subtree<'t>(
     }
 }
 
-pub fn find_metavariable_elisions<'t>(tree: &AlignedNode<'t>) -> SpineNode<'t> {
-    let elisions = find_wanted_elisions(tree);
+pub fn find_metavariable_elisions<'t>(
+    tree: &AlignedNode<'t>,
+    skip_elisions: bool,
+) -> SpineNode<'t> {
+    let elisions = if !skip_elisions {
+        find_wanted_elisions(tree)
+    } else {
+        HashSet::new()
+    };
     let mut name_generator = MetavarNameGenerator::default();
     elide_change_nodes(tree, &elisions, &mut name_generator)
 }

@@ -1,16 +1,16 @@
-use super::hash::{HashedNode, Weight};
+use super::weight::{Weight, WeightedNode, SPINE_LEAF_WEIGHT};
 use crate::generic_tree::{Subtree, Tree};
 
 pub enum AlignedNode<'t> {
     Spine(Tree<'t, AlignedSeqNode<'t>>),
     Unchanged,
-    Changed(HashedNode<'t>, HashedNode<'t>),
+    Changed(WeightedNode<'t>, WeightedNode<'t>),
 }
 
 pub enum AlignedSeqNode<'t> {
     Zipped(Subtree<AlignedNode<'t>>),
-    Deleted(Vec<Subtree<HashedNode<'t>>>),
-    Inserted(Vec<Subtree<HashedNode<'t>>>),
+    Deleted(Vec<Subtree<WeightedNode<'t>>>),
+    Inserted(Vec<Subtree<WeightedNode<'t>>>),
 }
 
 enum NodeAlignment {
@@ -25,9 +25,9 @@ enum SeqNodeAlignment {
     Delete,
 }
 
-fn compute_node_alignment(del: &HashedNode, ins: &HashedNode) -> (Weight, NodeAlignment) {
+fn compute_node_alignment(del: &WeightedNode, ins: &WeightedNode) -> (Weight, NodeAlignment) {
     if del == ins {
-        return (0, NodeAlignment::Copy);
+        return (SPINE_LEAF_WEIGHT, NodeAlignment::Copy);
     }
     match (&del.node, &ins.node) {
         (Tree::Node(del_kind, del_sub), Tree::Node(ins_kind, ins_sub)) if del_kind == ins_kind => {
@@ -43,8 +43,8 @@ fn compute_node_alignment(del: &HashedNode, ins: &HashedNode) -> (Weight, NodeAl
 }
 
 fn compute_subtrees_alignment(
-    del_seq: &[Subtree<HashedNode>],
-    ins_seq: &[Subtree<HashedNode>],
+    del_seq: &[Subtree<WeightedNode>],
+    ins_seq: &[Subtree<WeightedNode>],
 ) -> (Weight, Vec<SeqNodeAlignment>) {
     // Using a dynamic programming approach:
     // dyn_array[id][ii] = "Best cost for subproblem del_seq[0..id], ins_seq[0..ii]"
@@ -108,8 +108,8 @@ fn compute_subtrees_alignment(
 }
 
 fn align_nodes<'t>(
-    del: HashedNode<'t>,
-    ins: HashedNode<'t>,
+    del: WeightedNode<'t>,
+    ins: WeightedNode<'t>,
     alignment: NodeAlignment,
 ) -> AlignedNode<'t> {
     match alignment {
@@ -132,8 +132,8 @@ fn align_nodes<'t>(
 }
 
 fn align_subtrees<'t>(
-    del: Vec<Subtree<HashedNode<'t>>>,
-    ins: Vec<Subtree<HashedNode<'t>>>,
+    del: Vec<Subtree<WeightedNode<'t>>>,
+    ins: Vec<Subtree<WeightedNode<'t>>>,
     alignment: Vec<SeqNodeAlignment>,
 ) -> Vec<AlignedSeqNode<'t>> {
     let mut del_iter = del.into_iter();
@@ -176,7 +176,7 @@ fn align_subtrees<'t>(
     aligned_vec
 }
 
-pub fn align_trees<'t>(del: HashedNode<'t>, ins: HashedNode<'t>) -> AlignedNode<'t> {
+pub fn align_trees<'t>(del: WeightedNode<'t>, ins: WeightedNode<'t>) -> AlignedNode<'t> {
     let (_, align) = compute_node_alignment(&del, &ins);
     align_nodes(del, ins, align)
 }
