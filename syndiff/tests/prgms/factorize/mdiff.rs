@@ -1,7 +1,7 @@
 fn ·· {DELETED![
     let $0 = 2;
     let $1 = 40;
-    ]DELETED![let x = $2;]
+    let x = $2;]
     let · = CHANGED![«x» -> «answer()»] * CHANGED![«2» -> «5»];
     ·
 }INSERTED![
