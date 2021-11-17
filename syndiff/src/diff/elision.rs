@@ -1,5 +1,5 @@
 use super::alignment::{AlignedNode, AlignedSeqNode};
-use super::weight::{HashSum, WeightedNode, ELISION_WEIGHT};
+use super::weight::{HashSum, WeightedNode};
 use super::{ChangeNode, Metavariable, SpineNode, SpineSeqNode};
 use crate::generic_tree::Tree;
 use std::collections::{HashMap, HashSet};
@@ -19,10 +19,12 @@ fn collect_change_node_hashes(
     ins_hash_set: &mut HashSet<HashSum>,
 ) {
     match tree {
-        AlignedNode::Spine(spine) => {
+        AlignedNode::Spine(spine, del_hash, ins_hash) => {
+            del_hash_set.insert(*del_hash);
+            ins_hash_set.insert(*ins_hash);
             spine.visit(|sub| collect_changed_subtree_hashes(sub, del_hash_set, ins_hash_set))
         }
-        AlignedNode::Unchanged => (),
+        AlignedNode::Unchanged(_) => (),
         AlignedNode::Changed(del, ins) => {
             collect_node_hashes(del, del_hash_set);
             collect_node_hashes(ins, ins_hash_set);
@@ -69,17 +71,54 @@ fn collect_wanted_elisions(
 fn collect_change_node_elisions(
     tree: &AlignedNode,
     possible_elisions: &HashSet<HashSum>,
-    del_elisions: &mut HashSet<HashSum>,
-    ins_elisions: &mut HashSet<HashSum>,
+    del_elisions: Option<&mut HashSet<HashSum>>,
+    ins_elisions: Option<&mut HashSet<HashSum>>,
 ) {
+    if del_elisions.is_none() && ins_elisions.is_none() {
+        return;
+    }
     match tree {
-        AlignedNode::Spine(spine) => spine.visit(|sub| {
-            collect_changed_subtree_elisions(sub, possible_elisions, del_elisions, ins_elisions)
-        }),
-        AlignedNode::Unchanged => (),
+        AlignedNode::Spine(spine, del_hash, ins_hash) => {
+            // Stop collecting in the deletion/insertion subtrees if we want an elision here
+            let mut del_elisions = del_elisions.and_then(|elisions| {
+                if possible_elisions.contains(del_hash) {
+                    elisions.insert(*del_hash);
+                    None
+                } else {
+                    Some(elisions)
+                }
+            });
+            let mut ins_elisions = ins_elisions.and_then(|elisions| {
+                if possible_elisions.contains(ins_hash) {
+                    elisions.insert(*ins_hash);
+                    None
+                } else {
+                    Some(elisions)
+                }
+            });
+            spine.visit(|sub| {
+                collect_changed_subtree_elisions(
+                    sub,
+                    possible_elisions,
+                    match &mut del_elisions {
+                        Some(el) => Some(&mut **el),
+                        None => None,
+                    },
+                    match &mut ins_elisions {
+                        Some(el) => Some(&mut **el),
+                        None => None,
+                    },
+                )
+            })
+        }
+        AlignedNode::Unchanged(_) => (),
         AlignedNode::Changed(del, ins) => {
-            collect_wanted_elisions(del, possible_elisions, del_elisions);
-            collect_wanted_elisions(ins, possible_elisions, ins_elisions);
+            if let Some(elisions) = del_elisions {
+                collect_wanted_elisions(del, possible_elisions, elisions);
+            }
+            if let Some(elisions) = ins_elisions {
+                collect_wanted_elisions(ins, possible_elisions, elisions);
+            }
         }
     }
 }
@@ -87,21 +126,25 @@ fn collect_change_node_elisions(
 fn collect_changed_subtree_elisions(
     subtree: &AlignedSeqNode,
     possible_elisions: &HashSet<HashSum>,
-    del_elisions: &mut HashSet<HashSum>,
-    ins_elisions: &mut HashSet<HashSum>,
+    del_elisions: Option<&mut HashSet<HashSum>>,
+    ins_elisions: Option<&mut HashSet<HashSum>>,
 ) {
     match subtree {
         AlignedSeqNode::Zipped(node) => {
             collect_change_node_elisions(&node.node, possible_elisions, del_elisions, ins_elisions)
         }
         AlignedSeqNode::Deleted(del_list) => {
-            for del in del_list {
-                collect_wanted_elisions(&del.node, possible_elisions, del_elisions)
+            if let Some(elisions) = del_elisions {
+                for del in del_list {
+                    collect_wanted_elisions(&del.node, possible_elisions, elisions)
+                }
             }
         }
         AlignedSeqNode::Inserted(ins_list) => {
-            for ins in ins_list {
-                collect_wanted_elisions(&ins.node, possible_elisions, ins_elisions)
+            if let Some(elisions) = ins_elisions {
+                for ins in ins_list {
+                    collect_wanted_elisions(&ins.node, possible_elisions, elisions)
+                }
             }
         }
     }
@@ -121,34 +164,10 @@ fn find_wanted_elisions(tree: &AlignedNode) -> HashSet<HashSum> {
     collect_change_node_elisions(
         tree,
         &possible_elisions,
-        &mut del_elisions,
-        &mut ins_elisions,
+        Some(&mut del_elisions),
+        Some(&mut ins_elisions),
     );
     &del_elisions & &ins_elisions
-}
-
-fn reduce_weight_for_hash(tree: &mut WeightedNode, elisions: &HashSet<HashSum>) {
-    if elisions.contains(&tree.hash) {
-        tree.weight = std::cmp::min(tree.weight, ELISION_WEIGHT);
-    } else {
-        tree.node
-            .visit_mut(|sub| reduce_weight_for_hash(&mut sub.node, elisions));
-    }
-}
-
-pub fn reduce_weight_on_elision_sites<'t>(
-    del: WeightedNode<'t>,
-    ins: WeightedNode<'t>,
-) -> (WeightedNode<'t>, WeightedNode<'t>) {
-    let aligned = AlignedNode::Changed(del, ins);
-    let elisions = find_wanted_elisions(&aligned);
-    let (mut del, mut ins) = match aligned {
-        AlignedNode::Changed(del, ins) => (del, ins),
-        _ => unreachable![],
-    };
-    reduce_weight_for_hash(&mut del, &elisions);
-    reduce_weight_for_hash(&mut ins, &elisions);
-    (del, ins)
 }
 
 #[derive(Default)]
@@ -183,16 +202,98 @@ fn elide_tree<'t>(
     }
 }
 
+fn elide_and_keep_del<'t>(
+    tree: &AlignedNode<'t>,
+    elisions: &HashSet<HashSum>,
+    name_generator: &mut MetavarNameGenerator,
+) -> ChangeNode<'t> {
+    match tree {
+        AlignedNode::Spine(_, del_hash, _) if elisions.contains(del_hash) => {
+            ChangeNode::Elided(name_generator.get(*del_hash))
+        }
+        AlignedNode::Spine(spine, _, _) => ChangeNode::InPlace(spine.convert(|sub| {
+            let mut del_sub = Vec::new();
+            for sub_node in sub {
+                match sub_node {
+                    AlignedSeqNode::Zipped(node) => del_sub.push(
+                        node.as_ref()
+                            .map(|node| elide_and_keep_del(node, elisions, name_generator)),
+                    ),
+                    AlignedSeqNode::Deleted(del_list) => {
+                        for del in del_list {
+                            del_sub.push(
+                                del.as_ref()
+                                    .map(|del| elide_tree(del, elisions, name_generator)),
+                            )
+                        }
+                    }
+                    AlignedSeqNode::Inserted(_) => (),
+                }
+            }
+            del_sub
+        })),
+        AlignedNode::Unchanged(node) => elide_tree(node, elisions, name_generator),
+        AlignedNode::Changed(del, _) => elide_tree(del, elisions, name_generator),
+    }
+}
+
+fn elide_and_keep_ins<'t>(
+    tree: &AlignedNode<'t>,
+    elisions: &HashSet<HashSum>,
+    name_generator: &mut MetavarNameGenerator,
+) -> ChangeNode<'t> {
+    match tree {
+        AlignedNode::Spine(_, _, ins_hash) if elisions.contains(ins_hash) => {
+            ChangeNode::Elided(name_generator.get(*ins_hash))
+        }
+        AlignedNode::Spine(spine, _, _) => ChangeNode::InPlace(spine.convert(|sub| {
+            let mut ins_sub = Vec::new();
+            for sub_node in sub {
+                match sub_node {
+                    AlignedSeqNode::Zipped(node) => ins_sub.push(
+                        node.as_ref()
+                            .map(|node| elide_and_keep_ins(node, elisions, name_generator)),
+                    ),
+                    AlignedSeqNode::Inserted(ins_list) => {
+                        for ins in ins_list {
+                            ins_sub.push(
+                                ins.as_ref()
+                                    .map(|ins| elide_tree(ins, elisions, name_generator)),
+                            )
+                        }
+                    }
+                    AlignedSeqNode::Deleted(_) => (),
+                }
+            }
+            ins_sub
+        })),
+        AlignedNode::Unchanged(node) => elide_tree(node, elisions, name_generator),
+        AlignedNode::Changed(_, ins) => elide_tree(ins, elisions, name_generator),
+    }
+}
+
 fn elide_change_nodes<'t>(
     tree: &AlignedNode<'t>,
     elisions: &HashSet<HashSum>,
     name_generator: &mut MetavarNameGenerator,
 ) -> SpineNode<'t> {
     match tree {
-        AlignedNode::Spine(spine) => SpineNode::Spine(
-            spine.map_children(|sub| elide_changed_subtree(sub, elisions, name_generator)),
-        ),
-        AlignedNode::Unchanged => SpineNode::Unchanged,
+        AlignedNode::Spine(spine, del_hash, ins_hash) => {
+            if elisions.contains(del_hash) || elisions.contains(ins_hash) {
+                SpineNode::Changed(
+                    elide_and_keep_del(tree, elisions, name_generator),
+                    elide_and_keep_ins(tree, elisions, name_generator),
+                )
+            } else {
+                SpineNode::Spine(
+                    spine.map_children(|sub| elide_changed_subtree(sub, elisions, name_generator)),
+                )
+            }
+        }
+        AlignedNode::Unchanged(node) => match node.node {
+            Tree::Leaf(tok) => SpineNode::Spine(Tree::Leaf(tok)),
+            _ => SpineNode::Unchanged,
+        },
         AlignedNode::Changed(del, ins) => SpineNode::Changed(
             elide_tree(del, elisions, name_generator),
             elide_tree(ins, elisions, name_generator),

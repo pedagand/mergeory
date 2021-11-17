@@ -1,7 +1,9 @@
-fn CHANGED![«zero» -> «$0»]· -> · {
-    CHANGED![«0» -> «2»]
-}
+CHANGED![«fn zero() -> i32 {
+    0
+}» -> «$0»]
 
 ·
 
-fn CHANGED![«$0» -> «i2»]· -> · ·
+CHANGED![«$0» -> «fn i2() -> i32 {
+    2
+}»]

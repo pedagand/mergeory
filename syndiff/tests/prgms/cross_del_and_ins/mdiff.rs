@@ -1,15 +1,9 @@
-INSERT_ORDER_CONFLICT![«$0
-
-», «fn zero$1 -> $2 {
+CHANGED![«MV_CONFLICT![$0: «fn zero() -> i32 {
     0
-}
+}» <- «$1»]» -> «$2»]
 
-»]fn CHANGED![«zero» -> «two»]· -> · {
-    CHANGED![«0» -> «2»]
-}DELETED![
+CHANGED![«$2» -> «CONFLICT![«$0», «$1»]»]
 
-$0
-
-fn two$1 -> $2 {
+CHANGED![«MV_CONFLICT![$1: «fn two() -> i32 {
     2
-}]
+}» <- «$0»]» -> «$2»]

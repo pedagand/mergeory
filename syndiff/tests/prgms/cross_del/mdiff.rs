@@ -1,13 +1,9 @@
-DELETE_CONFLICT![«fn zero() -> i32 {
+DELETED![MV_CONFLICT![$0: «fn zero() -> i32 {
     0
-}» -/> «fn two() -> i32 {
-    2
-}»]DELETED![
+}» <- «$1»]
 
 ]·DELETED![
 
-]DELETE_CONFLICT![«fn two() -> i32 {
+MV_CONFLICT![$1: «fn two() -> i32 {
     2
-}» -/> «fn zero() -> i32 {
-    0
-}»]
+}» <- «$0»]]

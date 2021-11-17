@@ -1,9 +1,7 @@
-DELETED![fn $0() -> i32 {
-    $1
-}
+DELETED![$0
 
 ]·
 
-fn CHANGED![«two» -> «$0»]· -> · {
-    CHANGED![«2» -> «$1»]
-}
+CHANGED![«fn two() -> i32 {
+    2
+}» -> «$0»]

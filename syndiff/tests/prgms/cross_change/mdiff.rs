@@ -1,9 +1,13 @@
-fn CHANGED![«MV_CONFLICT![$0: «zero» <- «$1»]» -> «i0»]· -> · {
-    CHANGED![«0» -> «2»]
-}
+CHANGED![«MV_CONFLICT![$0: «fn zero() -> i32 {
+    0
+}» <- «$1»]» -> «fn i0() -> i32 {
+    0
+}»]
 
 ·
 
-fn CHANGED![«MV_CONFLICT![$1: «two» <- «$0»]» -> «i2»]· -> · {
-    CHANGED![«2» -> «0»]
-}
+CHANGED![«MV_CONFLICT![$1: «fn two() -> i32 {
+    2
+}» <- «$0»]» -> «fn i2() -> i32 {
+    2
+}»]

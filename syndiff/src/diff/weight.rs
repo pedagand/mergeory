@@ -5,8 +5,7 @@ use std::hash::{Hash, Hasher};
 
 pub type Weight = usize;
 pub const NODE_WEIGHT: Weight = 0;
-pub const LEAF_WEIGHT: Weight = 3;
-pub const ELISION_WEIGHT: Weight = 5;
+pub const LEAF_WEIGHT: Weight = 2;
 pub const SPINE_LEAF_WEIGHT: Weight = 1;
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]

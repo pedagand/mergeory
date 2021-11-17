@@ -1,9 +1,9 @@
-use super::weight::{Weight, WeightedNode, SPINE_LEAF_WEIGHT};
+use super::weight::{HashSum, Weight, WeightedNode, SPINE_LEAF_WEIGHT};
 use crate::generic_tree::{Subtree, Tree};
 
 pub enum AlignedNode<'t> {
-    Spine(Tree<'t, AlignedSeqNode<'t>>),
-    Unchanged,
+    Spine(Tree<'t, AlignedSeqNode<'t>>, HashSum, HashSum),
+    Unchanged(WeightedNode<'t>),
     Changed(WeightedNode<'t>, WeightedNode<'t>),
 }
 
@@ -115,18 +115,16 @@ fn align_nodes<'t>(
     match alignment {
         NodeAlignment::Zip(sub_align) => {
             if let (Tree::Node(_, sub_del), Tree::Node(kind, sub_ins)) = (del.node, ins.node) {
-                AlignedNode::Spine(Tree::Node(
-                    kind,
-                    align_subtrees(sub_del, sub_ins, sub_align),
-                ))
+                AlignedNode::Spine(
+                    Tree::Node(kind, align_subtrees(sub_del, sub_ins, sub_align)),
+                    del.hash,
+                    ins.hash,
+                )
             } else {
                 panic!("Wrong node alignment in align_nodes")
             }
         }
-        NodeAlignment::Copy => match ins.node {
-            Tree::Leaf(tok) => AlignedNode::Spine(Tree::Leaf(tok)),
-            _ => AlignedNode::Unchanged,
-        },
+        NodeAlignment::Copy => AlignedNode::Unchanged(ins),
         NodeAlignment::Replace => AlignedNode::Changed(del, ins),
     }
 }
