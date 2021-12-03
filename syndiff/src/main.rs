@@ -5,7 +5,7 @@ use std::path::Path;
 use std::process::exit;
 use syndiff::{
     add_extra_blocks, apply_patch, compute_diff, count_conflicts, merge_diffs, parse_source,
-    remove_metavars,
+    remove_metavars, ColoredTreeFormatter, PlainTreeFormatter,
 };
 use tree_sitter::Parser;
 use tree_sitter_config::Config;
@@ -129,7 +129,7 @@ fn main() {
             .into_iter()
             .next()
             .unwrap()
-            .write_to(&mut std::io::stdout().lock())
+            .write_with(&mut PlainTreeFormatter::new(std::io::stdout().lock()))
             .unwrap_or_else(|err| {
                 eprintln!("Unable to write output: {}", err);
                 exit(-1)
@@ -142,7 +142,7 @@ fn main() {
             if nb_conflicts == 0 && cmd_args.is_present("merge-files") {
                 let merged_tree = apply_patch(merged_diffs, &origin_tree).unwrap();
                 merged_tree
-                    .write_to(&mut std::io::stdout().lock())
+                    .write_with(&mut PlainTreeFormatter::new(std::io::stdout().lock()))
                     .unwrap_or_else(|err| {
                         eprintln!("Unable to write output: {}", err);
                         exit(-1)
@@ -153,12 +153,15 @@ fn main() {
                 } else {
                     merged_diffs
                 };
-                out_tree
-                    .write_to(&mut std::io::stdout().lock())
-                    .unwrap_or_else(|err| {
-                        eprintln!("Unable to write output: {}", err);
-                        exit(-1)
-                    });
+                if cmd_args.is_present("colored") {
+                    out_tree.write_with(&mut ColoredTreeFormatter::new(std::io::stdout().lock()))
+                } else {
+                    out_tree.write_with(&mut PlainTreeFormatter::new(std::io::stdout().lock()))
+                }
+                .unwrap_or_else(|err| {
+                    eprintln!("Unable to write output: {}", err);
+                    exit(-1)
+                });
             }
         }
 

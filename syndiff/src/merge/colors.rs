@@ -12,6 +12,12 @@ impl TryFrom<usize> for Color {
     }
 }
 
+impl std::fmt::Display for Color {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct ColorSet(u64);
 
@@ -28,14 +34,14 @@ impl ColorSet {
         self.0 & (1 << color.0) != 0
     }
 
-    pub fn color_list(&self) -> Vec<Color> {
-        let mut list = Vec::new();
-        for c in 0..64 {
+    pub fn iter<'a>(&'a self) -> impl Iterator<Item = Color> + 'a {
+        (0..64).filter_map(|c| {
             if self.contains(Color(c)) {
-                list.push(Color(c))
+                Some(Color(c))
+            } else {
+                None
             }
-        }
-        list
+        })
     }
 }
 

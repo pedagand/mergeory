@@ -1,3 +1,4 @@
+use crate::tree_formatter::TreeFormatter;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
@@ -160,19 +161,19 @@ impl<'t, T> Tree<'t, T> {
         }
     }
 
-    pub fn write_to<O: std::io::Write>(
+    pub fn write_with<F: TreeFormatter>(
         &self,
-        output: &mut O,
-        mut write_child_fn: impl FnMut(&T, &mut O) -> std::io::Result<()>,
+        formatter: &mut F,
+        mut write_child_fn: impl FnMut(&T, &mut F) -> std::io::Result<()>,
     ) -> std::io::Result<()> {
         match self {
             Tree::Node(_, children) => {
                 for ch in children {
-                    write_child_fn(ch, output)?
+                    write_child_fn(ch, formatter)?
                 }
                 Ok(())
             }
-            Tree::Leaf(tok) => output.write_all(tok.bytes),
+            Tree::Leaf(tok) => formatter.write_token(tok.bytes),
         }
     }
 }

@@ -2,6 +2,7 @@ use super::{Color, ColorSet, Colored};
 use crate::diff::{ChangeNode, SpineNode as DiffSpineNode, SpineSeqNode as DiffSpineSeqNode};
 use crate::generic_tree::{FieldId, Subtree, Tree};
 use crate::syn_tree::SynNode;
+use crate::tree_formatter::TreeFormatter;
 use crate::Metavariable;
 
 #[derive(Clone)]
@@ -63,24 +64,22 @@ impl<'t> DelNode<'t> {
         })
     }
 
-    fn write_to(&self, output: &mut impl std::io::Write) -> std::io::Result<()> {
+    fn write_with<F: TreeFormatter>(&self, fmt: &mut F) -> std::io::Result<()> {
         match self {
-            DelNode::InPlace(node) => node.data.write_to(output, |ch, out| ch.node.write_to(out)),
-            DelNode::Elided(mv) => write!(output, "${}", mv.data.0),
-            DelNode::MetavariableConflict(mv, del, repl) => {
-                write!(output, "MV_CONFLICT![${}: «", mv.0)?;
-                del.write_to(output)?;
-                write!(output, "»")?;
-                match repl {
-                    MetavarInsReplacement::InferFromDel => (),
-                    MetavarInsReplacement::Inlined(ins) => {
-                        write!(output, " <- «")?;
-                        ins.write_to(output)?;
-                        write!(output, "»")?;
-                    }
-                }
-                write!(output, "]")
+            DelNode::InPlace(node) => fmt.write_colored(node.colors, |fmt| {
+                node.data.write_with(fmt, |ch, fmt| ch.node.write_with(fmt))
+            }),
+            DelNode::Elided(mv) => {
+                fmt.write_colored(mv.colors, |fmt| fmt.write_metavariable(mv.data))
             }
+            DelNode::MetavariableConflict(mv, del, repl) => fmt.write_mv_conflict(
+                *mv,
+                |fmt| del.write_with(fmt),
+                match repl {
+                    MetavarInsReplacement::InferFromDel => None,
+                    MetavarInsReplacement::Inlined(ins) => Some(|fmt: &mut F| ins.write_with(fmt)),
+                },
+            ),
         }
     }
 }
@@ -105,50 +104,38 @@ impl<'t> InsNode<'t> {
         ))
     }
 
-    fn write_to(&self, output: &mut impl std::io::Write) -> std::io::Result<()> {
+    fn write_with<F: TreeFormatter>(&self, fmt: &mut F) -> std::io::Result<()> {
         match self {
-            InsNode::InPlace(node) => node.data.write_to(output, InsSeqNode::write_to),
-            InsNode::Elided(mv) => write!(output, "${}", mv.0),
+            InsNode::InPlace(node) => fmt.write_colored(node.colors, |fmt| {
+                node.data.write_with(fmt, InsSeqNode::write_with)
+            }),
+            InsNode::Elided(mv) => fmt.write_metavariable(*mv),
             InsNode::Conflict(confl) => {
-                write!(output, "CONFLICT![")?;
-                for (i, ins) in confl.iter().enumerate() {
-                    if i == 0 {
-                        write!(output, "«")?
-                    } else {
-                        write!(output, ", «")?
-                    }
-                    ins.write_to(output)?;
-                    write!(output, "»")?;
-                }
-                write!(output, "]")
+                fmt.write_ins_conflict(confl.iter().map(|ins| |fmt: &mut F| ins.write_with(fmt)))
             }
         }
     }
 }
 
 impl<'t> InsSeqNode<'t> {
-    fn write_to(&self, output: &mut impl std::io::Write) -> std::io::Result<()> {
+    fn write_with<F: TreeFormatter>(&self, fmt: &mut F) -> std::io::Result<()> {
         match self {
-            InsSeqNode::Node(node) => node.node.write_to(output),
-            InsSeqNode::DeleteConflict(node) => {
-                write!(output, "DELETE_CONFLICT![")?;
-                node.node.write_to(output)?;
-                write!(output, "]")
-            }
+            InsSeqNode::Node(node) => node.node.write_with(fmt),
+            InsSeqNode::DeleteConflict(node) => fmt
+                .write_del_conflict(None::<fn(&mut F) -> std::io::Result<()>>, |fmt| {
+                    node.node.write_with(fmt)
+                }),
             InsSeqNode::InsertOrderConflict(confl) => {
-                write!(output, "INSERT_ORDER_CONFLICT![")?;
-                for (i, ins_list) in confl.iter().enumerate() {
-                    if i == 0 {
-                        write!(output, "«")?
-                    } else {
-                        write!(output, ", «")?
+                fmt.write_ord_conflict(confl.iter().map(|ins_list| {
+                    |fmt: &mut F| {
+                        fmt.write_colored(ins_list.colors, |fmt| {
+                            for ins in &ins_list.data {
+                                ins.node.write_with(fmt)?;
+                            }
+                            Ok(())
+                        })
                     }
-                    for ins in &ins_list.data {
-                        ins.node.write_to(output)?;
-                    }
-                    write!(output, "»")?;
-                }
-                write!(output, "]")
+                }))
             }
         }
     }
@@ -175,16 +162,12 @@ impl<'t> SpineNode<'t> {
         )
     }
 
-    pub fn write_to(&self, output: &mut impl std::io::Write) -> std::io::Result<()> {
+    pub fn write_with(&self, fmt: &mut impl TreeFormatter) -> std::io::Result<()> {
         match self {
-            SpineNode::Spine(spine) => spine.write_to(output, SpineSeqNode::write_to),
-            SpineNode::Unchanged => write!(output, "·"),
+            SpineNode::Spine(spine) => spine.write_with(fmt, SpineSeqNode::write_with),
+            SpineNode::Unchanged => fmt.write_unchanged(),
             SpineNode::Changed(del, ins) => {
-                write!(output, "CHANGED![«")?;
-                del.write_to(output)?;
-                write!(output, "» -> «")?;
-                ins.write_to(output)?;
-                write!(output, "»]")
+                fmt.write_changed(|fmt| del.write_with(fmt), |fmt| ins.write_with(fmt))
             }
         }
     }
@@ -212,44 +195,38 @@ impl<'t> SpineSeqNode<'t> {
         }
     }
 
-    fn write_to(&self, output: &mut impl std::io::Write) -> std::io::Result<()> {
+    fn write_with<F: TreeFormatter>(&self, fmt: &mut F) -> std::io::Result<()> {
         match self {
-            SpineSeqNode::Zipped(spine) => spine.node.write_to(output),
-            SpineSeqNode::Deleted(del_list) => {
-                write!(output, "DELETED![")?;
+            SpineSeqNode::Zipped(spine) => spine.node.write_with(fmt),
+            SpineSeqNode::Deleted(del_list) => fmt.write_deleted(|fmt| {
                 for del in del_list {
-                    del.node.write_to(output)?;
+                    del.node.write_with(fmt)?;
                 }
-                write!(output, "]")
-            }
-            SpineSeqNode::DeleteConflict(_, del, ins) => {
-                write!(output, "DELETE_CONFLICT![«")?;
-                del.write_to(output)?;
-                write!(output, "» -/> «")?;
-                ins.write_to(output)?;
-                write!(output, "»]")
-            }
-            SpineSeqNode::Inserted(ins_list) => {
-                write!(output, "INSERTED![")?;
-                for ins in &ins_list.data {
-                    ins.node.write_to(output)?;
-                }
-                write!(output, "]")
-            }
-            SpineSeqNode::InsertOrderConflict(confl) => {
-                write!(output, "INSERT_ORDER_CONFLICT![")?;
-                for (i, ins_list) in confl.iter().enumerate() {
-                    if i == 0 {
-                        write!(output, "«")?
-                    } else {
-                        write!(output, ", «")?
-                    }
+                Ok(())
+            }),
+            SpineSeqNode::DeleteConflict(_, del, ins) => fmt
+                .write_del_conflict(Some(|fmt: &mut F| del.write_with(fmt)), |fmt| {
+                    ins.write_with(fmt)
+                }),
+            SpineSeqNode::Inserted(ins_list) => fmt.write_inserted(|fmt| {
+                fmt.write_colored(ins_list.colors, |fmt| {
                     for ins in &ins_list.data {
-                        ins.node.write_to(output)?;
+                        ins.node.write_with(fmt)?;
                     }
-                    write!(output, "»")?;
-                }
-                write!(output, "]")
+                    Ok(())
+                })
+            }),
+            SpineSeqNode::InsertOrderConflict(confl) => {
+                fmt.write_ord_conflict(confl.iter().map(|ins_list| {
+                    |fmt: &mut F| {
+                        fmt.write_colored(ins_list.colors, |fmt| {
+                            for ins in &ins_list.data {
+                                ins.node.write_with(fmt)?;
+                            }
+                            Ok(())
+                        })
+                    }
+                }))
             }
         }
     }
