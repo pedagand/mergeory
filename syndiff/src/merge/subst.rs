@@ -115,10 +115,10 @@ impl<'t> Substituter<'t> {
     fn substitute_in_del_node(&mut self, node: &mut DelNode<'t>) {
         match node {
             DelNode::InPlace(del) => del
-                .node
+                .data
                 .visit_mut(|sub| self.substitute_in_del_node(&mut sub.node)),
             DelNode::Elided(mv) => {
-                let mut subst = self.find_del_subst(mv.node);
+                let mut subst = self.find_del_subst(mv.data);
                 replace_colors(&mut subst, mv.colors);
                 *node = subst;
             }
@@ -132,7 +132,7 @@ impl<'t> Substituter<'t> {
     fn substitute_in_ins_node(&mut self, node: &mut InsNode<'t>) {
         match node {
             InsNode::InPlace(ins) => ins
-                .node
+                .data
                 .visit_mut(|sub| self.substitute_in_ins_seq_node(sub)),
             InsNode::Elided(mv) => *node = self.find_ins_subst(*mv),
             InsNode::Conflict(conflict_list) => {
@@ -167,7 +167,7 @@ impl<'t> Substituter<'t> {
             InsSeqNode::DeleteConflict(node) => self.substitute_in_ins_node(&mut node.node),
             InsSeqNode::InsertOrderConflict(conflict_list) => {
                 for ins_seq in conflict_list {
-                    for ins in &mut ins_seq.node {
+                    for ins in &mut ins_seq.data {
                         self.substitute_in_ins_node(&mut ins.node)
                     }
                 }
@@ -223,14 +223,14 @@ impl<'t> Substituter<'t> {
                     }
                 }
                 SpineSeqNode::Inserted(mut ins_seq) => {
-                    for ins in &mut ins_seq.node {
+                    for ins in &mut ins_seq.data {
                         self.substitute_in_ins_node(&mut ins.node)
                     }
                     seq.push(SpineSeqNode::Inserted(ins_seq))
                 }
                 SpineSeqNode::InsertOrderConflict(mut conflict_list) => {
                     for ins_seq in &mut conflict_list {
-                        for ins in &mut ins_seq.node {
+                        for ins in &mut ins_seq.data {
                             self.substitute_in_ins_node(&mut ins.node)
                         }
                     }
@@ -277,7 +277,7 @@ impl<'t> Substituter<'t> {
     fn remove_solved_conflicts_in_del(&mut self, node: &mut DelNode<'t>) {
         match node {
             DelNode::InPlace(del) => del
-                .node
+                .data
                 .visit_mut(|sub| self.remove_solved_conflicts_in_del(&mut sub.node)),
             DelNode::Elided(_) => (),
             DelNode::MetavariableConflict(mv, del, repl) => {
@@ -345,7 +345,7 @@ impl<'t> Substituter<'t> {
 fn replace_colors(node: &mut DelNode, colors: ColorSet) {
     match node {
         DelNode::InPlace(del) => {
-            del.node
+            del.data
                 .visit_mut(|sub| replace_colors(&mut sub.node, colors));
             del.colors = colors;
         }
@@ -357,11 +357,11 @@ fn replace_colors(node: &mut DelNode, colors: ColorSet) {
 fn infer_ins_from_del<'t>(del: &DelNode<'t>) -> InsNode<'t> {
     match del {
         DelNode::InPlace(del) => {
-            InsNode::InPlace(Colored::new_white(del.node.map_children(|child| {
+            InsNode::InPlace(Colored::new_white(del.data.map_children(|child| {
                 InsSeqNode::Node(child.as_ref().map(infer_ins_from_del))
             })))
         }
-        DelNode::Elided(mv) => InsNode::Elided(mv.node),
+        DelNode::Elided(mv) => InsNode::Elided(mv.data),
         DelNode::MetavariableConflict(_, del, _) => infer_ins_from_del(del),
     }
 }

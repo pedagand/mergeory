@@ -22,9 +22,9 @@ impl MetavarRenamer {
 fn rename_metavars_in_del(del: &mut DelNode, renamer: &mut MetavarRenamer) {
     match del {
         DelNode::InPlace(del) => del
-            .node
+            .data
             .visit_mut(|sub| rename_metavars_in_del(&mut sub.node, renamer)),
-        DelNode::Elided(mv) => mv.node = renamer.rename(mv.node),
+        DelNode::Elided(mv) => mv.data = renamer.rename(mv.data),
         DelNode::MetavariableConflict(mv, del, ins) => {
             *mv = renamer.rename(*mv);
             rename_metavars_in_del(del, renamer);
@@ -38,7 +38,7 @@ fn rename_metavars_in_del(del: &mut DelNode, renamer: &mut MetavarRenamer) {
 fn rename_metavars_in_ins(ins: &mut InsNode, renamer: &mut MetavarRenamer) {
     match ins {
         InsNode::InPlace(ins) => ins
-            .node
+            .data
             .visit_mut(|sub| rename_metavars_in_ins_subtree(sub, renamer)),
         InsNode::Elided(mv) => *mv = renamer.rename(*mv),
         InsNode::Conflict(ins_list) => {
@@ -55,7 +55,7 @@ fn rename_metavars_in_ins_subtree(ins: &mut InsSeqNode, renamer: &mut MetavarRen
         InsSeqNode::DeleteConflict(ins) => rename_metavars_in_ins(&mut ins.node, renamer),
         InsSeqNode::InsertOrderConflict(conflicts) => {
             for ins_list in conflicts {
-                for ins in &mut ins_list.node {
+                for ins in &mut ins_list.data {
                     rename_metavars_in_ins(&mut ins.node, renamer);
                 }
             }
@@ -89,13 +89,13 @@ fn rename_metavars_in_spine_subtree(subtree: &mut SpineSeqNode, renamer: &mut Me
             rename_metavars_in_ins(ins, renamer);
         }
         SpineSeqNode::Inserted(ins_list) => {
-            for ins in &mut ins_list.node {
+            for ins in &mut ins_list.data {
                 rename_metavars_in_ins(&mut ins.node, renamer);
             }
         }
         SpineSeqNode::InsertOrderConflict(conflicts) => {
             for ins_list in conflicts {
-                for ins in &mut ins_list.node {
+                for ins in &mut ins_list.data {
                     rename_metavars_in_ins(&mut ins.node, renamer);
                 }
             }

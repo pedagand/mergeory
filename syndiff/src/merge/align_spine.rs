@@ -74,7 +74,7 @@ fn split_spine_subtrees<'t>(
                 ins_seq.push(InsSeqNode::DeleteConflict(Subtree { field, node: ins }));
             }
             SpineSeqNode::Inserted(ins_list) => {
-                for ins in ins_list.node {
+                for ins in ins_list.data {
                     ins_seq.push(InsSeqNode::Node(ins));
                 }
             }

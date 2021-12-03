@@ -54,28 +54,28 @@ impl std::ops::BitOrAssign for ColorSet {
 
 #[derive(Clone, Copy)]
 pub struct Colored<T> {
-    pub node: T,
+    pub data: T,
     pub colors: ColorSet,
 }
 
 impl<T> Colored<T> {
-    pub fn new_white(node: T) -> Colored<T> {
+    pub fn new_white(data: T) -> Colored<T> {
         Colored {
-            node,
+            data,
             colors: ColorSet::white(),
         }
     }
 
-    pub fn with_color(color: Color, node: T) -> Colored<T> {
+    pub fn with_color(color: Color, data: T) -> Colored<T> {
         Colored {
-            node,
+            data,
             colors: ColorSet::single_color(color),
         }
     }
 
     pub fn as_ref(&self) -> Colored<&T> {
         Colored {
-            node: &self.node,
+            data: &self.data,
             colors: self.colors,
         }
     }
@@ -86,7 +86,7 @@ impl<T> Colored<T> {
         merge_fn: impl FnOnce(L, R) -> Option<T>,
     ) -> Option<Colored<T>> {
         Some(Colored {
-            node: merge_fn(left.node, right.node)?,
+            data: merge_fn(left.data, right.data)?,
             colors: left.colors | right.colors,
         })
     }

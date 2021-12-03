@@ -6,7 +6,7 @@ use crate::SynNode;
 fn standalone_ins_to_syn(node: InsNode) -> Option<SynNode> {
     match node {
         InsNode::InPlace(ins) => Some(SynNode(
-            ins.node.try_convert_into(standalone_ins_seq_to_syn)?,
+            ins.data.try_convert_into(standalone_ins_seq_to_syn)?,
         )),
         _ => None,
     }
@@ -42,7 +42,7 @@ fn keep_only_ins_from_standalone_spine_seq<'t>(
             SpineSeqNode::Deleted(_) => Box::new(std::iter::empty()),
             SpineSeqNode::Inserted(ins_list) => Box::new(
                 ins_list
-                    .node
+                    .data
                     .into_iter()
                     .map(|sub| sub.try_map(standalone_ins_to_syn)),
             ),

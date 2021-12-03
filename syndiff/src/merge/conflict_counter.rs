@@ -3,7 +3,7 @@ use super::{DelNode, InsNode, InsSeqNode, MetavarInsReplacement, SpineNode, Spin
 fn count_conflicts_in_del_node(node: &DelNode, counter: &mut usize) {
     match node {
         DelNode::InPlace(del) => del
-            .node
+            .data
             .visit(|ch| count_conflicts_in_del_node(&ch.node, counter)),
         DelNode::Elided(_) => (),
         DelNode::MetavariableConflict(_, del, repl) => {
@@ -20,7 +20,7 @@ fn count_conflicts_in_del_node(node: &DelNode, counter: &mut usize) {
 fn count_conflicts_in_ins_node(node: &InsNode, counter: &mut usize) {
     match node {
         InsNode::InPlace(ins) => ins
-            .node
+            .data
             .visit(|ch| count_conflicts_in_ins_seq_node(ch, counter)),
         InsNode::Elided(_) => (),
         InsNode::Conflict(ins_list) => {
@@ -42,7 +42,7 @@ fn count_conflicts_in_ins_seq_node(node: &InsSeqNode, counter: &mut usize) {
         InsSeqNode::InsertOrderConflict(ins_list) => {
             *counter += 1;
             for ins_set in ins_list {
-                for ins in &ins_set.node {
+                for ins in &ins_set.data {
                     count_conflicts_in_ins_node(&ins.node, counter)
                 }
             }
@@ -75,14 +75,14 @@ fn count_conflicts_in_spine_seq_node(node: &SpineSeqNode, counter: &mut usize) {
             count_conflicts_in_ins_node(ins, counter);
         }
         SpineSeqNode::Inserted(ins_list) => {
-            for ins in &ins_list.node {
+            for ins in &ins_list.data {
                 count_conflicts_in_ins_node(&ins.node, counter);
             }
         }
         SpineSeqNode::InsertOrderConflict(ins_list) => {
             *counter += 1;
             for ins_set in ins_list {
-                for ins in &ins_set.node {
+                for ins in &ins_set.data {
                     count_conflicts_in_ins_node(&ins.node, counter)
                 }
             }

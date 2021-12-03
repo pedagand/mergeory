@@ -20,7 +20,7 @@ pub type MetavarInsReplacementList<'t> = Vec<MetavarInsReplacement<'t>>;
 fn merge_ins_nodes<'t>(left: InsNode<'t>, right: InsNode<'t>) -> InsNode<'t> {
     match (left, right) {
         (InsNode::InPlace(left_node), InsNode::InPlace(right_node))
-            if Tree::compare(&left_node.node, &right_node.node, can_merge_ins_seq) =>
+            if Tree::compare(&left_node.data, &right_node.data, can_merge_ins_seq) =>
         {
             InsNode::InPlace(
                 Colored::merge(left_node, right_node, |l, r| {
@@ -92,8 +92,8 @@ fn can_inline_ins_in_del(ins: &InsNode, del: &DelNode) -> bool {
         (DelNode::InPlace(del_subtree), InsNode::InPlace(ins_subtree)) => {
             if ins_subtree.colors == ColorSet::white() {
                 Tree::compare(
-                    &ins_subtree.node,
-                    &del_subtree.node,
+                    &ins_subtree.data,
+                    &del_subtree.data,
                     can_inline_ins_seq_in_del,
                 )
             } else {
@@ -130,9 +130,9 @@ fn inline_ins_in_del<'t>(
     match del {
         DelNode::Elided(mv) => {
             // Here we may have to clone the insert tree once to check for potential conflicts
-            metavars_status[mv.node.0].push(MetavarInsReplacement::Inlined(ins.clone()));
+            metavars_status[mv.data.0].push(MetavarInsReplacement::Inlined(ins.clone()));
             DelNode::MetavariableConflict(
-                mv.node,
+                mv.data,
                 Box::new(DelNode::Elided(mv)),
                 MetavarInsReplacement::Inlined(ins),
             )
@@ -148,7 +148,7 @@ fn inline_ins_in_del<'t>(
         }
         DelNode::InPlace(del_subtree) => match ins {
             InsNode::InPlace(ins_subtree) => DelNode::InPlace(Colored {
-                node: Tree::merge_into(ins_subtree.node, del_subtree.node, |ins, del| {
+                data: Tree::merge_into(ins_subtree.data, del_subtree.data, |ins, del| {
                     inline_ins_seq_in_del(ins, del, metavars_status)
                 })
                 .unwrap(),
@@ -184,12 +184,12 @@ fn register_kept_metavars<'t>(
 ) {
     match del {
         DelNode::InPlace(del_subtree) => del_subtree
-            .node
+            .data
             .visit_mut(|node| register_kept_metavars(&mut node.node, metavars_status)),
         DelNode::Elided(mv) => {
-            metavars_status[mv.node.0].push(MetavarInsReplacement::InferFromDel);
+            metavars_status[mv.data.0].push(MetavarInsReplacement::InferFromDel);
             *del = DelNode::MetavariableConflict(
-                mv.node,
+                mv.data,
                 Box::new(DelNode::Elided(*mv)),
                 MetavarInsReplacement::InferFromDel,
             )

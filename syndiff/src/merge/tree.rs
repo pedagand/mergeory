@@ -58,15 +58,15 @@ impl<'t> DelNode<'t> {
 
     pub fn from_syn(tree: &SynNode<'t>, colors: ColorSet) -> Self {
         DelNode::InPlace(Colored {
-            node: tree.0.map_subtrees(|sub| DelNode::from_syn(sub, colors)),
+            data: tree.0.map_subtrees(|sub| DelNode::from_syn(sub, colors)),
             colors,
         })
     }
 
     fn write_to(&self, output: &mut impl std::io::Write) -> std::io::Result<()> {
         match self {
-            DelNode::InPlace(node) => node.node.write_to(output, |ch, out| ch.node.write_to(out)),
-            DelNode::Elided(mv) => write!(output, "${}", mv.node.0),
+            DelNode::InPlace(node) => node.data.write_to(output, |ch, out| ch.node.write_to(out)),
+            DelNode::Elided(mv) => write!(output, "${}", mv.data.0),
             DelNode::MetavariableConflict(mv, del, repl) => {
                 write!(output, "MV_CONFLICT![${}: «", mv.0)?;
                 del.write_to(output)?;
@@ -107,7 +107,7 @@ impl<'t> InsNode<'t> {
 
     fn write_to(&self, output: &mut impl std::io::Write) -> std::io::Result<()> {
         match self {
-            InsNode::InPlace(node) => node.node.write_to(output, InsSeqNode::write_to),
+            InsNode::InPlace(node) => node.data.write_to(output, InsSeqNode::write_to),
             InsNode::Elided(mv) => write!(output, "${}", mv.0),
             InsNode::Conflict(confl) => {
                 write!(output, "CONFLICT![")?;
@@ -143,7 +143,7 @@ impl<'t> InsSeqNode<'t> {
                     } else {
                         write!(output, ", «")?
                     }
-                    for ins in &ins_list.node {
+                    for ins in &ins_list.data {
                         ins.node.write_to(output)?;
                     }
                     write!(output, "»")?;
@@ -231,7 +231,7 @@ impl<'t> SpineSeqNode<'t> {
             }
             SpineSeqNode::Inserted(ins_list) => {
                 write!(output, "INSERTED![")?;
-                for ins in &ins_list.node {
+                for ins in &ins_list.data {
                     ins.node.write_to(output)?;
                 }
                 write!(output, "]")
@@ -244,7 +244,7 @@ impl<'t> SpineSeqNode<'t> {
                     } else {
                         write!(output, ", «")?
                     }
-                    for ins in &ins_list.node {
+                    for ins in &ins_list.data {
                         ins.node.write_to(output)?;
                     }
                     write!(output, "»")?;

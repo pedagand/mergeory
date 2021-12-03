@@ -36,7 +36,7 @@ impl<'t> MetavarRemover<'t> {
     ) -> Option<DelNode<'t>> {
         Some(match del {
             DelNode::InPlace(d) => DelNode::InPlace(Colored {
-                node: merge_with_syn(d.node, source, |del_ch, src_ch| {
+                data: merge_with_syn(d.data, source, |del_ch, src_ch| {
                     if del_ch.len() != src_ch.len() {
                         return None;
                     }
@@ -53,7 +53,7 @@ impl<'t> MetavarRemover<'t> {
                 colors: d.colors,
             }),
             DelNode::Elided(mv) => {
-                let mv_id = mv.node.0;
+                let mv_id = mv.data.0;
                 if self.metavar_replacements.len() <= mv_id {
                     self.metavar_replacements
                         .resize_with(mv_id + 1, Default::default);
@@ -159,7 +159,7 @@ impl<'t> MetavarRemover<'t> {
     fn replace_metavars_in_ins_node(&self, node: &mut InsNode<'t>) {
         match node {
             InsNode::InPlace(ins) => ins
-                .node
+                .data
                 .visit_mut(|ch| self.replace_metavars_in_ins_seq_node(ch)),
             InsNode::Elided(mv) => {
                 if self.metavar_replacements.len() <= mv.0 {
@@ -187,7 +187,7 @@ impl<'t> MetavarRemover<'t> {
             }
             InsSeqNode::InsertOrderConflict(conflict) => {
                 for ins_list in conflict {
-                    for ins in &mut ins_list.node {
+                    for ins in &mut ins_list.data {
                         self.replace_metavars_in_ins_node(&mut ins.node)
                     }
                 }
@@ -198,7 +198,7 @@ impl<'t> MetavarRemover<'t> {
     fn replace_metavars_in_del_node(&self, node: &mut DelNode<'t>) {
         match node {
             DelNode::InPlace(del) => del
-                .node
+                .data
                 .visit_mut(|ch| self.replace_metavars_in_del_node(&mut ch.node)),
             DelNode::Elided(_) => panic!("A metavariable was not removed in deletion tree"),
             DelNode::MetavariableConflict(_, del, repl) => {
@@ -237,13 +237,13 @@ impl<'t> MetavarRemover<'t> {
                 self.replace_metavars_in_ins_node(ins);
             }
             SpineSeqNode::Inserted(ins_list) => {
-                for ins in &mut ins_list.node {
+                for ins in &mut ins_list.data {
                     self.replace_metavars_in_ins_node(&mut ins.node)
                 }
             }
             SpineSeqNode::InsertOrderConflict(ins_conflict) => {
                 for ins_list in ins_conflict {
-                    for ins in &mut ins_list.node {
+                    for ins in &mut ins_list.data {
                         self.replace_metavars_in_ins_node(&mut ins.node)
                     }
                 }

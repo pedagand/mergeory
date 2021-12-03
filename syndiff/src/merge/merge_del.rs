@@ -18,15 +18,15 @@ fn merge_del_nodes<'t>(
             let new_del = merge_del_nodes(*del, other, metavars_del)?;
             DelNode::MetavariableConflict(mv, Box::new(new_del), ins)
         }
-        (DelNode::Elided(mv), DelNode::Elided(other_mv)) if mv.node == other_mv.node => {
+        (DelNode::Elided(mv), DelNode::Elided(other_mv)) if mv.data == other_mv.data => {
             // This case can occur because of unification inside metavars_del
             DelNode::Elided(Colored {
-                node: mv.node,
+                data: mv.data,
                 colors: mv.colors | other_mv.colors,
             })
         }
         (DelNode::Elided(mv), mut other) | (mut other, DelNode::Elided(mv)) => {
-            let mv_id = mv.node.0;
+            let mv_id = mv.data.0;
             match metavars_del[mv_id].take() {
                 Some(repl_tree) => {
                     // Perform unification on the metavariable del replacement
@@ -101,7 +101,7 @@ fn merge_del_in_spine_seq<'t>(
 fn add_colors(colors: ColorSet, node: &mut DelNode) {
     match node {
         DelNode::InPlace(del) => {
-            del.node.visit_mut(|ch| add_colors(colors, &mut ch.node));
+            del.data.visit_mut(|ch| add_colors(colors, &mut ch.node));
             del.colors |= colors
         }
         DelNode::Elided(mv) => mv.colors |= colors,

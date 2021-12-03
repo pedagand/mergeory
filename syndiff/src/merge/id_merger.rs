@@ -79,9 +79,9 @@ fn merge_id_ins_seq<'t>(
 pub fn is_del_equivalent_to_ins(del: &DelNode, ins: &InsNode) -> bool {
     match (del, ins) {
         (DelNode::InPlace(del), InsNode::InPlace(ins)) => {
-            Tree::compare(&del.node, &ins.node, is_del_equivalent_to_ins_seq)
+            Tree::compare(&del.data, &ins.data, is_del_equivalent_to_ins_seq)
         }
-        (DelNode::Elided(del_mv), InsNode::Elided(ins_mv)) => del_mv.node == *ins_mv,
+        (DelNode::Elided(del_mv), InsNode::Elided(ins_mv)) => del_mv.data == *ins_mv,
         (DelNode::MetavariableConflict(_, del, _), ins) => is_del_equivalent_to_ins(del, ins),
         _ => false,
     }
