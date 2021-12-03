@@ -8,4 +8,4 @@ pub use crate::merge::{
     apply_patch, canonicalize_metavars, count_conflicts, merge_diffs, merge_multi_diffs,
     remove_metavars, SpineNode as MergedSpineNode,
 };
-pub use crate::syn_tree::{parse_source, SynNode};
+pub use crate::syn_tree::{add_extra_blocks, parse_source, SynNode};

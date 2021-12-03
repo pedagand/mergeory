@@ -19,6 +19,10 @@ impl<'t> Token<'t> {
             bytes,
         }
     }
+
+    pub fn is_extra_block_separator(&self) -> bool {
+        self.bytes.iter().filter(|c| **c == b'\n').count() >= 2
+    }
 }
 
 impl<'t> Hash for Token<'t> {

@@ -4,7 +4,8 @@ use std::fs::read;
 use std::path::Path;
 use std::process::exit;
 use syndiff::{
-    apply_patch, compute_diff, count_conflicts, merge_diffs, parse_source, remove_metavars,
+    add_extra_blocks, apply_patch, compute_diff, count_conflicts, merge_diffs, parse_source,
+    remove_metavars,
 };
 use tree_sitter::Parser;
 use tree_sitter_config::Config;
@@ -39,6 +40,7 @@ fn main() {
         .arg(Arg::with_name("merge-files").short("m").long("merge-files").help("If there are no conflicts, print the resulting merged file instead of the merged difference"))
         .arg(Arg::with_name("quiet").short("q").long("quiet").help("Do not print anything, just compute the number of conflicts"))
         .arg(Arg::with_name("scope").long("scope").takes_value(true).help("Select the tree-sitter language by scope instead of file extension"))
+        .arg(Arg::with_name("extra-blocks").short("b").long("extra-blocks").help("Add extra structure with additional blocks separated by empty lines"))
         .get_matches_safe()
         .unwrap_or_else(|err| {
             eprintln!("{}", err);
@@ -85,6 +87,11 @@ fn main() {
         eprintln!("Unable to parse {}", origin_filename.to_string_lossy());
         exit(-2)
     });
+    let origin_tree = if cmd_args.is_present("extra-blocks") {
+        add_extra_blocks(&origin_tree)
+    } else {
+        origin_tree
+    };
 
     let modified_src: Vec<_> = cmd_args
         .values_of_os("modified-file")
@@ -105,6 +112,11 @@ fn main() {
                 eprintln!("Unable to parse {}", filename);
                 exit(-2)
             });
+            let tree = if cmd_args.is_present("extra-blocks") {
+                add_extra_blocks(&tree)
+            } else {
+                tree
+            };
             compute_diff(&origin_tree, &tree, cmd_args.is_present("no-elisions"))
         })
         .collect();
