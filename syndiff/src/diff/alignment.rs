@@ -1,5 +1,7 @@
 use super::weight::{HashSum, Weight, WeightedNode, SPINE_LEAF_WEIGHT};
 use crate::generic_tree::{Subtree, Tree};
+use std::cmp::{max, Ordering};
+use std::collections::BinaryHeap;
 
 pub enum AlignedNode<'t> {
     Spine(Tree<'t, AlignedSeqNode<'t>>, HashSum, HashSum),
@@ -42,69 +44,126 @@ fn compute_node_alignment(del: &WeightedNode, ins: &WeightedNode) -> (Weight, No
     }
 }
 
+struct AlignmentAStarNode {
+    estimated_cost: Weight,
+    cost: Weight,
+    del_pos: usize,
+    ins_pos: usize,
+    source_edge: Option<SeqNodeAlignment>,
+}
+
+impl AlignmentAStarNode {
+    fn new(
+        cost: Weight,
+        del_pos: usize,
+        ins_pos: usize,
+        source_edge: Option<SeqNodeAlignment>,
+    ) -> Self {
+        AlignmentAStarNode {
+            estimated_cost: cost + SPINE_LEAF_WEIGHT * max(del_pos, ins_pos),
+            cost,
+            del_pos,
+            ins_pos,
+            source_edge,
+        }
+    }
+}
+
+impl PartialEq for AlignmentAStarNode {
+    fn eq(&self, other: &Self) -> bool {
+        self.estimated_cost == other.estimated_cost
+    }
+}
+impl Eq for AlignmentAStarNode {}
+
+impl PartialOrd for AlignmentAStarNode {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Ord for AlignmentAStarNode {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.estimated_cost.cmp(&other.estimated_cost).reverse()
+    }
+}
+
 fn compute_subtrees_alignment(
     del_seq: &[Subtree<WeightedNode>],
     ins_seq: &[Subtree<WeightedNode>],
 ) -> (Weight, Vec<SeqNodeAlignment>) {
-    // Using a dynamic programming approach:
-    // dyn_array[id][ii] = "Best cost for subproblem del_seq[0..id], ins_seq[0..ii]"
-    let mut dyn_array = Vec::with_capacity(del_seq.len() + 1);
+    // Using an A* pathfinding approach:
+    // Nodes are pair of position in both sequences, edges are edit operations, distance is cost.
+    // Goal: arrive at position (0, 0) from (n, m).
+    let mut visited_nodes = Vec::new();
+    visited_nodes.resize_with((del_seq.len() + 1) * (ins_seq.len() + 1), Default::default);
+    let node_index = |del_pos, ins_pos| del_pos + ins_pos * (del_seq.len() + 1);
 
-    // Fill first line with only insertions
-    let mut first_row = Vec::with_capacity(ins_seq.len() + 1);
-    first_row.push((0, None));
-    for (ii, ins) in ins_seq.iter().enumerate() {
-        let (prev_cost, _) = first_row[ii];
-        first_row.push((prev_cost + ins.node.weight, Some(SeqNodeAlignment::Insert)));
-    }
-    dyn_array.push(first_row);
+    let mut to_visit_heap = BinaryHeap::new();
+    to_visit_heap.push(AlignmentAStarNode::new(
+        0,
+        del_seq.len(),
+        ins_seq.len(),
+        None,
+    ));
 
-    for (id, del) in del_seq.iter().enumerate() {
-        dyn_array.push(Vec::with_capacity(ins_seq.len() + 1));
+    let cost;
+    loop {
+        let node = to_visit_heap.pop().unwrap();
+        match &mut visited_nodes[node_index(node.del_pos, node.ins_pos)] {
+            Some(_) => continue,
+            visit_node => *visit_node = Some(node.source_edge),
+        };
+        if node.del_pos == 0 && node.ins_pos == 0 {
+            cost = node.cost;
+            break;
+        }
 
-        // First column has only deletions
-        let (prev_cost, _) = dyn_array[id][0];
-        dyn_array[id + 1].push((prev_cost + del.node.weight, Some(SeqNodeAlignment::Delete)));
-
-        // All the rest must consider zipping, deletion and insertion
-        for (ii, ins) in ins_seq.iter().enumerate() {
-            // Compute the cost of insertion and deletion and remember
-            // the best of the two
-            let cost_after_insert = dyn_array[id + 1][ii].0 + ins.node.weight;
-            let cost_after_delete = dyn_array[id][ii + 1].0 + del.node.weight;
-
-            dyn_array[id + 1].push(if cost_after_delete <= cost_after_insert {
-                (cost_after_delete, Some(SeqNodeAlignment::Delete))
-            } else {
-                (cost_after_insert, Some(SeqNodeAlignment::Insert))
-            });
-
-            // Try to zip if fields are the same
+        if node.del_pos > 0 {
+            to_visit_heap.push(AlignmentAStarNode::new(
+                node.cost + del_seq[node.del_pos - 1].node.weight,
+                node.del_pos - 1,
+                node.ins_pos,
+                Some(SeqNodeAlignment::Delete),
+            ));
+        }
+        if node.ins_pos > 0 {
+            to_visit_heap.push(AlignmentAStarNode::new(
+                node.cost + ins_seq[node.ins_pos - 1].node.weight,
+                node.del_pos,
+                node.ins_pos - 1,
+                Some(SeqNodeAlignment::Insert),
+            ));
+        }
+        if node.del_pos > 0 && node.ins_pos > 0 {
+            let del = &del_seq[node.del_pos - 1];
+            let ins = &ins_seq[node.ins_pos - 1];
             if del.field == ins.field {
                 let (cost, align) = compute_node_alignment(&del.node, &ins.node);
-                let cost_after_zip = dyn_array[id][ii].0 + cost;
-
-                // Keep zipping if it improves or maintain score
-                if cost_after_zip <= dyn_array[id + 1][ii + 1].0 {
-                    dyn_array[id + 1][ii + 1] = (cost_after_zip, Some(SeqNodeAlignment::Zip(align)))
-                }
+                to_visit_heap.push(AlignmentAStarNode::new(
+                    node.cost + cost,
+                    node.del_pos - 1,
+                    node.ins_pos - 1,
+                    Some(SeqNodeAlignment::Zip(align)),
+                ));
             }
         }
     }
 
-    let cost = dyn_array[del_seq.len()][ins_seq.len()].0;
-
-    let mut cur_coord = (del_seq.len(), ins_seq.len());
-    let mut rev_alignment = Vec::new();
-    while let Some(align_op) = dyn_array[cur_coord.0][cur_coord.1].1.take() {
+    // Reconstruct the edit sequence from visited nodes
+    let mut cur_coord = (0, 0);
+    let mut alignment = Vec::new();
+    while let Some(align_op) = visited_nodes[node_index(cur_coord.0, cur_coord.1)]
+        .take()
+        .unwrap()
+    {
         cur_coord = match &align_op {
-            SeqNodeAlignment::Zip(_) => (cur_coord.0 - 1, cur_coord.1 - 1),
-            SeqNodeAlignment::Delete => (cur_coord.0 - 1, cur_coord.1),
-            SeqNodeAlignment::Insert => (cur_coord.0, cur_coord.1 - 1),
+            SeqNodeAlignment::Zip(_) => (cur_coord.0 + 1, cur_coord.1 + 1),
+            SeqNodeAlignment::Delete => (cur_coord.0 + 1, cur_coord.1),
+            SeqNodeAlignment::Insert => (cur_coord.0, cur_coord.1 + 1),
         };
-        rev_alignment.push(align_op)
+        alignment.push(align_op)
     }
-    (cost, rev_alignment.into_iter().rev().collect())
+    (cost, alignment)
 }
 
 fn align_nodes<'t>(
