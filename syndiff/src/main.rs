@@ -5,7 +5,7 @@ use std::path::Path;
 use std::process::exit;
 use syndiff::{
     add_extra_blocks, apply_patch, compute_diff, count_conflicts, merge_diffs, parse_source,
-    remove_metavars, ColoredTreeFormatter, PlainTreeFormatter,
+    remove_metavars, AnsiColoredTreeFormatter, PlainTreeFormatter, TextColoredTreeFormatter,
 };
 use tree_sitter::Parser;
 use tree_sitter_config::Config;
@@ -37,6 +37,7 @@ fn main() {
         .arg(Arg::with_name("standalone").short("s").long("standalone").help("Remove all elisions and unchanged nodes in the final output"))
         .arg(Arg::with_name("no-elisions").long("no-elisions").help("Do not try to elide moved code when computing diff"))
         .arg(Arg::with_name("colored").short("c").long("colored").help("Display difference node colors"))
+        .arg(Arg::with_name("text-colored").short("C").long("text-colored").help("Display difference node colors as plain text without ANSI color codes"))
         .arg(Arg::with_name("merge-files").short("m").long("merge-files").help("If there are no conflicts, print the resulting merged file instead of the merged difference"))
         .arg(Arg::with_name("quiet").short("q").long("quiet").help("Do not print anything, just compute the number of conflicts"))
         .arg(Arg::with_name("scope").long("scope").takes_value(true).help("Select the tree-sitter language by scope instead of file extension"))
@@ -153,8 +154,16 @@ fn main() {
                 } else {
                     merged_diffs
                 };
-                if cmd_args.is_present("colored") {
-                    out_tree.write_with(&mut ColoredTreeFormatter::new(std::io::stdout().lock()))
+                if cmd_args.is_present("colored") || cmd_args.is_present("text-colored") {
+                    if cmd_args.is_present("text-colored") || diff_trees.len() > 6 {
+                        out_tree.write_with(&mut TextColoredTreeFormatter::new(
+                            std::io::stdout().lock(),
+                        ))
+                    } else {
+                        out_tree.write_with(&mut AnsiColoredTreeFormatter::new(
+                            std::io::stdout().lock(),
+                        ))
+                    }
                 } else {
                     out_tree.write_with(&mut PlainTreeFormatter::new(std::io::stdout().lock()))
                 }

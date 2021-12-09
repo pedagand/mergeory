@@ -10,4 +10,6 @@ pub use crate::merge::{
     remove_metavars, SpineNode as MergedSpineNode,
 };
 pub use crate::syn_tree::{add_extra_blocks, parse_source, SynNode};
-pub use crate::tree_formatter::{ColoredTreeFormatter, PlainTreeFormatter, TreeFormatter};
+pub use crate::tree_formatter::{
+    AnsiColoredTreeFormatter, PlainTreeFormatter, TextColoredTreeFormatter, TreeFormatter,
+};

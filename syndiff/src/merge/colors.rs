@@ -12,6 +12,12 @@ impl TryFrom<usize> for Color {
     }
 }
 
+impl From<Color> for usize {
+    fn from(color: Color) -> usize {
+        color.0 as usize
+    }
+}
+
 impl std::fmt::Display for Color {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{}", self.0)
