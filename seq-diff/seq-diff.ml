@@ -78,20 +78,21 @@ let prepend_tokens (dest: patched_token) (ins_tokens: ins_tokens) =
   | Deleted -> invalid_arg "inserting on a deleted node"
 
 let rec insert_tokens (patched_seq: patched_seq) (ins_tokens: token array) ?(force_link = false) {ins_pos; ins_anchor} =
-  match ins_anchor with
-  | Before ->
-    if ins_pos > 0 then
-      patched_seq.tokens.(ins_pos - 1) <- append_tokens patched_seq.tokens.(ins_pos - 1) {ins_tokens; linked = force_link}
-    else
-      patched_seq.ins_head <- try_push_ins patched_seq.ins_head {ins_tokens; linked = force_link}
-  | After ->
-    if ins_pos < Array.length patched_seq.tokens then
-      patched_seq.tokens.(ins_pos) <- prepend_tokens patched_seq.tokens.(ins_pos) {ins_tokens; linked = force_link}
-    else
-      patched_seq.ins_tail <- try_push_ins patched_seq.ins_tail {ins_tokens; linked = force_link}
-  | Both ->
-    insert_tokens patched_seq ins_tokens ~force_link:true {ins_pos; ins_anchor = Before};
-    insert_tokens patched_seq ins_tokens ~force_link:true {ins_pos; ins_anchor = After}
+  if Array.length ins_tokens = 0 then () else
+    match ins_anchor with
+    | Before ->
+      if ins_pos > 0 then
+        patched_seq.tokens.(ins_pos - 1) <- append_tokens patched_seq.tokens.(ins_pos - 1) {ins_tokens; linked = force_link}
+      else
+        patched_seq.ins_head <- try_push_ins patched_seq.ins_head {ins_tokens; linked = force_link}
+    | After ->
+      if ins_pos < Array.length patched_seq.tokens then
+        patched_seq.tokens.(ins_pos) <- prepend_tokens patched_seq.tokens.(ins_pos) {ins_tokens; linked = force_link}
+      else
+        patched_seq.ins_tail <- try_push_ins patched_seq.ins_tail {ins_tokens; linked = force_link}
+    | Both ->
+      insert_tokens patched_seq ins_tokens ~force_link:true {ins_pos; ins_anchor = Before};
+      insert_tokens patched_seq ins_tokens ~force_link:true {ins_pos; ins_anchor = After}
 
 let atom_patch (patched_seq: patched_seq) (d: diff_atom) =
   match d with
@@ -113,8 +114,32 @@ let diff_example = [Insert ([|'A'|], {ins_pos = 3; ins_anchor = After});
                     Transfer ([{del_pos = 0; del_len = 2}; {del_pos = 3; del_len = 1}],
                               [{ins_pos = 6; ins_anchor = Before}; {ins_pos = 9; ins_anchor = Both}])]
 
+let rec merge_diffs (left: diff_atom list) (right: diff_atom list) : (diff_atom list) list =
+  match (left, right) with
+  | ([], _) -> [right]
+  | (_, []) -> [left]
+  | (hl::tl, hr::tr) -> List.map (fun d -> hl::d) (merge_diffs tl right) @ List.map (fun d -> hr::d) (merge_diffs left tr)
+
+let unique_valid_output (seq: token array) (diffs: (diff_atom list) list): token array =
+  Option.get (List.fold_left (fun prev_out diff ->
+      try
+        let new_out = patch seq diff in
+        Option.iter (fun prev_out -> if prev_out <> new_out then invalid_arg "multiple possible outputs") prev_out;
+        Some new_out
+      with Invalid_argument _ -> prev_out
+    ) None diffs)
+
 let print_seq (seq: token array) =
   Array.iter (Printf.printf "%c") seq;
   Printf.printf "\n"
 ;;
 print_seq (patch seq_example diff_example);;
+
+let merge_with_itself = merge_diffs diff_example diff_example in
+print_seq (unique_valid_output seq_example merge_with_itself);;
+
+let print_all_possible_outputs (seq: token array) = List.iter (fun diff -> print_seq (patch seq diff));;
+
+let diff_example1 = [Transfer ([{del_pos = 2; del_len = 1}], [{ins_pos = 0; ins_anchor = Before}])] in
+let diff_example2 = [Transfer ([{del_pos = 1; del_len = 3}], [{ins_pos = 9; ins_anchor = After}])] in
+print_all_possible_outputs seq_example (merge_diffs diff_example1 diff_example2)
