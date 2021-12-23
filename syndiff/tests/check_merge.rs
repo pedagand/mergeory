@@ -34,4 +34,5 @@ check_merge_tests! {
     same_change(4),
     double_del(2),
     print_macro(2),
+    inlining(2),
 }

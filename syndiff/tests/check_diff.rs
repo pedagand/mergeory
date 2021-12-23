@@ -42,4 +42,5 @@ check_diff_tests! {
     same_change(1),
     double_del(2),
     print_macro(2),
+    inlining(2),
 }
