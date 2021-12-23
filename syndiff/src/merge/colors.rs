@@ -36,12 +36,12 @@ impl ColorSet {
         ColorSet(1 << color.0)
     }
 
-    pub fn contains(&self, color: Color) -> bool {
+    pub fn contains(self, color: Color) -> bool {
         self.0 & (1 << color.0) != 0
     }
 
-    pub fn iter<'a>(&'a self) -> impl Iterator<Item = Color> + 'a {
-        (0..64).filter_map(|c| {
+    pub fn iter(self) -> impl Iterator<Item = Color> {
+        (0..64).filter_map(move |c| {
             if self.contains(Color(c)) {
                 Some(Color(c))
             } else {
