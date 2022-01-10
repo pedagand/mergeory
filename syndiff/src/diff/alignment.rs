@@ -1,6 +1,6 @@
 use super::weight::{HashSum, Weight, WeightedNode, SPINE_LEAF_WEIGHT};
 use crate::generic_tree::{Subtree, Tree};
-use std::cmp::{max, Ordering};
+use std::cmp::{max, Ordering, Reverse};
 use std::collections::BinaryHeap;
 
 pub enum AlignedNode<'t> {
@@ -23,8 +23,34 @@ enum NodeAlignment {
 
 enum SeqNodeAlignment {
     Zip(NodeAlignment),
-    Insert,
     Delete,
+    Insert,
+}
+
+impl PartialEq for SeqNodeAlignment {
+    fn eq(&self, other: &SeqNodeAlignment) -> bool {
+        std::mem::discriminant(self) == std::mem::discriminant(other)
+    }
+}
+impl Eq for SeqNodeAlignment {}
+
+impl PartialOrd for SeqNodeAlignment {
+    fn partial_cmp(&self, other: &SeqNodeAlignment) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Ord for SeqNodeAlignment {
+    fn cmp(&self, other: &SeqNodeAlignment) -> Ordering {
+        match (self, other) {
+            (SeqNodeAlignment::Zip(_), SeqNodeAlignment::Zip(_)) => Ordering::Equal,
+            (SeqNodeAlignment::Zip(_), _) => Ordering::Greater,
+            (_, SeqNodeAlignment::Zip(_)) => Ordering::Less,
+            (SeqNodeAlignment::Delete, SeqNodeAlignment::Delete) => Ordering::Equal,
+            (SeqNodeAlignment::Delete, _) => Ordering::Greater,
+            (_, SeqNodeAlignment::Delete) => Ordering::Less,
+            (SeqNodeAlignment::Insert, SeqNodeAlignment::Insert) => Ordering::Equal,
+        }
+    }
 }
 
 fn compute_node_alignment(del: &WeightedNode, ins: &WeightedNode) -> (Weight, NodeAlignment) {
@@ -44,12 +70,13 @@ fn compute_node_alignment(del: &WeightedNode, ins: &WeightedNode) -> (Weight, No
     }
 }
 
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
 struct AlignmentAStarNode {
-    estimated_cost: Weight,
+    estimated_cost: Reverse<Weight>,
+    source_edge: Option<SeqNodeAlignment>,
     cost: Weight,
     del_pos: usize,
     ins_pos: usize,
-    source_edge: Option<SeqNodeAlignment>,
 }
 
 impl AlignmentAStarNode {
@@ -60,30 +87,12 @@ impl AlignmentAStarNode {
         source_edge: Option<SeqNodeAlignment>,
     ) -> Self {
         AlignmentAStarNode {
-            estimated_cost: cost + SPINE_LEAF_WEIGHT * max(del_pos, ins_pos),
+            estimated_cost: Reverse(cost + SPINE_LEAF_WEIGHT * max(del_pos, ins_pos)),
+            source_edge,
             cost,
             del_pos,
             ins_pos,
-            source_edge,
         }
-    }
-}
-
-impl PartialEq for AlignmentAStarNode {
-    fn eq(&self, other: &Self) -> bool {
-        self.estimated_cost == other.estimated_cost
-    }
-}
-impl Eq for AlignmentAStarNode {}
-
-impl PartialOrd for AlignmentAStarNode {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-impl Ord for AlignmentAStarNode {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.estimated_cost.cmp(&other.estimated_cost).reverse()
     }
 }
 
