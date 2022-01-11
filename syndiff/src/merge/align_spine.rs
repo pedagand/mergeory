@@ -1,36 +1,53 @@
-use super::{Colored, DelNode, InsNode, InsSeqNode, SpineNode, SpineSeqNode};
+use super::{Colored, DelNode, InsNode, SpineNode, SpineSeqNode};
 use crate::generic_tree::{FieldId, Subtree, Tree};
 use crate::Metavariable;
+
+pub enum InsSpineNode<'t> {
+    Spine(Tree<'t, InsSpineSeqNode<'t>>),
+    Unchanged(Metavariable),
+    Changed(InsNode<'t>),
+}
+
+pub enum InsSpineSeqNode<'t> {
+    Zipped(Subtree<InsSpineNode<'t>>),
+    Deleted,
+    DeleteConflict(Subtree<InsNode<'t>>),
+    Inserted(Colored<Vec<Subtree<InsNode<'t>>>>),
+    InsertOrderConflict(Vec<Colored<Vec<Subtree<InsNode<'t>>>>>),
+}
 
 pub enum AlignedSpineNode<'t> {
     Spine(Tree<'t, AlignedSpineSeqNode<'t>>),
     Unchanged,
     OneChange(DelNode<'t>, InsNode<'t>),
-    BothChanged(DelNode<'t>, InsNode<'t>, DelNode<'t>, InsNode<'t>),
+    BothChanged(DelNode<'t>, InsSpineNode<'t>, DelNode<'t>, InsSpineNode<'t>),
 }
 
 pub enum AlignedSpineSeqNode<'t> {
     Zipped(Subtree<AlignedSpineNode<'t>>),
     BothDeleted(Option<FieldId>, DelNode<'t>, DelNode<'t>),
-    OneDeleteConflict(Option<FieldId>, DelNode<'t>, DelNode<'t>, InsNode<'t>),
+    OneDeleteConflict(Option<FieldId>, DelNode<'t>, DelNode<'t>, InsSpineNode<'t>),
     BothDeleteConflict(
         Option<FieldId>,
         DelNode<'t>,
-        InsNode<'t>,
+        InsSpineNode<'t>,
         DelNode<'t>,
-        InsNode<'t>,
+        InsSpineNode<'t>,
     ),
     Inserted(Vec<Colored<Vec<Subtree<InsNode<'t>>>>>),
 }
 
-fn split_spine<'t>(tree: SpineNode<'t>, next_metavar: &mut usize) -> (DelNode<'t>, InsNode<'t>) {
+fn split_spine<'t>(
+    tree: SpineNode<'t>,
+    next_metavar: &mut usize,
+) -> (DelNode<'t>, InsSpineNode<'t>) {
     match tree {
         SpineNode::Spine(spine) => {
             let (del, ins) =
                 spine.split_into(|subtrees| split_spine_subtrees(subtrees, next_metavar));
             (
                 DelNode::InPlace(Colored::new_white(del)),
-                InsNode::InPlace(Colored::new_white(ins)),
+                InsSpineNode::Spine(ins),
             )
         }
         SpineNode::Unchanged => {
@@ -38,17 +55,17 @@ fn split_spine<'t>(tree: SpineNode<'t>, next_metavar: &mut usize) -> (DelNode<'t
             *next_metavar += 1;
             (
                 DelNode::Elided(Colored::new_white(new_metavar)),
-                InsNode::Elided(new_metavar),
+                InsSpineNode::Unchanged(new_metavar),
             )
         }
-        SpineNode::Changed(del, ins) => (del, ins),
+        SpineNode::Changed(del, ins) => (del, InsSpineNode::Changed(ins)),
     }
 }
 
 fn split_spine_subtrees<'t>(
     subtrees: Vec<SpineSeqNode<'t>>,
     next_metavar: &mut usize,
-) -> (Vec<Subtree<DelNode<'t>>>, Vec<InsSeqNode<'t>>) {
+) -> (Vec<Subtree<DelNode<'t>>>, Vec<InsSpineSeqNode<'t>>) {
     let mut del_seq = Vec::new();
     let mut ins_seq = Vec::new();
     for subtree in subtrees {
@@ -59,7 +76,7 @@ fn split_spine_subtrees<'t>(
                     field: node.field,
                     node: del,
                 });
-                ins_seq.push(InsSeqNode::Node(Subtree {
+                ins_seq.push(InsSpineSeqNode::Zipped(Subtree {
                     field: node.field,
                     node: ins,
                 }));
@@ -67,19 +84,21 @@ fn split_spine_subtrees<'t>(
             SpineSeqNode::Deleted(del_list) => {
                 for del in del_list {
                     del_seq.push(del);
+                    ins_seq.push(InsSpineSeqNode::Deleted);
                 }
             }
             SpineSeqNode::DeleteConflict(field, del, ins) => {
                 del_seq.push(Subtree { field, node: del });
-                ins_seq.push(InsSeqNode::DeleteConflict(Subtree { field, node: ins }));
+                ins_seq.push(InsSpineSeqNode::DeleteConflict(Subtree {
+                    field,
+                    node: ins,
+                }));
             }
             SpineSeqNode::Inserted(ins_list) => {
-                for ins in ins_list.data {
-                    ins_seq.push(InsSeqNode::Node(ins));
-                }
+                ins_seq.push(InsSpineSeqNode::Inserted(ins_list));
             }
             SpineSeqNode::InsertOrderConflict(ins_conflict) => {
-                ins_seq.push(InsSeqNode::InsertOrderConflict(ins_conflict));
+                ins_seq.push(InsSpineSeqNode::InsertOrderConflict(ins_conflict));
             }
         }
     }
@@ -107,12 +126,17 @@ fn merge_spines<'t>(
             AlignedSpineNode::OneChange(del, ins)
         }
         (SpineNode::Changed(left_del, left_ins), SpineNode::Changed(right_del, right_ins)) => {
-            AlignedSpineNode::BothChanged(left_del, left_ins, right_del, right_ins)
+            AlignedSpineNode::BothChanged(
+                left_del,
+                InsSpineNode::Changed(left_ins),
+                right_del,
+                InsSpineNode::Changed(right_ins),
+            )
         }
         (SpineNode::Changed(del, ins), SpineNode::Spine(spine))
         | (SpineNode::Spine(spine), SpineNode::Changed(del, ins)) => {
             let (spine_del, spine_ins) = split_spine(SpineNode::Spine(spine), next_metavar);
-            AlignedSpineNode::BothChanged(del, ins, spine_del, spine_ins)
+            AlignedSpineNode::BothChanged(del, InsSpineNode::Changed(ins), spine_del, spine_ins)
         }
     })
 }
@@ -213,7 +237,12 @@ fn merge_spine_subtrees<'t>(
                         if field != del.field {
                             return None;
                         }
-                        AlignedSpineSeqNode::OneDeleteConflict(field, del.node, c_del, c_ins)
+                        AlignedSpineSeqNode::OneDeleteConflict(
+                            field,
+                            del.node,
+                            c_del,
+                            InsSpineNode::Changed(c_ins),
+                        )
                     }
                     (
                         FlatDelSubtree::DeleteConflict(left_field, left_del, left_ins),
@@ -223,7 +252,11 @@ fn merge_spine_subtrees<'t>(
                             return None;
                         }
                         AlignedSpineSeqNode::BothDeleteConflict(
-                            left_field, left_del, left_ins, right_del, right_ins,
+                            left_field,
+                            left_del,
+                            InsSpineNode::Changed(left_ins),
+                            right_del,
+                            InsSpineNode::Changed(right_ins),
                         )
                     }
                     (FlatDelSubtree::Deleted(del), FlatDelSubtree::Zipped(spine))
@@ -249,7 +282,11 @@ fn merge_spine_subtrees<'t>(
                         }
                         let (spine_del, spine_ins) = split_spine(spine.node, next_metavar);
                         AlignedSpineSeqNode::BothDeleteConflict(
-                            field, spine_del, spine_ins, c_del, c_ins,
+                            field,
+                            spine_del,
+                            spine_ins,
+                            c_del,
+                            InsSpineNode::Changed(c_ins),
                         )
                     }
                     (FlatDelSubtree::Inserted(_), _) | (_, FlatDelSubtree::Inserted(_)) => {
@@ -290,7 +327,7 @@ fn align_spine_subtrees_with_unchanged<'t>(
                 let unchanged_mv = Metavariable(*next_metavar);
                 *next_metavar += 1;
                 let unchanged_del = DelNode::Elided(Colored::new_white(unchanged_mv));
-                let unchanged_ins = InsNode::Elided(unchanged_mv);
+                let unchanged_ins = InsSpineNode::Unchanged(unchanged_mv);
                 AlignedSpineSeqNode::OneDeleteConflict(
                     del.field,
                     del.node,
@@ -302,11 +339,11 @@ fn align_spine_subtrees_with_unchanged<'t>(
                 let unchanged_mv = Metavariable(*next_metavar);
                 *next_metavar += 1;
                 let unchanged_del = DelNode::Elided(Colored::new_white(unchanged_mv));
-                let unchanged_ins = InsNode::Elided(unchanged_mv);
+                let unchanged_ins = InsSpineNode::Unchanged(unchanged_mv);
                 AlignedSpineSeqNode::BothDeleteConflict(
                     field,
                     conflict_del,
-                    conflict_ins,
+                    InsSpineNode::Changed(conflict_ins),
                     unchanged_del,
                     unchanged_ins,
                 )

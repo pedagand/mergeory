@@ -1,4 +1,4 @@
-use super::align_spine::{AlignedSpineNode, AlignedSpineSeqNode};
+use super::align_spine::{AlignedSpineNode, AlignedSpineSeqNode, InsSpineNode, InsSpineSeqNode};
 use super::{ColorSet, Colored, DelNode, InsNode, InsSeqNode, MetavarInsReplacement};
 use crate::generic_tree::{FieldId, Subtree, Tree};
 
@@ -85,6 +85,40 @@ fn merge_ins_seq<'t>(
     )
 }
 
+fn flatten_ins_spine(ins_spine: InsSpineNode) -> InsNode {
+    match ins_spine {
+        InsSpineNode::Spine(ins_subtree) => InsNode::InPlace(Colored::new_white(
+            ins_subtree.convert_into(flatten_ins_spine_seq),
+        )),
+        InsSpineNode::Unchanged(mv) => InsNode::Elided(mv),
+        InsSpineNode::Changed(ins) => ins,
+    }
+}
+
+fn flatten_ins_spine_seq(ins_spine_seq: Vec<InsSpineSeqNode>) -> Vec<InsSeqNode> {
+    let mut ins_seq = Vec::new();
+    for ins_spine_seq_node in ins_spine_seq {
+        match ins_spine_seq_node {
+            InsSpineSeqNode::Zipped(ins_subtree) => {
+                ins_seq.push(InsSeqNode::Node(ins_subtree.map(flatten_ins_spine)))
+            }
+            InsSpineSeqNode::Deleted => (),
+            InsSpineSeqNode::DeleteConflict(confl) => {
+                ins_seq.push(InsSeqNode::DeleteConflict(confl))
+            }
+            InsSpineSeqNode::Inserted(ins_list) => {
+                for ins in ins_list.data {
+                    ins_seq.push(InsSeqNode::Node(ins))
+                }
+            }
+            InsSpineSeqNode::InsertOrderConflict(confl) => {
+                ins_seq.push(InsSeqNode::InsertOrderConflict(confl))
+            }
+        }
+    }
+    ins_seq
+}
+
 fn can_inline_ins_in_del(ins: &InsNode, del: &DelNode) -> bool {
     match (del, ins) {
         (DelNode::Elided(_), _) => true,
@@ -118,6 +152,41 @@ fn can_inline_ins_seq_in_del(ins_seq: &[InsSeqNode], del_seq: &[Subtree<DelNode>
             InsSeqNode::Node(ins) if del.field == ins.field => {
                 can_inline_ins_in_del(&ins.node, &del.node)
             }
+            _ => false,
+        })
+}
+
+fn can_inline_ins_spine_in_del(ins: &InsSpineNode, del: &DelNode) -> bool {
+    match ins {
+        InsSpineNode::Spine(ins_subtree) => match del {
+            DelNode::InPlace(del_subtree) => Tree::compare(
+                ins_subtree,
+                &del_subtree.data,
+                can_inline_ins_spine_seq_in_del,
+            ),
+            DelNode::Elided(_) | DelNode::MetavariableConflict(_, _, _) => true,
+        },
+        InsSpineNode::Unchanged(_) => true,
+        InsSpineNode::Changed(ins) => can_inline_ins_in_del(ins, del),
+    }
+}
+
+fn can_inline_ins_spine_seq_in_del(
+    ins_seq: &[InsSpineSeqNode],
+    del_seq: &[Subtree<DelNode>],
+) -> bool {
+    if ins_seq.len() != del_seq.len() {
+        return false;
+    }
+
+    ins_seq
+        .iter()
+        .zip(del_seq)
+        .all(|(ins_spine_seq_node, del)| match ins_spine_seq_node {
+            InsSpineSeqNode::Zipped(ins) if del.field == ins.field => {
+                can_inline_ins_spine_in_del(&ins.node, &del.node)
+            }
+            InsSpineSeqNode::Deleted => true, // This could be false to disallow nested deletions
             _ => false,
         })
 }
@@ -178,6 +247,57 @@ fn inline_ins_seq_in_del<'t>(
     )
 }
 
+fn inline_ins_spine_in_del<'t>(
+    ins_spine: InsSpineNode<'t>,
+    mut del: DelNode<'t>,
+    metavars_status: &mut [MetavarInsReplacementList<'t>],
+) -> DelNode<'t> {
+    match ins_spine {
+        InsSpineNode::Spine(ins_subtree) => match del {
+            DelNode::InPlace(del_subtree) => DelNode::InPlace(Colored {
+                data: Tree::merge_into(ins_subtree, del_subtree.data, |ins, del| {
+                    inline_ins_spine_seq_in_del(ins, del, metavars_status)
+                })
+                .unwrap(),
+                colors: del_subtree.colors,
+            }),
+            DelNode::Elided(_) | DelNode::MetavariableConflict(_, _, _) => inline_ins_in_del(
+                flatten_ins_spine(InsSpineNode::Spine(ins_subtree)),
+                del,
+                metavars_status,
+            ),
+        },
+        InsSpineNode::Unchanged(_) => {
+            register_kept_metavars(&mut del, metavars_status);
+            del
+        }
+        InsSpineNode::Changed(ins) => inline_ins_in_del(ins, del, metavars_status),
+    }
+}
+
+fn inline_ins_spine_seq_in_del<'t>(
+    ins_spine_seq: Vec<InsSpineSeqNode<'t>>,
+    del_seq: Vec<Subtree<DelNode<'t>>>,
+    metavars_status: &mut [MetavarInsReplacementList<'t>],
+) -> Option<Vec<Subtree<DelNode<'t>>>> {
+    Some(
+        ins_spine_seq
+            .into_iter()
+            .zip(del_seq)
+            .map(|(ins_spine_seq_node, mut del)| match ins_spine_seq_node {
+                InsSpineSeqNode::Zipped(ins_spine) => {
+                    del.map(|del| inline_ins_spine_in_del(ins_spine.node, del, metavars_status))
+                }
+                InsSpineSeqNode::Deleted => {
+                    register_kept_metavars(&mut del.node, metavars_status);
+                    del
+                }
+                _ => panic!("InsSpineSeq cannot be inlined in the deletion tree"),
+            })
+            .collect(),
+    )
+}
+
 fn register_kept_metavars<'t>(
     del: &mut DelNode<'t>,
     metavars_status: &mut [MetavarInsReplacementList<'t>],
@@ -216,8 +336,8 @@ fn merge_ins_in_spine<'t>(
         }
         AlignedSpineNode::BothChanged(mut left_del, left_ins, mut right_del, right_ins) => {
             match (
-                can_inline_ins_in_del(&left_ins, &right_del),
-                can_inline_ins_in_del(&right_ins, &left_del),
+                can_inline_ins_spine_in_del(&left_ins, &right_del),
+                can_inline_ins_spine_in_del(&right_ins, &left_del),
             ) {
                 (true, true) | (false, false) => {
                     register_kept_metavars(&mut left_del, metavars_status);
@@ -225,18 +345,26 @@ fn merge_ins_in_spine<'t>(
                     InsMergedSpineNode::BothChanged(
                         left_del,
                         right_del,
-                        merge_ins_nodes(left_ins, right_ins),
+                        merge_ins_nodes(flatten_ins_spine(left_ins), flatten_ins_spine(right_ins)),
                     )
                 }
                 (true, false) => {
-                    let right_del = inline_ins_in_del(left_ins, right_del, metavars_status);
+                    let right_del = inline_ins_spine_in_del(left_ins, right_del, metavars_status);
                     register_kept_metavars(&mut left_del, metavars_status);
-                    InsMergedSpineNode::BothChanged(right_del, left_del, right_ins)
+                    InsMergedSpineNode::BothChanged(
+                        right_del,
+                        left_del,
+                        flatten_ins_spine(right_ins),
+                    )
                 }
                 (false, true) => {
-                    let left_del = inline_ins_in_del(right_ins, left_del, metavars_status);
+                    let left_del = inline_ins_spine_in_del(right_ins, left_del, metavars_status);
                     register_kept_metavars(&mut right_del, metavars_status);
-                    InsMergedSpineNode::BothChanged(left_del, right_del, left_ins)
+                    InsMergedSpineNode::BothChanged(
+                        left_del,
+                        right_del,
+                        flatten_ins_spine(left_ins),
+                    )
                 }
             }
         }
@@ -257,17 +385,22 @@ fn merge_ins_in_spine_seq_node<'t>(
             InsMergedSpineSeqNode::BothDeleted(field, left_del, right_del)
         }
         AlignedSpineSeqNode::OneDeleteConflict(field, mut del, mut conflict_del, conflict_ins) => {
-            if can_inline_ins_in_del(&conflict_ins, &del) {
+            if can_inline_ins_spine_in_del(&conflict_ins, &del) {
                 register_kept_metavars(&mut conflict_del, metavars_status);
                 InsMergedSpineSeqNode::BothDeleted(
                     field,
-                    inline_ins_in_del(conflict_ins, del, metavars_status),
+                    inline_ins_spine_in_del(conflict_ins, del, metavars_status),
                     conflict_del,
                 )
             } else {
                 register_kept_metavars(&mut del, metavars_status);
                 register_kept_metavars(&mut conflict_del, metavars_status);
-                InsMergedSpineSeqNode::DeleteConflict(field, del, conflict_del, conflict_ins)
+                InsMergedSpineSeqNode::DeleteConflict(
+                    field,
+                    del,
+                    conflict_del,
+                    flatten_ins_spine(conflict_ins),
+                )
             }
         }
         AlignedSpineSeqNode::BothDeleteConflict(
@@ -278,8 +411,8 @@ fn merge_ins_in_spine_seq_node<'t>(
             right_ins,
         ) => {
             match (
-                can_inline_ins_in_del(&left_ins, &right_del),
-                can_inline_ins_in_del(&right_ins, &left_del),
+                can_inline_ins_spine_in_del(&left_ins, &right_del),
+                can_inline_ins_spine_in_del(&right_ins, &left_del),
             ) {
                 (false, false) => {
                     register_kept_metavars(&mut left_del, metavars_status);
@@ -288,33 +421,33 @@ fn merge_ins_in_spine_seq_node<'t>(
                         field,
                         left_del,
                         right_del,
-                        merge_ins_nodes(left_ins, right_ins),
+                        merge_ins_nodes(flatten_ins_spine(left_ins), flatten_ins_spine(right_ins)),
                     )
                 }
                 (true, false) => {
                     register_kept_metavars(&mut left_del, metavars_status);
                     InsMergedSpineSeqNode::DeleteConflict(
                         field,
-                        inline_ins_in_del(left_ins, right_del, metavars_status),
+                        inline_ins_spine_in_del(left_ins, right_del, metavars_status),
                         left_del,
-                        right_ins,
+                        flatten_ins_spine(right_ins),
                     )
                 }
                 (false, true) => {
                     register_kept_metavars(&mut right_del, metavars_status);
                     InsMergedSpineSeqNode::DeleteConflict(
                         field,
-                        inline_ins_in_del(right_ins, left_del, metavars_status),
+                        inline_ins_spine_in_del(right_ins, left_del, metavars_status),
                         right_del,
-                        left_ins,
+                        flatten_ins_spine(left_ins),
                     )
                 }
                 (true, true) => {
                     // Solve both conflicts at once!
                     InsMergedSpineSeqNode::BothDeleted(
                         field,
-                        inline_ins_in_del(right_ins, left_del, metavars_status),
-                        inline_ins_in_del(left_ins, right_del, metavars_status),
+                        inline_ins_spine_in_del(right_ins, left_del, metavars_status),
+                        inline_ins_spine_in_del(left_ins, right_del, metavars_status),
                     )
                 }
             }
