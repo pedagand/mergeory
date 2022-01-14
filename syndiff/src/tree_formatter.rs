@@ -1,5 +1,4 @@
-use crate::merge::{Color, ColorSet};
-use crate::Metavariable;
+use crate::{Color, ColorSet, Metavariable};
 use std::io::Write;
 
 type Result = std::io::Result<()>;

@@ -1,6 +1,7 @@
 use super::merge_ins::{InsMergedSpineNode, InsMergedSpineSeqNode};
-use super::{ColorSet, Colored, DelNode, SpineNode, SpineSeqNode};
+use super::{DelNode, MergedSpineNode, MergedSpineSeqNode};
 use crate::generic_tree::{Subtree, Tree};
+use crate::{ColorSet, Colored};
 
 fn merge_del_nodes<'t>(
     left: DelNode<'t>,
@@ -46,15 +47,15 @@ fn merge_del_nodes<'t>(
 fn merge_del_in_spine<'t>(
     spine: InsMergedSpineNode<'t>,
     metavars_del: &mut [Option<DelNode<'t>>],
-) -> Option<SpineNode<'t>> {
+) -> Option<MergedSpineNode<'t>> {
     Some(match spine {
-        InsMergedSpineNode::Spine(s) => {
-            SpineNode::Spine(s.try_convert_into(|ch| merge_del_in_spine_seq(ch, metavars_del))?)
-        }
-        InsMergedSpineNode::Unchanged => SpineNode::Unchanged,
-        InsMergedSpineNode::OneChange(del, ins) => SpineNode::Changed(del, ins),
+        InsMergedSpineNode::Spine(s) => MergedSpineNode::Spine(
+            s.try_convert_into(|ch| merge_del_in_spine_seq(ch, metavars_del))?,
+        ),
+        InsMergedSpineNode::Unchanged => MergedSpineNode::Unchanged,
+        InsMergedSpineNode::OneChange(del, ins) => MergedSpineNode::Changed(del, ins),
         InsMergedSpineNode::BothChanged(left_del, right_del, ins) => {
-            SpineNode::Changed(merge_del_nodes(left_del, right_del, metavars_del)?, ins)
+            MergedSpineNode::Changed(merge_del_nodes(left_del, right_del, metavars_del)?, ins)
         }
     })
 }
@@ -62,11 +63,11 @@ fn merge_del_in_spine<'t>(
 fn merge_del_in_spine_seq<'t>(
     spine_seq: Vec<InsMergedSpineSeqNode<'t>>,
     metavars_del: &mut [Option<DelNode<'t>>],
-) -> Option<Vec<SpineSeqNode<'t>>> {
+) -> Option<Vec<MergedSpineSeqNode<'t>>> {
     let mut merged_vec = Vec::new();
     for seq_node in spine_seq {
         match seq_node {
-            InsMergedSpineSeqNode::Zipped(node) => merged_vec.push(SpineSeqNode::Zipped(
+            InsMergedSpineSeqNode::Zipped(node) => merged_vec.push(MergedSpineSeqNode::Zipped(
                 node.try_map(|node| merge_del_in_spine(node, metavars_del))?,
             )),
             InsMergedSpineSeqNode::BothDeleted(field, left_del, right_del) => {
@@ -74,24 +75,23 @@ fn merge_del_in_spine_seq<'t>(
                     field,
                     node: merge_del_nodes(left_del, right_del, metavars_del)?,
                 };
-                if let Some(SpineSeqNode::Deleted(del_list)) = merged_vec.last_mut() {
+                if let Some(MergedSpineSeqNode::Deleted(del_list)) = merged_vec.last_mut() {
                     del_list.push(del);
                 } else {
-                    merged_vec.push(SpineSeqNode::Deleted(vec![del]));
+                    merged_vec.push(MergedSpineSeqNode::Deleted(vec![del]));
                 }
             }
             InsMergedSpineSeqNode::DeleteConflict(field, left_del, right_del, ins) => merged_vec
-                .push(SpineSeqNode::DeleteConflict(
+                .push(MergedSpineSeqNode::DeleteConflict(
                     field,
                     merge_del_nodes(left_del, right_del, metavars_del)?,
                     ins,
                 )),
-            InsMergedSpineSeqNode::Inserted(mut ins_vec) => {
-                merged_vec.push(if ins_vec.len() == 1 {
-                    SpineSeqNode::Inserted(ins_vec.pop().unwrap())
-                } else {
-                    SpineSeqNode::InsertOrderConflict(ins_vec)
-                })
+            InsMergedSpineSeqNode::Inserted(ins_list) => {
+                merged_vec.push(MergedSpineSeqNode::Inserted(ins_list))
+            }
+            InsMergedSpineSeqNode::InsertOrderConflict(left_ins, right_ins) => {
+                merged_vec.push(MergedSpineSeqNode::InsertOrderConflict(left_ins, right_ins))
             }
         }
     }
@@ -112,7 +112,7 @@ fn add_colors(colors: ColorSet, node: &mut DelNode) {
 pub fn merge_del(
     input: InsMergedSpineNode,
     nb_metavars: usize,
-) -> Option<(SpineNode, Vec<Option<DelNode>>)> {
+) -> Option<(MergedSpineNode, Vec<Option<DelNode>>)> {
     let mut metavars_del = Vec::new();
     metavars_del.resize_with(nb_metavars, || None);
     let output = merge_del_in_spine(input, &mut metavars_del)?;

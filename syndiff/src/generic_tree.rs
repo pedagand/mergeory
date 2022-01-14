@@ -235,6 +235,40 @@ impl<'t, T> Tree<'t, Subtree<T>> {
         self.map_children_into(|child| child.map(&mut conv_fn))
     }
 
+    pub fn compare_subtrees<U>(
+        left: &Tree<'t, Subtree<T>>,
+        right: &Tree<'t, Subtree<U>>,
+        mut compare_child_fn: impl FnMut(&T, &U) -> bool,
+    ) -> bool {
+        Tree::compare(left, right, |left_seq, right_seq| {
+            if left_seq.len() != right_seq.len() {
+                return false;
+            }
+
+            left_seq
+                .iter()
+                .zip(right_seq)
+                .all(|(l, r)| Subtree::compare(l, r, &mut compare_child_fn))
+        })
+    }
+
+    pub fn merge_subtrees_to<L, R>(
+        left: &Tree<'t, Subtree<L>>,
+        right: &Tree<'t, Subtree<R>>,
+        mut merge_child_fn: impl FnMut(&L, &R) -> Option<T>,
+    ) -> Option<Self> {
+        Tree::merge_to(left, right, |left_seq, right_seq| {
+            if left_seq.len() != right_seq.len() {
+                return None;
+            }
+            left_seq
+                .iter()
+                .zip(right_seq)
+                .map(|(l, r)| Subtree::merge(l.as_ref(), r.as_ref(), &mut merge_child_fn))
+                .collect()
+        })
+    }
+
     pub fn merge_subtrees_into<L, R>(
         left: Tree<'t, Subtree<L>>,
         right: Tree<'t, Subtree<R>>,

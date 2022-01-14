@@ -3,8 +3,10 @@ mod elision;
 mod tree;
 mod weight;
 
-pub use tree::{ChangeNode, Metavariable, SpineNode, SpineSeqNode};
+pub use tree::Metavariable;
+pub use tree::{ChangeNode, DiffSpineNode, DiffSpineSeqNode};
 
+use crate::colors::Color;
 use crate::syn_tree::SynNode;
 use alignment::align_trees;
 use elision::find_metavariable_elisions;
@@ -14,7 +16,8 @@ pub fn compute_diff<'t>(
     origin_tree: &SynNode<'t>,
     modified_tree: &SynNode<'t>,
     skip_elisions: bool,
-) -> SpineNode<'t> {
+    color: Color,
+) -> DiffSpineNode<'t> {
     // Hash the syntax trees and compute their weights
     let mut origin_weighted_tree = weight_tree(origin_tree);
     origin_weighted_tree.weight += 1; // Small incentive to keep the root node
@@ -26,5 +29,5 @@ pub fn compute_diff<'t>(
 
     // Compute the difference as a deletion and an insertion tree by eliding
     // parts reused from original to modified
-    find_metavariable_elisions(&aligned_tree, skip_elisions)
+    find_metavariable_elisions(&aligned_tree, skip_elisions, color)
 }

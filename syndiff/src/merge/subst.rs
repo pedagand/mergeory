@@ -1,10 +1,10 @@
-use super::id_merger::{is_del_equivalent_to_ins, merge_id_ins};
+//use super::id_merger::{is_del_equivalent_to_ins, merge_id_ins};
 use super::merge_ins::MetavarInsReplacementList;
 use super::{
-    ColorSet, Colored, DelNode, InsNode, InsSeqNode, MetavarInsReplacement, SpineNode, SpineSeqNode,
+    DelNode, InsNode, MergedInsNode, MergedSpineNode, MergedSpineSeqNode, MetavarInsReplacement,
 };
 use crate::generic_tree::{Subtree, Tree};
-use crate::Metavariable;
+use crate::{ColorSet, Colored, Metavariable};
 
 enum ComputableSubst<T, U> {
     Pending(U),
@@ -107,7 +107,7 @@ impl<'t> Substituter<'t> {
             None => {
                 // Save conflict and return a simple white metavariable
                 self.ins_subst[mv.0] = ComputableSubst::Computed(None);
-                InsNode::Elided(mv)
+                InsNode::Elided(Colored::new_white(mv))
             }
         }
     }
@@ -133,141 +133,114 @@ impl<'t> Substituter<'t> {
         match node {
             InsNode::InPlace(ins) => ins
                 .data
-                .visit_mut(|sub| self.substitute_in_ins_seq_node(sub)),
-            InsNode::Elided(mv) => *node = self.find_ins_subst(*mv),
-            InsNode::Conflict(conflict_list) => {
-                for ins in &mut *conflict_list {
-                    self.substitute_in_ins_node(ins)
-                }
+                .visit_mut(|sub| self.substitute_in_ins_node(&mut sub.node)),
+            InsNode::Elided(mv) => *node = self.find_ins_subst(mv.data),
+        }
+    }
+
+    fn substitute_in_merged_ins_node(&mut self, node: &mut MergedInsNode<'t>) {
+        match node {
+            MergedInsNode::InPlace(ins) => ins
+                .data
+                .visit_mut(|sub| self.substitute_in_merged_ins_node(&mut sub.node)),
+            MergedInsNode::Elided(mv) => {
+                *node = MergedInsNode::from_simple_ins(self.find_ins_subst(mv.data))
+            }
+            MergedInsNode::Conflict(left_ins, right_ins) => {
+                self.substitute_in_ins_node(left_ins);
+                self.substitute_in_ins_node(right_ins);
 
                 // Try to solve the insertion conflict after substitution
-                let mut conflict_list_iter = std::mem::take(conflict_list).into_iter();
-                let mut cur_ins = conflict_list_iter.next().unwrap();
-                for ins in conflict_list_iter {
-                    match merge_id_ins(&cur_ins, &ins) {
-                        Some(merged_ins) => cur_ins = merged_ins,
-                        None => {
-                            conflict_list.push(cur_ins);
-                            cur_ins = ins;
-                        }
-                    }
-                }
-                if conflict_list.is_empty() {
-                    *node = cur_ins
-                } else {
-                    conflict_list.push(cur_ins);
+                match merge_id_ins(&left_ins, &right_ins) {
+                    Some(merged_ins) => *node = MergedInsNode::from_simple_ins(merged_ins),
+                    None => (),
                 }
             }
         }
     }
 
-    fn substitute_in_ins_seq_node(&mut self, node: &mut InsSeqNode<'t>) {
+    fn substitute_in_spine_node(&mut self, node: &mut MergedSpineNode<'t>) {
         match node {
-            InsSeqNode::Node(node) => self.substitute_in_ins_node(&mut node.node),
-            InsSeqNode::DeleteConflict(node) => self.substitute_in_ins_node(&mut node.node),
-            InsSeqNode::InsertOrderConflict(conflict_list) => {
-                for ins_seq in conflict_list {
-                    for ins in &mut ins_seq.data {
-                        self.substitute_in_ins_node(&mut ins.node)
-                    }
-                }
-            }
-        }
-    }
-
-    fn substitute_in_spine_node(&mut self, node: &mut SpineNode<'t>) {
-        match node {
-            SpineNode::Spine(spine) => match spine {
+            MergedSpineNode::Spine(spine) => match spine {
                 Tree::Node(_, children) => self.substitute_in_spine_seq(children),
                 Tree::Leaf(_) => (),
             },
-            SpineNode::Unchanged => (),
-            SpineNode::Changed(del, ins) => {
+            MergedSpineNode::Unchanged => (),
+            MergedSpineNode::Changed(del, ins) => {
                 self.substitute_in_del_node(del);
-                self.substitute_in_ins_node(ins);
+                self.substitute_in_merged_ins_node(ins);
             }
         }
     }
 
-    fn substitute_in_spine_seq(&mut self, seq: &mut Vec<SpineSeqNode<'t>>) {
+    fn substitute_in_spine_seq(&mut self, seq: &mut Vec<MergedSpineSeqNode<'t>>) {
         for node in std::mem::take(seq) {
             match node {
-                SpineSeqNode::Zipped(mut spine) => {
+                MergedSpineSeqNode::Zipped(mut spine) => {
                     self.substitute_in_spine_node(&mut spine.node);
-                    seq.push(SpineSeqNode::Zipped(spine))
+                    seq.push(MergedSpineSeqNode::Zipped(spine))
                 }
-                SpineSeqNode::Deleted(mut del_seq) => {
+                MergedSpineSeqNode::Deleted(mut del_seq) => {
                     for del in &mut del_seq {
                         self.substitute_in_del_node(&mut del.node)
                     }
-                    if let Some(SpineSeqNode::Deleted(prev_del_seq)) = seq.last_mut() {
+                    if let Some(MergedSpineSeqNode::Deleted(prev_del_seq)) = seq.last_mut() {
                         prev_del_seq.extend(del_seq)
                     } else {
-                        seq.push(SpineSeqNode::Deleted(del_seq))
+                        seq.push(MergedSpineSeqNode::Deleted(del_seq))
                     }
                 }
-                SpineSeqNode::DeleteConflict(field, mut del, mut ins) => {
+                MergedSpineSeqNode::DeleteConflict(field, mut del, mut ins) => {
                     self.substitute_in_del_node(&mut del);
                     self.substitute_in_ins_node(&mut ins);
 
                     // Solve the delete conflict if del and ins are identical after substitution
                     if is_del_equivalent_to_ins(&del, &ins) {
                         let del_subtree = Subtree { field, node: del };
-                        if let Some(SpineSeqNode::Deleted(prev_del_seq)) = seq.last_mut() {
+                        if let Some(MergedSpineSeqNode::Deleted(prev_del_seq)) = seq.last_mut() {
                             prev_del_seq.push(del_subtree)
                         } else {
-                            seq.push(SpineSeqNode::Deleted(vec![del_subtree]))
+                            seq.push(MergedSpineSeqNode::Deleted(vec![del_subtree]))
                         }
                     } else {
-                        seq.push(SpineSeqNode::DeleteConflict(field, del, ins))
+                        seq.push(MergedSpineSeqNode::DeleteConflict(field, del, ins))
                     }
                 }
-                SpineSeqNode::Inserted(mut ins_seq) => {
+                MergedSpineSeqNode::Inserted(mut ins_seq) => {
                     for ins in &mut ins_seq.data {
                         self.substitute_in_ins_node(&mut ins.node)
                     }
-                    seq.push(SpineSeqNode::Inserted(ins_seq))
+                    seq.push(MergedSpineSeqNode::Inserted(ins_seq))
                 }
-                SpineSeqNode::InsertOrderConflict(mut conflict_list) => {
-                    for ins_seq in &mut conflict_list {
+                MergedSpineSeqNode::InsertOrderConflict(mut left_ins_seq, mut right_ins_seq) => {
+                    for ins_seq in [&mut left_ins_seq, &mut right_ins_seq] {
                         for ins in &mut ins_seq.data {
                             self.substitute_in_ins_node(&mut ins.node)
                         }
                     }
 
-                    // Try to solve the insert order conflict after substitutions
-                    let mut conflict_list_iter = conflict_list.into_iter();
-                    let mut cur_ins_seq = conflict_list_iter.next().unwrap();
-                    let mut remaining_conflict_list = Vec::new();
-                    for ins_seq in conflict_list_iter {
-                        match Colored::merge(
-                            cur_ins_seq.as_ref(),
-                            ins_seq.as_ref(),
-                            |acc, ins_list| {
-                                if acc.len() != ins_list.len() {
-                                    return None;
-                                }
-
-                                acc.iter()
-                                    .zip(ins_list)
-                                    .map(|(l, r)| {
-                                        Subtree::merge(l.as_ref(), r.as_ref(), merge_id_ins)
-                                    })
-                                    .collect()
-                            },
-                        ) {
-                            Some(merged_ins_seq) => cur_ins_seq = merged_ins_seq,
-                            None => {
-                                remaining_conflict_list.push(cur_ins_seq);
-                                cur_ins_seq = ins_seq
+                    // Try to resolve the merge conflict after the substitutions
+                    match Colored::merge(
+                        left_ins_seq.as_ref(),
+                        right_ins_seq.as_ref(),
+                        |left, right| {
+                            if left.len() != right.len() {
+                                return None;
                             }
+
+                            left.iter()
+                                .zip(right)
+                                .map(|(l, r)| Subtree::merge(l.as_ref(), r.as_ref(), merge_id_ins))
+                                .collect()
+                        },
+                    ) {
+                        Some(merged_ins_seq) => {
+                            seq.push(MergedSpineSeqNode::Inserted(merged_ins_seq))
                         }
-                    }
-                    if remaining_conflict_list.is_empty() {
-                        seq.push(SpineSeqNode::Inserted(cur_ins_seq));
-                    } else {
-                        remaining_conflict_list.push(cur_ins_seq);
-                        seq.push(SpineSeqNode::InsertOrderConflict(remaining_conflict_list))
+                        None => seq.push(MergedSpineSeqNode::InsertOrderConflict(
+                            left_ins_seq,
+                            right_ins_seq,
+                        )),
                     }
                 }
             }
@@ -316,28 +289,30 @@ impl<'t> Substituter<'t> {
         }
     }
 
-    fn remove_solved_conflicts_in_spine_node(&mut self, node: &mut SpineNode<'t>) {
+    fn remove_solved_conflicts_in_spine_node(&mut self, node: &mut MergedSpineNode<'t>) {
         match node {
-            SpineNode::Spine(spine) => {
+            MergedSpineNode::Spine(spine) => {
                 spine.visit_mut(|sub| self.remove_solved_conflicts_in_spine_seq_node(sub))
             }
-            SpineNode::Unchanged => (),
-            SpineNode::Changed(del, _) => self.remove_solved_conflicts_in_del(del),
+            MergedSpineNode::Unchanged => (),
+            MergedSpineNode::Changed(del, _) => self.remove_solved_conflicts_in_del(del),
         }
     }
 
-    fn remove_solved_conflicts_in_spine_seq_node(&mut self, node: &mut SpineSeqNode<'t>) {
+    fn remove_solved_conflicts_in_spine_seq_node(&mut self, node: &mut MergedSpineSeqNode<'t>) {
         match node {
-            SpineSeqNode::Zipped(spine) => {
+            MergedSpineSeqNode::Zipped(spine) => {
                 self.remove_solved_conflicts_in_spine_node(&mut spine.node)
             }
-            SpineSeqNode::Deleted(del_list) => {
+            MergedSpineSeqNode::Deleted(del_list) => {
                 for del in del_list {
                     self.remove_solved_conflicts_in_del(&mut del.node)
                 }
             }
-            SpineSeqNode::DeleteConflict(_, del, _) => self.remove_solved_conflicts_in_del(del),
-            SpineSeqNode::Inserted(_) | SpineSeqNode::InsertOrderConflict(_) => (),
+            MergedSpineSeqNode::DeleteConflict(_, del, _) => {
+                self.remove_solved_conflicts_in_del(del)
+            }
+            MergedSpineSeqNode::Inserted(_) | MergedSpineSeqNode::InsertOrderConflict(..) => (),
         }
     }
 }
@@ -356,18 +331,52 @@ fn replace_colors(node: &mut DelNode, colors: ColorSet) {
 
 fn infer_ins_from_del<'t>(del: &DelNode<'t>) -> InsNode<'t> {
     match del {
-        DelNode::InPlace(del) => {
-            InsNode::InPlace(Colored::new_white(del.data.map_children(|child| {
-                InsSeqNode::Node(child.as_ref().map(infer_ins_from_del))
-            })))
-        }
-        DelNode::Elided(mv) => InsNode::Elided(mv.data),
+        DelNode::InPlace(del) => InsNode::InPlace(Colored::new_white(
+            del.data
+                .map_children(|child| child.as_ref().map(infer_ins_from_del)),
+        )),
+        DelNode::Elided(mv) => InsNode::Elided(Colored::new_white(mv.data)),
         DelNode::MetavariableConflict(_, del, _) => infer_ins_from_del(del),
     }
 }
 
+pub fn merge_id_ins<'t>(left: &InsNode<'t>, right: &InsNode<'t>) -> Option<InsNode<'t>> {
+    match (left, right) {
+        (InsNode::InPlace(left), InsNode::InPlace(right)) => Some(InsNode::InPlace(
+            Colored::merge(left.as_ref(), right.as_ref(), |l, r| {
+                Tree::merge_subtrees_to(l, r, merge_id_ins)
+            })?,
+        )),
+        (InsNode::Elided(left), InsNode::Elided(right)) => Some(InsNode::Elided(Colored::merge(
+            *left,
+            *right,
+            |left_mv, right_mv| {
+                if left_mv == right_mv {
+                    Some(left_mv)
+                } else {
+                    None
+                }
+            },
+        )?)),
+        _ => None,
+    }
+}
+
+fn is_del_equivalent_to_ins(del: &DelNode, ins: &InsNode) -> bool {
+    match (del, ins) {
+        (DelNode::InPlace(del), InsNode::InPlace(ins)) => {
+            Tree::compare_subtrees(&del.data, &ins.data, is_del_equivalent_to_ins)
+        }
+        (DelNode::Elided(del_mv), InsNode::Elided(ins_mv)) => del_mv.data == ins_mv.data,
+        (DelNode::MetavariableConflict(_, del, _), ins) => is_del_equivalent_to_ins(del, ins),
+        (DelNode::InPlace(_), InsNode::Elided(_)) | (DelNode::Elided(_), InsNode::InPlace(_)) => {
+            false
+        }
+    }
+}
+
 pub fn apply_metavar_substitutions<'t>(
-    tree: &mut SpineNode<'t>,
+    tree: &mut MergedSpineNode<'t>,
     del_subst: Vec<Option<DelNode<'t>>>,
     ins_subst: Vec<MetavarInsReplacementList<'t>>,
 ) {

@@ -1,13 +1,14 @@
 use goldenfile::Mint;
 use std::process::Command;
 
-fn check_merge(test_name: &str, nb: usize) {
+fn check_merge(test_name: &str) {
     let mut mint = Mint::new(format!("tests/prgms/{}", test_name));
     let diff_file = mint.new_goldenfile("mdiff.rs").unwrap();
 
     let diff_out = Command::new(env!("CARGO_BIN_EXE_syndiff"))
         .arg(format!("tests/prgms/{}/orig.rs", test_name))
-        .args((0..nb).map(|i| format!("tests/prgms/{}/edit{}.rs", test_name, i)))
+        .arg(format!("tests/prgms/{}/edit0.rs", test_name))
+        .arg(format!("tests/prgms/{}/edit1.rs", test_name))
         .stdout(diff_file)
         .output()
         .expect("Failed to launch syndiff");
@@ -17,22 +18,22 @@ fn check_merge(test_name: &str, nb: usize) {
 }
 
 macro_rules! check_merge_tests {
-    { $($test_name:ident ($nb:expr),)* } => {
+    { $($test_name:ident,)* } => {
         $(#[test]
         fn $test_name() {
-            check_merge(stringify!($test_name), $nb);
+            check_merge(stringify!($test_name));
         })*
     }
 }
 
 check_merge_tests! {
-    common_trailing(2),
-    factorize(2),
-    cross_del(2),
-    cross_change(2),
-    cross_del_and_ins(2),
-    same_change(4),
-    double_del(2),
-    print_macro(2),
-    inlining(2),
+    common_trailing,
+    factorize,
+    cross_del,
+    cross_change,
+    cross_del_and_ins,
+    same_change,
+    double_del,
+    print_macro,
+    inlining,
 }

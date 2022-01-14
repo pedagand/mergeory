@@ -92,6 +92,13 @@ impl<T> Colored<T> {
         }
     }
 
+    pub fn map<U>(self, map_fn: impl FnOnce(T) -> U) -> Colored<U> {
+        Colored {
+            data: map_fn(self.data),
+            colors: self.colors,
+        }
+    }
+
     pub fn merge<L, R>(
         left: Colored<L>,
         right: Colored<R>,

@@ -1,9 +1,9 @@
-use super::id_merger::merge_id_ins;
+use super::subst::merge_id_ins;
 use super::{
-    Colored, DelNode, InsNode, InsSeqNode, MetavarInsReplacement, SpineNode, SpineSeqNode,
+    DelNode, InsNode, MergedInsNode, MergedSpineNode, MergedSpineSeqNode, MetavarInsReplacement,
 };
 use crate::generic_tree::{Subtree, Tree};
-use crate::SynNode;
+use crate::{Colored, Metavariable, SynNode};
 
 struct MetavarRemover<'t> {
     metavar_replacements: Vec<Option<InsNode<'t>>>,
@@ -87,41 +87,41 @@ impl<'t> MetavarRemover<'t> {
 
     fn remove_metavars_in_spine_node(
         &mut self,
-        diff: SpineNode<'t>,
+        diff: MergedSpineNode<'t>,
         source: &SynNode<'t>,
-    ) -> Option<SpineNode<'t>> {
+    ) -> Option<MergedSpineNode<'t>> {
         Some(match diff {
-            SpineNode::Spine(spine) => {
-                SpineNode::Spine(merge_with_syn(spine, source, |spine_ch, source_ch| {
+            MergedSpineNode::Spine(spine) => {
+                MergedSpineNode::Spine(merge_with_syn(spine, source, |spine_ch, source_ch| {
                     self.remove_metavars_in_spine_seq(spine_ch, source_ch)
                 })?)
             }
-            SpineNode::Unchanged => SpineNode::from_syn(source),
-            SpineNode::Changed(del, ins) => {
-                SpineNode::Changed(self.remove_metavars_in_del_node(del, source)?, ins)
+            MergedSpineNode::Unchanged => MergedSpineNode::from_syn(source),
+            MergedSpineNode::Changed(del, ins) => {
+                MergedSpineNode::Changed(self.remove_metavars_in_del_node(del, source)?, ins)
             }
         })
     }
 
     fn remove_metavars_in_spine_seq(
         &mut self,
-        spine_seq: Vec<SpineSeqNode<'t>>,
+        spine_seq: Vec<MergedSpineSeqNode<'t>>,
         source_seq: &[Subtree<SynNode<'t>>],
-    ) -> Option<Vec<SpineSeqNode<'t>>> {
+    ) -> Option<Vec<MergedSpineSeqNode<'t>>> {
         let mut source_iter = source_seq.iter();
         let result_seq = spine_seq
             .into_iter()
             .map(|diff_node| {
                 Some(match diff_node {
-                    SpineSeqNode::Zipped(node) => {
+                    MergedSpineSeqNode::Zipped(node) => {
                         let source_node = source_iter.next()?;
-                        SpineSeqNode::Zipped(Subtree::merge(
+                        MergedSpineSeqNode::Zipped(Subtree::merge(
                             node,
                             source_node.as_ref(),
                             |diff, source| self.remove_metavars_in_spine_node(diff, source),
                         )?)
                     }
-                    SpineSeqNode::Deleted(del_list) => SpineSeqNode::Deleted(
+                    MergedSpineSeqNode::Deleted(del_list) => MergedSpineSeqNode::Deleted(
                         del_list
                             .into_iter()
                             .map(|del| {
@@ -132,18 +132,19 @@ impl<'t> MetavarRemover<'t> {
                             })
                             .collect::<Option<_>>()?,
                     ),
-                    SpineSeqNode::DeleteConflict(field, del, ins) => {
+                    MergedSpineSeqNode::DeleteConflict(field, del, ins) => {
                         let source_node = source_iter.next()?;
                         if source_node.field != field {
                             return None;
                         }
-                        SpineSeqNode::DeleteConflict(
+                        MergedSpineSeqNode::DeleteConflict(
                             field,
                             self.remove_metavars_in_del_node(del, &source_node.node)?,
                             ins,
                         )
                     }
-                    SpineSeqNode::Inserted(_) | SpineSeqNode::InsertOrderConflict(_) => diff_node,
+                    MergedSpineSeqNode::Inserted(_)
+                    | MergedSpineSeqNode::InsertOrderConflict(..) => diff_node,
                 })
             })
             .collect();
@@ -156,41 +157,40 @@ impl<'t> MetavarRemover<'t> {
         }
     }
 
+    fn get_metavar_replacement(&self, mv: Metavariable) -> InsNode<'t> {
+        if self.metavar_replacements.len() <= mv.0 {
+            panic!("A metavariable appears in insertion but never in deletion");
+        }
+        if !self.metavar_conflict[mv.0] {
+            match &self.metavar_replacements[mv.0] {
+                None => panic!("A metavariable appears in insertion but never in deletion"),
+                Some(repl) => repl.clone(),
+            }
+        } else {
+            InsNode::Elided(Colored::new_white(mv))
+        }
+    }
+
     fn replace_metavars_in_ins_node(&self, node: &mut InsNode<'t>) {
         match node {
             InsNode::InPlace(ins) => ins
                 .data
-                .visit_mut(|ch| self.replace_metavars_in_ins_seq_node(ch)),
-            InsNode::Elided(mv) => {
-                if self.metavar_replacements.len() <= mv.0 {
-                    panic!("A metavariable appears in insertion but never in deletion");
-                }
-                if !self.metavar_conflict[mv.0] {
-                    match &self.metavar_replacements[mv.0] {
-                        None => panic!("A metavariable appears in insertion but never in deletion"),
-                        Some(repl) => *node = repl.clone(),
-                    }
-                }
-            }
-            InsNode::Conflict(ins_list) => {
-                for ins in ins_list {
-                    self.replace_metavars_in_ins_node(ins)
-                }
-            }
+                .visit_mut(|ch| self.replace_metavars_in_ins_node(&mut ch.node)),
+            InsNode::Elided(mv) => *node = self.get_metavar_replacement(mv.data),
         }
     }
 
-    fn replace_metavars_in_ins_seq_node(&self, node: &mut InsSeqNode<'t>) {
+    fn replace_metavars_in_merged_ins_node(&self, node: &mut MergedInsNode<'t>) {
         match node {
-            InsSeqNode::Node(node) | InsSeqNode::DeleteConflict(node) => {
-                self.replace_metavars_in_ins_node(&mut node.node)
+            MergedInsNode::InPlace(ins) => ins
+                .data
+                .visit_mut(|ch| self.replace_metavars_in_merged_ins_node(&mut ch.node)),
+            MergedInsNode::Elided(mv) => {
+                *node = MergedInsNode::from_simple_ins(self.get_metavar_replacement(mv.data))
             }
-            InsSeqNode::InsertOrderConflict(conflict) => {
-                for ins_list in conflict {
-                    for ins in &mut ins_list.data {
-                        self.replace_metavars_in_ins_node(&mut ins.node)
-                    }
-                }
+            MergedInsNode::Conflict(left_ins, right_ins) => {
+                self.replace_metavars_in_ins_node(left_ins);
+                self.replace_metavars_in_ins_node(right_ins);
             }
         }
     }
@@ -211,38 +211,40 @@ impl<'t> MetavarRemover<'t> {
         }
     }
 
-    fn replace_metavars_in_spine_node(&self, node: &mut SpineNode<'t>) {
+    fn replace_metavars_in_spine_node(&self, node: &mut MergedSpineNode<'t>) {
         match node {
-            SpineNode::Spine(spine) => {
+            MergedSpineNode::Spine(spine) => {
                 spine.visit_mut(|ch| self.replace_metavars_in_spine_seq_node(ch))
             }
-            SpineNode::Unchanged => panic!("An unchanged node not was not removed in the spine"),
-            SpineNode::Changed(del, ins) => {
+            MergedSpineNode::Unchanged => {
+                panic!("An unchanged node not was not removed in the spine")
+            }
+            MergedSpineNode::Changed(del, ins) => {
                 self.replace_metavars_in_del_node(del);
-                self.replace_metavars_in_ins_node(ins);
+                self.replace_metavars_in_merged_ins_node(ins);
             }
         }
     }
 
-    fn replace_metavars_in_spine_seq_node(&self, node: &mut SpineSeqNode<'t>) {
+    fn replace_metavars_in_spine_seq_node(&self, node: &mut MergedSpineSeqNode<'t>) {
         match node {
-            SpineSeqNode::Zipped(node) => self.replace_metavars_in_spine_node(&mut node.node),
-            SpineSeqNode::Deleted(del_list) => {
+            MergedSpineSeqNode::Zipped(node) => self.replace_metavars_in_spine_node(&mut node.node),
+            MergedSpineSeqNode::Deleted(del_list) => {
                 for del in del_list {
                     self.replace_metavars_in_del_node(&mut del.node)
                 }
             }
-            SpineSeqNode::DeleteConflict(_, del, ins) => {
+            MergedSpineSeqNode::DeleteConflict(_, del, ins) => {
                 self.replace_metavars_in_del_node(del);
                 self.replace_metavars_in_ins_node(ins);
             }
-            SpineSeqNode::Inserted(ins_list) => {
+            MergedSpineSeqNode::Inserted(ins_list) => {
                 for ins in &mut ins_list.data {
                     self.replace_metavars_in_ins_node(&mut ins.node)
                 }
             }
-            SpineSeqNode::InsertOrderConflict(ins_conflict) => {
-                for ins_list in ins_conflict {
+            MergedSpineSeqNode::InsertOrderConflict(left_ins, right_ins) => {
+                for ins_list in [left_ins, right_ins] {
                     for ins in &mut ins_list.data {
                         self.replace_metavars_in_ins_node(&mut ins.node)
                     }
@@ -252,7 +254,10 @@ impl<'t> MetavarRemover<'t> {
     }
 }
 
-pub fn remove_metavars<'t>(diff: SpineNode<'t>, source: &SynNode<'t>) -> Option<SpineNode<'t>> {
+pub fn remove_metavars<'t>(
+    diff: MergedSpineNode<'t>,
+    source: &SynNode<'t>,
+) -> Option<MergedSpineNode<'t>> {
     let mut remover = MetavarRemover {
         metavar_replacements: Vec::new(),
         metavar_conflict: Vec::new(),

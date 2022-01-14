@@ -1,7 +1,8 @@
 use super::alignment::{AlignedNode, AlignedSeqNode};
 use super::weight::{HashSum, WeightedNode};
-use super::{ChangeNode, Metavariable, SpineNode, SpineSeqNode};
+use super::{ChangeNode, DiffSpineNode, DiffSpineSeqNode, Metavariable};
 use crate::generic_tree::Tree;
+use crate::{Color, Colored};
 use std::collections::{HashMap, HashSet};
 
 fn collect_node_hashes(tree: &WeightedNode, hash_set: &mut HashSet<HashSum>) {
@@ -191,14 +192,16 @@ fn elide_tree<'t>(
     tree: &WeightedNode<'t>,
     elisions: &HashSet<HashSum>,
     name_generator: &mut MetavarNameGenerator,
+    color: Color,
 ) -> ChangeNode<'t> {
     if elisions.contains(&tree.hash) {
-        ChangeNode::Elided(name_generator.get(tree.hash))
+        ChangeNode::Elided(Colored::with_color(color, name_generator.get(tree.hash)))
     } else {
-        ChangeNode::InPlace(
+        ChangeNode::InPlace(Colored::with_color(
+            color,
             tree.node
-                .map_subtrees(|sub| elide_tree(sub, elisions, name_generator)),
-        )
+                .map_subtrees(|sub| elide_tree(sub, elisions, name_generator, color)),
+        ))
     }
 }
 
@@ -206,34 +209,40 @@ fn elide_and_keep_del<'t>(
     tree: &AlignedNode<'t>,
     elisions: &HashSet<HashSum>,
     name_generator: &mut MetavarNameGenerator,
+    color: Color,
 ) -> ChangeNode<'t> {
     match tree {
         AlignedNode::Spine(_, del_hash, _) if elisions.contains(del_hash) => {
-            ChangeNode::Elided(name_generator.get(*del_hash))
+            ChangeNode::Elided(Colored::with_color(color, name_generator.get(*del_hash)))
         }
-        AlignedNode::Spine(spine, _, _) => ChangeNode::InPlace(spine.convert(|sub| {
-            let mut del_sub = Vec::new();
-            for sub_node in sub {
-                match sub_node {
-                    AlignedSeqNode::Zipped(node) => del_sub.push(
-                        node.as_ref()
-                            .map(|node| elide_and_keep_del(node, elisions, name_generator)),
-                    ),
-                    AlignedSeqNode::Deleted(del_list) => {
-                        for del in del_list {
-                            del_sub.push(
-                                del.as_ref()
-                                    .map(|del| elide_tree(del, elisions, name_generator)),
-                            )
+        AlignedNode::Spine(spine, _, _) => {
+            ChangeNode::InPlace(Colored::with_color(
+                color,
+                spine.convert(|sub| {
+                    let mut del_sub = Vec::new();
+                    for sub_node in sub {
+                        match sub_node {
+                            AlignedSeqNode::Zipped(node) => {
+                                del_sub.push(node.as_ref().map(|node| {
+                                    elide_and_keep_del(node, elisions, name_generator, color)
+                                }))
+                            }
+                            AlignedSeqNode::Deleted(del_list) => {
+                                for del in del_list {
+                                    del_sub.push(del.as_ref().map(|del| {
+                                        elide_tree(del, elisions, name_generator, color)
+                                    }))
+                                }
+                            }
+                            AlignedSeqNode::Inserted(_) => (),
                         }
                     }
-                    AlignedSeqNode::Inserted(_) => (),
-                }
-            }
-            del_sub
-        })),
-        AlignedNode::Unchanged(node) => elide_tree(node, elisions, name_generator),
-        AlignedNode::Changed(del, _) => elide_tree(del, elisions, name_generator),
+                    del_sub
+                }),
+            ))
+        }
+        AlignedNode::Unchanged(node) => elide_tree(node, elisions, name_generator, color),
+        AlignedNode::Changed(del, _) => elide_tree(del, elisions, name_generator, color),
     }
 }
 
@@ -241,34 +250,40 @@ fn elide_and_keep_ins<'t>(
     tree: &AlignedNode<'t>,
     elisions: &HashSet<HashSum>,
     name_generator: &mut MetavarNameGenerator,
+    color: Color,
 ) -> ChangeNode<'t> {
     match tree {
         AlignedNode::Spine(_, _, ins_hash) if elisions.contains(ins_hash) => {
-            ChangeNode::Elided(name_generator.get(*ins_hash))
+            ChangeNode::Elided(Colored::with_color(color, name_generator.get(*ins_hash)))
         }
-        AlignedNode::Spine(spine, _, _) => ChangeNode::InPlace(spine.convert(|sub| {
-            let mut ins_sub = Vec::new();
-            for sub_node in sub {
-                match sub_node {
-                    AlignedSeqNode::Zipped(node) => ins_sub.push(
-                        node.as_ref()
-                            .map(|node| elide_and_keep_ins(node, elisions, name_generator)),
-                    ),
-                    AlignedSeqNode::Inserted(ins_list) => {
-                        for ins in ins_list {
-                            ins_sub.push(
-                                ins.as_ref()
-                                    .map(|ins| elide_tree(ins, elisions, name_generator)),
-                            )
+        AlignedNode::Spine(spine, _, _) => {
+            ChangeNode::InPlace(Colored::with_color(
+                color,
+                spine.convert(|sub| {
+                    let mut ins_sub = Vec::new();
+                    for sub_node in sub {
+                        match sub_node {
+                            AlignedSeqNode::Zipped(node) => {
+                                ins_sub.push(node.as_ref().map(|node| {
+                                    elide_and_keep_ins(node, elisions, name_generator, color)
+                                }))
+                            }
+                            AlignedSeqNode::Inserted(ins_list) => {
+                                for ins in ins_list {
+                                    ins_sub.push(ins.as_ref().map(|ins| {
+                                        elide_tree(ins, elisions, name_generator, color)
+                                    }))
+                                }
+                            }
+                            AlignedSeqNode::Deleted(_) => (),
                         }
                     }
-                    AlignedSeqNode::Deleted(_) => (),
-                }
-            }
-            ins_sub
-        })),
-        AlignedNode::Unchanged(node) => elide_tree(node, elisions, name_generator),
-        AlignedNode::Changed(_, ins) => elide_tree(ins, elisions, name_generator),
+                    ins_sub
+                }),
+            ))
+        }
+        AlignedNode::Unchanged(node) => elide_tree(node, elisions, name_generator, color),
+        AlignedNode::Changed(_, ins) => elide_tree(ins, elisions, name_generator, color),
     }
 }
 
@@ -276,27 +291,28 @@ fn elide_change_nodes<'t>(
     tree: &AlignedNode<'t>,
     elisions: &HashSet<HashSum>,
     name_generator: &mut MetavarNameGenerator,
-) -> SpineNode<'t> {
+    color: Color,
+) -> DiffSpineNode<'t> {
     match tree {
         AlignedNode::Spine(spine, del_hash, ins_hash) => {
             if elisions.contains(del_hash) || elisions.contains(ins_hash) {
-                SpineNode::Changed(
-                    elide_and_keep_del(tree, elisions, name_generator),
-                    elide_and_keep_ins(tree, elisions, name_generator),
+                DiffSpineNode::Changed(
+                    elide_and_keep_del(tree, elisions, name_generator, color),
+                    elide_and_keep_ins(tree, elisions, name_generator, color),
                 )
             } else {
-                SpineNode::Spine(
-                    spine.map_children(|sub| elide_changed_subtree(sub, elisions, name_generator)),
-                )
+                DiffSpineNode::Spine(spine.map_children(|sub| {
+                    elide_changed_subtree(sub, elisions, name_generator, color)
+                }))
             }
         }
         AlignedNode::Unchanged(node) => match node.node {
-            Tree::Leaf(tok) => SpineNode::Spine(Tree::Leaf(tok)),
-            _ => SpineNode::Unchanged,
+            Tree::Leaf(tok) => DiffSpineNode::Spine(Tree::Leaf(tok)),
+            _ => DiffSpineNode::Unchanged,
         },
-        AlignedNode::Changed(del, ins) => SpineNode::Changed(
-            elide_tree(del, elisions, name_generator),
-            elide_tree(ins, elisions, name_generator),
+        AlignedNode::Changed(del, ins) => DiffSpineNode::Changed(
+            elide_tree(del, elisions, name_generator, color),
+            elide_tree(ins, elisions, name_generator, color),
         ),
     }
 }
@@ -305,42 +321,45 @@ fn elide_changed_subtree<'t>(
     subtree: &AlignedSeqNode<'t>,
     elisions: &HashSet<HashSum>,
     name_generator: &mut MetavarNameGenerator,
-) -> SpineSeqNode<'t> {
+    color: Color,
+) -> DiffSpineSeqNode<'t> {
     match subtree {
-        AlignedSeqNode::Zipped(node) => SpineSeqNode::Zipped(
+        AlignedSeqNode::Zipped(node) => DiffSpineSeqNode::Zipped(
             node.as_ref()
-                .map(|node| elide_change_nodes(node, elisions, name_generator)),
+                .map(|node| elide_change_nodes(node, elisions, name_generator, color)),
         ),
-        AlignedSeqNode::Deleted(del_list) => SpineSeqNode::Deleted(
+        AlignedSeqNode::Deleted(del_list) => DiffSpineSeqNode::Deleted(
             del_list
                 .iter()
                 .map(|del| {
                     del.as_ref()
-                        .map(|del| elide_tree(del, elisions, name_generator))
+                        .map(|del| elide_tree(del, elisions, name_generator, color))
                 })
                 .collect(),
         ),
-        AlignedSeqNode::Inserted(ins_list) => SpineSeqNode::Inserted(
+        AlignedSeqNode::Inserted(ins_list) => DiffSpineSeqNode::Inserted(Colored::with_color(
+            color,
             ins_list
                 .iter()
                 .map(|ins| {
                     ins.as_ref()
-                        .map(|ins| elide_tree(ins, elisions, name_generator))
+                        .map(|ins| elide_tree(ins, elisions, name_generator, color))
                 })
                 .collect(),
-        ),
+        )),
     }
 }
 
 pub fn find_metavariable_elisions<'t>(
     tree: &AlignedNode<'t>,
     skip_elisions: bool,
-) -> SpineNode<'t> {
+    color: Color,
+) -> DiffSpineNode<'t> {
     let elisions = if !skip_elisions {
         find_wanted_elisions(tree)
     } else {
         HashSet::new()
     };
     let mut name_generator = MetavarNameGenerator::default();
-    elide_change_nodes(tree, &elisions, &mut name_generator)
+    elide_change_nodes(tree, &elisions, &mut name_generator, color)
 }
