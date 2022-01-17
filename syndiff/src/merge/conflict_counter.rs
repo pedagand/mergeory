@@ -15,10 +15,11 @@ fn count_conflicts_in_del_node(node: &DelNode, counter: &mut usize) {
 
 fn count_conflicts_in_merged_ins_node(node: &MergedInsNode, counter: &mut usize) {
     match node {
-        MergedInsNode::InPlace(ins) => ins
-            .data
-            .visit(|ch| count_conflicts_in_merged_ins_node(&ch.node, counter)),
+        MergedInsNode::InPlace(ins) => {
+            ins.visit(|ch| count_conflicts_in_merged_ins_node(&ch.node, counter))
+        }
         MergedInsNode::Elided(_) => (),
+        MergedInsNode::SingleIns(_) => (),
         MergedInsNode::Conflict(..) => {
             *counter += 1;
         }

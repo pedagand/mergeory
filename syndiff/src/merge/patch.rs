@@ -16,11 +16,12 @@ fn standalone_ins_to_syn(node: InsNode) -> Option<SynNode> {
 
 fn standalone_merged_ins_to_syn(node: MergedInsNode) -> Option<SynNode> {
     match node {
-        MergedInsNode::InPlace(ins) => Some(SynNode(ins.data.try_convert_into(|ch| {
+        MergedInsNode::InPlace(ins) => Some(SynNode(ins.try_convert_into(|ch| {
             ch.into_iter()
                 .map(|sub| sub.try_map(standalone_merged_ins_to_syn))
                 .collect()
         })?)),
+        MergedInsNode::SingleIns(ins) => standalone_ins_to_syn(ins),
         _ => None,
     }
 }
@@ -46,7 +47,6 @@ fn keep_only_ins_from_standalone_spine_seq<'t>(
             MergedSpineSeqNode::Deleted(_) => Box::new(std::iter::empty()),
             MergedSpineSeqNode::Inserted(ins_list) => Box::new(
                 ins_list
-                    .data
                     .into_iter()
                     .map(|sub| sub.try_map(standalone_ins_to_syn)),
             ),

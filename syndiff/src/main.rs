@@ -6,8 +6,8 @@ use std::path::Path;
 use std::process::exit;
 use syndiff::{
     add_extra_blocks, apply_patch, canonicalize_metavars, compute_diff, count_conflicts,
-    merge_diffs, parse_source, remove_metavars, AnsiColoredTreeFormatter, Color,
-    PlainTreeFormatter, SynNode, TextColoredTreeFormatter,
+    merge_diffs, parse_source, remove_metavars, AnsiColoredTreeFormatter, PlainTreeFormatter,
+    SynNode, TextColoredTreeFormatter, TreeFormattable,
 };
 use tree_sitter::Parser;
 use tree_sitter_config::Config;
@@ -79,6 +79,14 @@ fn main() {
     });
 
     let extra_blocks = cmd_args.is_present("extra-blocks");
+    let no_elisions = cmd_args.is_present("no-elisions");
+    let color_mode = if cmd_args.is_present("text-colored") {
+        ColorMode::TextColored
+    } else if cmd_args.is_present("colored") {
+        ColorMode::AnsiColored
+    } else {
+        ColorMode::NoColors
+    };
 
     let origin_src = read_file(&origin_filename);
     let origin_tree = parse_tree(&origin_src, &origin_filename, &mut parser, extra_blocks);
@@ -94,19 +102,15 @@ fn main() {
 
     match cmd_args.value_of_os("second-modified-file") {
         None => {
-            let no_elisions =
-                cmd_args.is_present("no-elisions") || cmd_args.is_present("standalone");
-            compute_diff(
-                &origin_tree,
-                &first_modified_tree,
-                no_elisions,
-                Color::try_from(0).unwrap(),
-            )
-            .write_with(&mut PlainTreeFormatter::new(std::io::stdout().lock()))
-            .unwrap_or_else(|err| {
-                eprintln!("Unable to write output: {}", err);
-                exit(-1)
-            })
+            let diff_tree = compute_diff(&origin_tree, &first_modified_tree, no_elisions);
+            if cmd_args.is_present("standalone") {
+                let standalone_tree =
+                    remove_metavars(merge_diffs(&diff_tree, &diff_tree).unwrap(), &origin_tree)
+                        .unwrap();
+                print_tree(&standalone_tree, color_mode);
+            } else {
+                print_tree(&diff_tree, color_mode);
+            }
         }
         Some(second_modified_filename) => {
             let second_modified_src = read_file(&second_modified_filename);
@@ -117,55 +121,25 @@ fn main() {
                 extra_blocks,
             );
 
-            let first_diff = compute_diff(
-                &origin_tree,
-                &first_modified_tree,
-                cmd_args.is_present("no-elisions"),
-                Color::try_from(0).unwrap(),
-            );
-            let second_diff = compute_diff(
-                &origin_tree,
-                &second_modified_tree,
-                cmd_args.is_present("no-elisions"),
-                Color::try_from(1).unwrap(),
-            );
+            let first_diff = compute_diff(&origin_tree, &first_modified_tree, no_elisions);
+            let second_diff = compute_diff(&origin_tree, &second_modified_tree, no_elisions);
 
-            let mut merged_diff = merge_diffs(first_diff, second_diff).unwrap();
+            let mut merged_diff = merge_diffs(&first_diff, &second_diff).unwrap();
             canonicalize_metavars(&mut merged_diff);
             let nb_conflicts = count_conflicts(&merged_diff);
 
             if !cmd_args.is_present("quiet") {
                 if nb_conflicts == 0 && cmd_args.is_present("merge-files") {
                     let merged_tree = apply_patch(merged_diff, &origin_tree).unwrap();
-                    merged_tree
-                        .write_with(&mut PlainTreeFormatter::new(std::io::stdout().lock()))
-                        .unwrap_or_else(|err| {
-                            eprintln!("Unable to write output: {}", err);
-                            exit(-1)
-                        });
+                    print_tree(&merged_tree, color_mode);
                 } else {
                     let out_tree = if cmd_args.is_present("standalone") {
                         remove_metavars(merged_diff, &origin_tree).unwrap()
                     } else {
                         merged_diff
                     };
-                    if cmd_args.is_present("colored") || cmd_args.is_present("text-colored") {
-                        if cmd_args.is_present("text-colored") {
-                            out_tree.write_with(&mut TextColoredTreeFormatter::new(
-                                std::io::stdout().lock(),
-                            ))
-                        } else {
-                            out_tree.write_with(&mut AnsiColoredTreeFormatter::new(
-                                std::io::stdout().lock(),
-                            ))
-                        }
-                    } else {
-                        out_tree.write_with(&mut PlainTreeFormatter::new(std::io::stdout().lock()))
-                    }
-                    .unwrap_or_else(|err| {
-                        eprintln!("Unable to write output: {}", err);
-                        exit(-1)
-                    });
+
+                    print_tree(&out_tree, color_mode);
                 }
             }
 
@@ -196,4 +170,28 @@ fn parse_tree<'t>(
     } else {
         origin_tree
     }
+}
+
+enum ColorMode {
+    NoColors,
+    TextColored,
+    AnsiColored,
+}
+
+fn print_tree<T: TreeFormattable>(tree: &T, color_mode: ColorMode) {
+    match color_mode {
+        ColorMode::NoColors => {
+            tree.write_with(&mut PlainTreeFormatter::new(std::io::stdout().lock()))
+        }
+        ColorMode::TextColored => {
+            tree.write_with(&mut TextColoredTreeFormatter::new(std::io::stdout().lock()))
+        }
+        ColorMode::AnsiColored => {
+            tree.write_with(&mut AnsiColoredTreeFormatter::new(std::io::stdout().lock()))
+        }
+    }
+    .unwrap_or_else(|err| {
+        eprintln!("Unable to write output: {}", err);
+        exit(-1)
+    });
 }

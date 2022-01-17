@@ -1,10 +1,10 @@
-//use super::id_merger::{is_del_equivalent_to_ins, merge_id_ins};
+use super::colors::{Color, Colored};
 use super::merge_ins::MetavarInsReplacementList;
 use super::{
     DelNode, InsNode, MergedInsNode, MergedSpineNode, MergedSpineSeqNode, MetavarInsReplacement,
 };
 use crate::generic_tree::{Subtree, Tree};
-use crate::{ColorSet, Colored, Metavariable};
+use crate::Metavariable;
 
 enum ComputableSubst<T, U> {
     Pending(U),
@@ -55,59 +55,60 @@ impl<'t> Substituter<'t> {
         repl
     }
 
-    fn find_ins_subst(&mut self, mv: Metavariable) -> InsNode<'t> {
-        let subst = match std::mem::replace(&mut self.ins_subst[mv.0], ComputableSubst::Processing)
-        {
-            ComputableSubst::Computed(subst) => subst,
-            ComputableSubst::Pending(replacements) => {
-                self.ins_cycle_stack.push((mv, false));
-                let mut repl_ins = replacements
-                    .into_iter()
-                    .map(|repl| match repl {
-                        MetavarInsReplacement::InferFromDel => {
-                            // Build the insertion substitution from the deletion substitution
-                            infer_ins_from_del(&self.find_del_subst(mv))
-                        }
-                        MetavarInsReplacement::Inlined(mut ins) => {
-                            self.substitute_in_ins_node(&mut ins);
-                            ins
-                        }
-                    })
-                    .collect::<Vec<_>>();
-                let (cycle_mv, cycle) = self.ins_cycle_stack.pop().unwrap();
-                assert!(cycle_mv == mv);
-                if !cycle {
-                    // No cycle during computation on potential replacements, try to fuse them
-                    let last_ins = repl_ins.pop().unwrap();
-                    repl_ins
+    fn find_ins_subst(&mut self, mv: Colored<Metavariable>) -> InsNode<'t> {
+        let subst =
+            match std::mem::replace(&mut self.ins_subst[mv.data.0], ComputableSubst::Processing) {
+                ComputableSubst::Computed(subst) => subst,
+                ComputableSubst::Pending(replacements) => {
+                    self.ins_cycle_stack.push((mv.data, false));
+                    let mut repl_ins = replacements
                         .into_iter()
-                        .try_fold(last_ins, |acc, ins| merge_id_ins(&acc, &ins))
-                } else {
-                    None
-                }
-            }
-            ComputableSubst::Processing => {
-                // If a cycle occur in ins_subst, we should yield a conflict for all metavariables
-                // in that cycle.
-                for (stack_mv, cycle_flag) in self.ins_cycle_stack.iter_mut().rev() {
-                    *cycle_flag = true;
-                    if *stack_mv == mv {
-                        break;
+                        .map(|repl| match repl {
+                            MetavarInsReplacement::InferFromDel => {
+                                // Build the insertion substitution from the deletion substitution
+                                infer_ins_from_del(&self.find_del_subst(mv.data))
+                            }
+                            MetavarInsReplacement::Inlined(mut ins) => {
+                                self.substitute_in_ins_node(&mut ins);
+                                ins
+                            }
+                        })
+                        .collect::<Vec<_>>();
+                    let (cycle_mv, cycle) = self.ins_cycle_stack.pop().unwrap();
+                    assert!(cycle_mv == mv.data);
+                    if !cycle {
+                        // No cycle during computation on potential replacements, try to fuse them
+                        let last_ins = repl_ins.pop().unwrap();
+                        repl_ins
+                            .into_iter()
+                            .try_fold(last_ins, |acc, ins| merge_id_ins(&acc, &ins))
+                    } else {
+                        None
                     }
                 }
-                assert!(!self.ins_cycle_stack[0].1 || self.ins_cycle_stack[0].0 == mv);
-                None
-            }
-        };
+                ComputableSubst::Processing => {
+                    // If a cycle occur in ins_subst, we should yield a conflict for all metavariables
+                    // in that cycle.
+                    for (stack_mv, cycle_flag) in self.ins_cycle_stack.iter_mut().rev() {
+                        *cycle_flag = true;
+                        if *stack_mv == mv.data {
+                            break;
+                        }
+                    }
+                    assert!(!self.ins_cycle_stack[0].1 || self.ins_cycle_stack[0].0 == mv.data);
+                    None
+                }
+            };
         match subst {
             Some(subst) => {
-                self.ins_subst[mv.0] = ComputableSubst::Computed(Some(subst.clone()));
+                self.ins_subst[mv.data.0] = ComputableSubst::Computed(Some(subst.clone()));
                 subst
             }
             None => {
-                // Save conflict and return a simple white metavariable
-                self.ins_subst[mv.0] = ComputableSubst::Computed(None);
-                InsNode::Elided(Colored::new_white(mv))
+                // Save conflict and return the given metavariable (keep the color to help manual
+                // conflict resolution)
+                self.ins_subst[mv.data.0] = ComputableSubst::Computed(None);
+                InsNode::Elided(mv)
             }
         }
     }
@@ -119,7 +120,7 @@ impl<'t> Substituter<'t> {
                 .visit_mut(|sub| self.substitute_in_del_node(&mut sub.node)),
             DelNode::Elided(mv) => {
                 let mut subst = self.find_del_subst(mv.data);
-                replace_colors(&mut subst, mv.colors);
+                replace_color(&mut subst, mv.color);
                 *node = subst;
             }
             DelNode::MetavariableConflict(_, del, _) => {
@@ -134,25 +135,26 @@ impl<'t> Substituter<'t> {
             InsNode::InPlace(ins) => ins
                 .data
                 .visit_mut(|sub| self.substitute_in_ins_node(&mut sub.node)),
-            InsNode::Elided(mv) => *node = self.find_ins_subst(mv.data),
+            InsNode::Elided(mv) => *node = self.find_ins_subst(*mv),
         }
     }
 
     fn substitute_in_merged_ins_node(&mut self, node: &mut MergedInsNode<'t>) {
         match node {
-            MergedInsNode::InPlace(ins) => ins
-                .data
-                .visit_mut(|sub| self.substitute_in_merged_ins_node(&mut sub.node)),
-            MergedInsNode::Elided(mv) => {
-                *node = MergedInsNode::from_simple_ins(self.find_ins_subst(mv.data))
+            MergedInsNode::InPlace(ins) => {
+                ins.visit_mut(|sub| self.substitute_in_merged_ins_node(&mut sub.node))
             }
+            MergedInsNode::Elided(mv) => {
+                *node = MergedInsNode::SingleIns(self.find_ins_subst(Colored::new_both(*mv)))
+            }
+            MergedInsNode::SingleIns(ins) => self.substitute_in_ins_node(ins),
             MergedInsNode::Conflict(left_ins, right_ins) => {
                 self.substitute_in_ins_node(left_ins);
                 self.substitute_in_ins_node(right_ins);
 
                 // Try to solve the insertion conflict after substitution
                 match merge_id_ins(&left_ins, &right_ins) {
-                    Some(merged_ins) => *node = MergedInsNode::from_simple_ins(merged_ins),
+                    Some(merged_ins) => *node = MergedInsNode::SingleIns(merged_ins),
                     None => (),
                 }
             }
@@ -207,33 +209,28 @@ impl<'t> Substituter<'t> {
                     }
                 }
                 MergedSpineSeqNode::Inserted(mut ins_seq) => {
-                    for ins in &mut ins_seq.data {
+                    for ins in &mut ins_seq {
                         self.substitute_in_ins_node(&mut ins.node)
                     }
                     seq.push(MergedSpineSeqNode::Inserted(ins_seq))
                 }
                 MergedSpineSeqNode::InsertOrderConflict(mut left_ins_seq, mut right_ins_seq) => {
                     for ins_seq in [&mut left_ins_seq, &mut right_ins_seq] {
-                        for ins in &mut ins_seq.data {
+                        for ins in ins_seq {
                             self.substitute_in_ins_node(&mut ins.node)
                         }
                     }
 
                     // Try to resolve the merge conflict after the substitutions
-                    match Colored::merge(
-                        left_ins_seq.as_ref(),
-                        right_ins_seq.as_ref(),
-                        |left, right| {
-                            if left.len() != right.len() {
-                                return None;
-                            }
-
-                            left.iter()
-                                .zip(right)
-                                .map(|(l, r)| Subtree::merge(l.as_ref(), r.as_ref(), merge_id_ins))
-                                .collect()
-                        },
-                    ) {
+                    match if left_ins_seq.len() == right_ins_seq.len() {
+                        left_ins_seq
+                            .iter()
+                            .zip(&right_ins_seq)
+                            .map(|(l, r)| Subtree::merge(l.as_ref(), r.as_ref(), merge_id_ins))
+                            .collect()
+                    } else {
+                        None
+                    } {
                         Some(merged_ins_seq) => {
                             seq.push(MergedSpineSeqNode::Inserted(merged_ins_seq))
                         }
@@ -317,15 +314,15 @@ impl<'t> Substituter<'t> {
     }
 }
 
-fn replace_colors(node: &mut DelNode, colors: ColorSet) {
+fn replace_color(node: &mut DelNode, color: Color) {
     match node {
         DelNode::InPlace(del) => {
             del.data
-                .visit_mut(|sub| replace_colors(&mut sub.node, colors));
-            del.colors = colors;
+                .visit_mut(|sub| replace_color(&mut sub.node, color));
+            del.color = color;
         }
-        DelNode::Elided(mv) => mv.colors = colors,
-        DelNode::MetavariableConflict(_, del, _) => replace_colors(del, colors),
+        DelNode::Elided(mv) => mv.color = color,
+        DelNode::MetavariableConflict(_, del, _) => replace_color(del, color),
     }
 }
 

@@ -1,5 +1,6 @@
+use super::colors::{ColoredChangeNode, ColoredSpineNode, ColoredSpineSeqNode};
 use super::{DelNode, MergedInsNode, MergedSpineNode, MergedSpineSeqNode, MetavarInsReplacement};
-use crate::diff::{ChangeNode, DiffSpineNode, DiffSpineSeqNode, Metavariable};
+use crate::Metavariable;
 
 pub struct MetavarRenamer {
     new_metavars: Vec<Option<Metavariable>>,
@@ -19,22 +20,22 @@ impl MetavarRenamer {
     }
 }
 
-fn rename_metavars_in_change(change: &mut ChangeNode, renamer: &mut MetavarRenamer) {
+fn rename_metavars_in_change(change: &mut ColoredChangeNode, renamer: &mut MetavarRenamer) {
     match change {
-        ChangeNode::InPlace(change) => change
+        ColoredChangeNode::InPlace(change) => change
             .data
             .visit_mut(|sub| rename_metavars_in_change(&mut sub.node, renamer)),
-        ChangeNode::Elided(mv) => mv.data = renamer.rename(mv.data),
+        ColoredChangeNode::Elided(mv) => mv.data = renamer.rename(mv.data),
     }
 }
 
-fn rename_metavars_in_diff_spine(spine: &mut DiffSpineNode, renamer: &mut MetavarRenamer) {
+fn rename_metavars_in_diff_spine(spine: &mut ColoredSpineNode, renamer: &mut MetavarRenamer) {
     match spine {
-        DiffSpineNode::Spine(spine) => {
+        ColoredSpineNode::Spine(spine) => {
             spine.visit_mut(|sub| rename_metavars_in_diff_spine_subtree(sub, renamer))
         }
-        DiffSpineNode::Unchanged => (),
-        DiffSpineNode::Changed(del, ins) => {
+        ColoredSpineNode::Unchanged => (),
+        ColoredSpineNode::Changed(del, ins) => {
             rename_metavars_in_change(del, renamer);
             rename_metavars_in_change(ins, renamer);
         }
@@ -42,18 +43,20 @@ fn rename_metavars_in_diff_spine(spine: &mut DiffSpineNode, renamer: &mut Metava
 }
 
 fn rename_metavars_in_diff_spine_subtree(
-    subtree: &mut DiffSpineSeqNode,
+    subtree: &mut ColoredSpineSeqNode,
     renamer: &mut MetavarRenamer,
 ) {
     match subtree {
-        DiffSpineSeqNode::Zipped(spine) => rename_metavars_in_diff_spine(&mut spine.node, renamer),
-        DiffSpineSeqNode::Deleted(del_list) => {
+        ColoredSpineSeqNode::Zipped(spine) => {
+            rename_metavars_in_diff_spine(&mut spine.node, renamer)
+        }
+        ColoredSpineSeqNode::Deleted(del_list) => {
             for del in del_list {
                 rename_metavars_in_change(&mut del.node, renamer);
             }
         }
-        DiffSpineSeqNode::Inserted(ins_list) => {
-            for ins in &mut ins_list.data {
+        ColoredSpineSeqNode::Inserted(ins_list) => {
+            for ins in ins_list {
                 rename_metavars_in_change(&mut ins.node, renamer);
             }
         }
@@ -78,10 +81,11 @@ fn rename_metavars_in_del(del: &mut DelNode, renamer: &mut MetavarRenamer) {
 
 fn rename_metavars_in_merged_ins(ins: &mut MergedInsNode, renamer: &mut MetavarRenamer) {
     match ins {
-        MergedInsNode::InPlace(ins) => ins
-            .data
-            .visit_mut(|sub| rename_metavars_in_merged_ins(&mut sub.node, renamer)),
-        MergedInsNode::Elided(mv) => mv.data = renamer.rename(mv.data),
+        MergedInsNode::InPlace(ins) => {
+            ins.visit_mut(|sub| rename_metavars_in_merged_ins(&mut sub.node, renamer))
+        }
+        MergedInsNode::Elided(mv) => *mv = renamer.rename(*mv),
+        MergedInsNode::SingleIns(ins) => rename_metavars_in_change(ins, renamer),
         MergedInsNode::Conflict(left_ins, right_ins) => {
             rename_metavars_in_change(left_ins, renamer);
             rename_metavars_in_change(right_ins, renamer);
@@ -120,13 +124,13 @@ fn rename_metavars_in_merged_spine_subtree(
             rename_metavars_in_change(ins, renamer);
         }
         MergedSpineSeqNode::Inserted(ins_list) => {
-            for ins in &mut ins_list.data {
+            for ins in ins_list {
                 rename_metavars_in_change(&mut ins.node, renamer);
             }
         }
         MergedSpineSeqNode::InsertOrderConflict(left_ins_list, right_ins_list) => {
             for ins_list in [left_ins_list, right_ins_list] {
-                for ins in &mut ins_list.data {
+                for ins in ins_list {
                     rename_metavars_in_change(&mut ins.node, renamer);
                 }
             }
@@ -134,7 +138,7 @@ fn rename_metavars_in_merged_spine_subtree(
     }
 }
 
-pub fn rename_metavars(input: &mut DiffSpineNode, first_metavar: usize) -> usize {
+pub fn rename_metavars(input: &mut ColoredSpineNode, first_metavar: usize) -> usize {
     let mut renamer = MetavarRenamer {
         new_metavars: Vec::new(),
         next_metavar: first_metavar,

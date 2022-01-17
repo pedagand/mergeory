@@ -1,4 +1,4 @@
-use crate::tree_formatter::TreeFormatter;
+use crate::tree_formatter::{TreeFormattable, TreeFormatter};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
@@ -160,20 +160,13 @@ impl<'t, T> Tree<'t, T> {
             Tree::Leaf(tok) => (Tree::Leaf(tok), Tree::Leaf(tok)),
         }
     }
+}
 
-    pub fn write_with<F: TreeFormatter>(
-        &self,
-        formatter: &mut F,
-        mut write_child_fn: impl FnMut(&T, &mut F) -> std::io::Result<()>,
-    ) -> std::io::Result<()> {
+impl<'t, T: TreeFormattable> TreeFormattable for Tree<'t, T> {
+    fn write_with<F: TreeFormatter>(&self, fmt: &mut F) -> std::io::Result<()> {
         match self {
-            Tree::Node(_, children) => {
-                for ch in children {
-                    write_child_fn(ch, formatter)?
-                }
-                Ok(())
-            }
-            Tree::Leaf(tok) => formatter.write_token(tok.bytes),
+            Tree::Node(_, children) => children.write_with(fmt),
+            Tree::Leaf(tok) => fmt.write_token(tok.bytes),
         }
     }
 }
@@ -223,6 +216,12 @@ impl<T> Subtree<T> {
             field: left.field,
             node: merge_fn(left.node, right.node)?,
         })
+    }
+}
+
+impl<T: TreeFormattable> TreeFormattable for Subtree<T> {
+    fn write_with<F: TreeFormatter>(&self, fmt: &mut F) -> std::io::Result<()> {
+        self.node.write_with(fmt)
     }
 }
 

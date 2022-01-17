@@ -1,12 +1,12 @@
 use crate::generic_tree::{NodeKind, Subtree, Token, Tree};
-use crate::tree_formatter::TreeFormatter;
+use crate::tree_formatter::{TreeFormattable, TreeFormatter};
 use tree_sitter::Parser;
 
 pub struct SynNode<'t>(pub Tree<'t, Subtree<SynNode<'t>>>);
 
-impl<'t> SynNode<'t> {
-    pub fn write_with(&self, output: &mut impl TreeFormatter) -> std::io::Result<()> {
-        self.0.write_with(output, |ch, fmt| ch.node.write_with(fmt))
+impl<'t> TreeFormattable for SynNode<'t> {
+    fn write_with<F: TreeFormatter>(&self, fmt: &mut F) -> std::io::Result<()> {
+        self.0.write_with(fmt)
     }
 }
 

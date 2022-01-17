@@ -1,8 +1,7 @@
 use super::align_spine::{AlignedSpineNode, AlignedSpineSeqNode, InsSpineNode, InsSpineSeqNode};
+use super::colors::{Colored, ColoredChangeNode as ChangeNode};
 use super::{DelNode, MergedInsNode, MetavarInsReplacement};
-use crate::diff::ChangeNode;
 use crate::generic_tree::{FieldId, Subtree, Tree};
-use crate::Colored;
 
 pub enum InsMergedSpineNode<'t> {
     Spine(Tree<'t, InsMergedSpineSeqNode<'t>>),
@@ -14,11 +13,8 @@ pub enum InsMergedSpineSeqNode<'t> {
     Zipped(Subtree<InsMergedSpineNode<'t>>),
     BothDeleted(Option<FieldId>, DelNode<'t>, DelNode<'t>),
     DeleteConflict(Option<FieldId>, DelNode<'t>, DelNode<'t>, ChangeNode<'t>),
-    Inserted(Colored<Vec<Subtree<ChangeNode<'t>>>>),
-    InsertOrderConflict(
-        Colored<Vec<Subtree<ChangeNode<'t>>>>,
-        Colored<Vec<Subtree<ChangeNode<'t>>>>,
-    ),
+    Inserted(Vec<Subtree<ChangeNode<'t>>>),
+    InsertOrderConflict(Vec<Subtree<ChangeNode<'t>>>, Vec<Subtree<ChangeNode<'t>>>),
 }
 
 pub type MetavarInsReplacementList<'t> = Vec<MetavarInsReplacement<'t>>;
@@ -29,8 +25,8 @@ fn merge_ins_nodes<'t>(left: ChangeNode<'t>, right: ChangeNode<'t>) -> MergedIns
             if Tree::compare_subtrees(&left_node.data, &right_node.data, |_, _| true) =>
         {
             MergedInsNode::InPlace(
-                Colored::merge(left_node, right_node, |l, r| {
-                    Tree::merge_subtrees_into(l, r, |l, r| Some(merge_ins_nodes(l, r)))
+                Tree::merge_subtrees_into(left_node.data, right_node.data, |l, r| {
+                    Some(merge_ins_nodes(l, r))
                 })
                 .unwrap(),
             )
@@ -58,7 +54,7 @@ fn flatten_ins_spine_seq(ins_spine_seq: Vec<InsSpineSeqNode>) -> Vec<Subtree<Cha
             }
             InsSpineSeqNode::Deleted => (),
             InsSpineSeqNode::Inserted(ins_list) => {
-                for ins in ins_list.data {
+                for ins in ins_list {
                     ins_seq.push(ins)
                 }
             }
@@ -121,7 +117,7 @@ fn inline_ins_in_del<'t>(
                     inline_ins_seq_in_del(ins, del, metavars_status)
                 })
                 .unwrap(),
-                colors: del_subtree.colors,
+                color: del_subtree.color,
             })
         }
         (InsSpineNode::Changed(_), ChangeNode::InPlace(_)) => {
@@ -184,7 +180,7 @@ fn merge_ins_in_spine<'t>(
         AlignedSpineNode::Unchanged => InsMergedSpineNode::Unchanged,
         AlignedSpineNode::OneChange(del, ins) => InsMergedSpineNode::OneChange(
             register_kept_metavars(del, metavars_status),
-            MergedInsNode::from_simple_ins(ins),
+            MergedInsNode::SingleIns(ins),
         ),
         AlignedSpineNode::BothChanged(left_del, left_ins, right_del, right_ins) => {
             match (
@@ -199,12 +195,12 @@ fn merge_ins_in_spine<'t>(
                 (true, false) => InsMergedSpineNode::BothChanged(
                     inline_ins_in_del(left_ins, right_del, metavars_status),
                     register_kept_metavars(left_del, metavars_status),
-                    MergedInsNode::from_simple_ins(flatten_ins_spine(right_ins)),
+                    MergedInsNode::SingleIns(flatten_ins_spine(right_ins)),
                 ),
                 (false, true) => InsMergedSpineNode::BothChanged(
                     inline_ins_in_del(right_ins, left_del, metavars_status),
                     register_kept_metavars(right_del, metavars_status),
-                    MergedInsNode::from_simple_ins(flatten_ins_spine(left_ins)),
+                    MergedInsNode::SingleIns(flatten_ins_spine(left_ins)),
                 ),
             }
         }

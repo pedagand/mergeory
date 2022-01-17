@@ -1,9 +1,10 @@
+use super::colors::Colored;
 use super::subst::merge_id_ins;
 use super::{
     DelNode, InsNode, MergedInsNode, MergedSpineNode, MergedSpineSeqNode, MetavarInsReplacement,
 };
 use crate::generic_tree::{Subtree, Tree};
-use crate::{Colored, Metavariable, SynNode};
+use crate::{Metavariable, SynNode};
 
 struct MetavarRemover<'t> {
     metavar_replacements: Vec<Option<InsNode<'t>>>,
@@ -50,7 +51,7 @@ impl<'t> MetavarRemover<'t> {
                         })
                         .collect()
                 })?,
-                colors: d.colors,
+                color: d.color,
             }),
             DelNode::Elided(mv) => {
                 let mv_id = mv.data.0;
@@ -67,7 +68,7 @@ impl<'t> MetavarRemover<'t> {
                         merge_id_ins(cur_repl, &ins_repl)?;
                     }
                 }
-                DelNode::from_syn(source, mv.colors)
+                DelNode::from_syn(source, mv.color)
             }
             DelNode::MetavariableConflict(mv, del, repl) => {
                 if self.metavar_replacements.len() <= mv.0 {
@@ -157,17 +158,17 @@ impl<'t> MetavarRemover<'t> {
         }
     }
 
-    fn get_metavar_replacement(&self, mv: Metavariable) -> InsNode<'t> {
-        if self.metavar_replacements.len() <= mv.0 {
+    fn get_metavar_replacement(&self, mv: Colored<Metavariable>) -> InsNode<'t> {
+        if self.metavar_replacements.len() <= mv.data.0 {
             panic!("A metavariable appears in insertion but never in deletion");
         }
-        if !self.metavar_conflict[mv.0] {
-            match &self.metavar_replacements[mv.0] {
+        if !self.metavar_conflict[mv.data.0] {
+            match &self.metavar_replacements[mv.data.0] {
                 None => panic!("A metavariable appears in insertion but never in deletion"),
                 Some(repl) => repl.clone(),
             }
         } else {
-            InsNode::Elided(Colored::new_white(mv))
+            InsNode::Elided(mv)
         }
     }
 
@@ -176,18 +177,20 @@ impl<'t> MetavarRemover<'t> {
             InsNode::InPlace(ins) => ins
                 .data
                 .visit_mut(|ch| self.replace_metavars_in_ins_node(&mut ch.node)),
-            InsNode::Elided(mv) => *node = self.get_metavar_replacement(mv.data),
+            InsNode::Elided(mv) => *node = self.get_metavar_replacement(*mv),
         }
     }
 
     fn replace_metavars_in_merged_ins_node(&self, node: &mut MergedInsNode<'t>) {
         match node {
-            MergedInsNode::InPlace(ins) => ins
-                .data
-                .visit_mut(|ch| self.replace_metavars_in_merged_ins_node(&mut ch.node)),
-            MergedInsNode::Elided(mv) => {
-                *node = MergedInsNode::from_simple_ins(self.get_metavar_replacement(mv.data))
+            MergedInsNode::InPlace(ins) => {
+                ins.visit_mut(|ch| self.replace_metavars_in_merged_ins_node(&mut ch.node))
             }
+            MergedInsNode::Elided(mv) => {
+                *node =
+                    MergedInsNode::SingleIns(self.get_metavar_replacement(Colored::new_both(*mv)))
+            }
+            MergedInsNode::SingleIns(ins) => self.replace_metavars_in_ins_node(ins),
             MergedInsNode::Conflict(left_ins, right_ins) => {
                 self.replace_metavars_in_ins_node(left_ins);
                 self.replace_metavars_in_ins_node(right_ins);
@@ -239,13 +242,13 @@ impl<'t> MetavarRemover<'t> {
                 self.replace_metavars_in_ins_node(ins);
             }
             MergedSpineSeqNode::Inserted(ins_list) => {
-                for ins in &mut ins_list.data {
+                for ins in ins_list {
                     self.replace_metavars_in_ins_node(&mut ins.node)
                 }
             }
             MergedSpineSeqNode::InsertOrderConflict(left_ins, right_ins) => {
                 for ins_list in [left_ins, right_ins] {
-                    for ins in &mut ins_list.data {
+                    for ins in ins_list {
                         self.replace_metavars_in_ins_node(&mut ins.node)
                     }
                 }

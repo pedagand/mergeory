@@ -1,7 +1,7 @@
+use super::colors::{Color, Colored};
 use super::merge_ins::{InsMergedSpineNode, InsMergedSpineSeqNode};
 use super::{DelNode, MergedSpineNode, MergedSpineSeqNode};
 use crate::generic_tree::{Subtree, Tree};
-use crate::{ColorSet, Colored};
 
 fn merge_del_nodes<'t>(
     left: DelNode<'t>,
@@ -23,7 +23,7 @@ fn merge_del_nodes<'t>(
             // This case can occur because of unification inside metavars_del
             DelNode::Elided(Colored {
                 data: mv.data,
-                colors: mv.colors | other_mv.colors,
+                color: mv.color | other_mv.color,
             })
         }
         (DelNode::Elided(mv), mut other) | (mut other, DelNode::Elided(mv)) => {
@@ -38,7 +38,7 @@ fn merge_del_nodes<'t>(
             }
 
             // Keep other in tree to retain its colors
-            add_colors(mv.colors, &mut other);
+            add_color(mv.color, &mut other);
             other
         }
     })
@@ -98,14 +98,14 @@ fn merge_del_in_spine_seq<'t>(
     Some(merged_vec)
 }
 
-fn add_colors(colors: ColorSet, node: &mut DelNode) {
+fn add_color(color: Color, node: &mut DelNode) {
     match node {
         DelNode::InPlace(del) => {
-            del.data.visit_mut(|ch| add_colors(colors, &mut ch.node));
-            del.colors |= colors
+            del.data.visit_mut(|ch| add_color(color, &mut ch.node));
+            del.color |= color
         }
-        DelNode::Elided(mv) => mv.colors |= colors,
-        DelNode::MetavariableConflict(_, del, _) => add_colors(colors, del),
+        DelNode::Elided(mv) => mv.color |= color,
+        DelNode::MetavariableConflict(_, del, _) => add_color(color, del),
     }
 }
 

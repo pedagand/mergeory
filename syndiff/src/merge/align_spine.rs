@@ -1,9 +1,9 @@
-use crate::diff::{ChangeNode, DiffSpineNode, DiffSpineSeqNode};
+use super::colors::{Colored, ColoredChangeNode, ColoredSpineNode, ColoredSpineSeqNode};
 use crate::generic_tree::{FieldId, Subtree, Tree};
-use crate::{Colored, Metavariable};
+use crate::Metavariable;
 
-type InsNode<'t> = ChangeNode<'t>;
-type DelNode<'t> = ChangeNode<'t>;
+type InsNode<'t> = ColoredChangeNode<'t>;
+type DelNode<'t> = ColoredChangeNode<'t>;
 
 pub enum InsSpineNode<'t> {
     Spine(Tree<'t, InsSpineSeqNode<'t>>),
@@ -14,7 +14,7 @@ pub enum InsSpineNode<'t> {
 pub enum InsSpineSeqNode<'t> {
     Zipped(Subtree<InsSpineNode<'t>>),
     Deleted,
-    Inserted(Colored<Vec<Subtree<InsNode<'t>>>>),
+    Inserted(Vec<Subtree<InsNode<'t>>>),
 }
 
 pub enum AlignedSpineNode<'t> {
@@ -28,19 +28,16 @@ pub enum AlignedSpineSeqNode<'t> {
     Zipped(Subtree<AlignedSpineNode<'t>>),
     BothDeleted(Option<FieldId>, DelNode<'t>, DelNode<'t>),
     DeleteConflict(Option<FieldId>, DelNode<'t>, DelNode<'t>, InsSpineNode<'t>),
-    Inserted(Colored<Vec<Subtree<InsNode<'t>>>>),
-    InsertOrderConflict(
-        Colored<Vec<Subtree<InsNode<'t>>>>,
-        Colored<Vec<Subtree<InsNode<'t>>>>,
-    ),
+    Inserted(Vec<Subtree<InsNode<'t>>>),
+    InsertOrderConflict(Vec<Subtree<InsNode<'t>>>, Vec<Subtree<InsNode<'t>>>),
 }
 
 fn split_spine<'t>(
-    tree: DiffSpineNode<'t>,
+    tree: ColoredSpineNode<'t>,
     next_metavar: &mut usize,
 ) -> (DelNode<'t>, InsSpineNode<'t>) {
     match tree {
-        DiffSpineNode::Spine(spine) => {
+        ColoredSpineNode::Spine(spine) => {
             let (del, ins) =
                 spine.split_into(|subtrees| split_spine_subtrees(subtrees, next_metavar));
             (
@@ -48,7 +45,7 @@ fn split_spine<'t>(
                 InsSpineNode::Spine(ins),
             )
         }
-        DiffSpineNode::Unchanged => {
+        ColoredSpineNode::Unchanged => {
             let new_metavar = Metavariable(*next_metavar);
             *next_metavar += 1;
             (
@@ -56,19 +53,19 @@ fn split_spine<'t>(
                 InsSpineNode::Unchanged(new_metavar),
             )
         }
-        DiffSpineNode::Changed(del, ins) => (del, InsSpineNode::Changed(ins)),
+        ColoredSpineNode::Changed(del, ins) => (del, InsSpineNode::Changed(ins)),
     }
 }
 
 fn split_spine_subtrees<'t>(
-    subtrees: Vec<DiffSpineSeqNode<'t>>,
+    subtrees: Vec<ColoredSpineSeqNode<'t>>,
     next_metavar: &mut usize,
 ) -> (Vec<Subtree<DelNode<'t>>>, Vec<InsSpineSeqNode<'t>>) {
     let mut del_seq = Vec::new();
     let mut ins_seq = Vec::new();
     for subtree in subtrees {
         match subtree {
-            DiffSpineSeqNode::Zipped(node) => {
+            ColoredSpineSeqNode::Zipped(node) => {
                 let (del, ins) = split_spine(node.node, next_metavar);
                 del_seq.push(Subtree {
                     field: node.field,
@@ -79,13 +76,13 @@ fn split_spine_subtrees<'t>(
                     node: ins,
                 }));
             }
-            DiffSpineSeqNode::Deleted(del_list) => {
+            ColoredSpineSeqNode::Deleted(del_list) => {
                 for del in del_list {
                     del_seq.push(del);
                     ins_seq.push(InsSpineSeqNode::Deleted);
                 }
             }
-            DiffSpineSeqNode::Inserted(ins_list) => {
+            ColoredSpineSeqNode::Inserted(ins_list) => {
                 ins_seq.push(InsSpineSeqNode::Inserted(ins_list));
             }
         }
@@ -94,58 +91,58 @@ fn split_spine_subtrees<'t>(
 }
 
 fn merge_spines<'t>(
-    left: DiffSpineNode<'t>,
-    right: DiffSpineNode<'t>,
+    left: ColoredSpineNode<'t>,
+    right: ColoredSpineNode<'t>,
     next_metavar: &mut usize,
 ) -> Option<AlignedSpineNode<'t>> {
     Some(match (left, right) {
-        (DiffSpineNode::Spine(left_spine), DiffSpineNode::Spine(right_spine)) => {
+        (ColoredSpineNode::Spine(left_spine), ColoredSpineNode::Spine(right_spine)) => {
             AlignedSpineNode::Spine(Tree::merge_into(left_spine, right_spine, |l, r| {
                 merge_spine_subtrees(l, r, next_metavar)
             })?)
         }
-        (DiffSpineNode::Unchanged, DiffSpineNode::Unchanged) => AlignedSpineNode::Unchanged,
-        (DiffSpineNode::Spine(spine), DiffSpineNode::Unchanged)
-        | (DiffSpineNode::Unchanged, DiffSpineNode::Spine(spine)) => {
-            align_spine_with_unchanged(DiffSpineNode::Spine(spine), next_metavar)
+        (ColoredSpineNode::Unchanged, ColoredSpineNode::Unchanged) => AlignedSpineNode::Unchanged,
+        (ColoredSpineNode::Spine(spine), ColoredSpineNode::Unchanged)
+        | (ColoredSpineNode::Unchanged, ColoredSpineNode::Spine(spine)) => {
+            align_spine_with_unchanged(ColoredSpineNode::Spine(spine), next_metavar)
         }
-        (DiffSpineNode::Changed(del, ins), DiffSpineNode::Unchanged)
-        | (DiffSpineNode::Unchanged, DiffSpineNode::Changed(del, ins)) => {
+        (ColoredSpineNode::Changed(del, ins), ColoredSpineNode::Unchanged)
+        | (ColoredSpineNode::Unchanged, ColoredSpineNode::Changed(del, ins)) => {
             AlignedSpineNode::OneChange(del, ins)
         }
         (
-            DiffSpineNode::Changed(left_del, left_ins),
-            DiffSpineNode::Changed(right_del, right_ins),
+            ColoredSpineNode::Changed(left_del, left_ins),
+            ColoredSpineNode::Changed(right_del, right_ins),
         ) => AlignedSpineNode::BothChanged(
             left_del,
             InsSpineNode::Changed(left_ins),
             right_del,
             InsSpineNode::Changed(right_ins),
         ),
-        (DiffSpineNode::Changed(del, ins), DiffSpineNode::Spine(spine))
-        | (DiffSpineNode::Spine(spine), DiffSpineNode::Changed(del, ins)) => {
-            let (spine_del, spine_ins) = split_spine(DiffSpineNode::Spine(spine), next_metavar);
+        (ColoredSpineNode::Changed(del, ins), ColoredSpineNode::Spine(spine))
+        | (ColoredSpineNode::Spine(spine), ColoredSpineNode::Changed(del, ins)) => {
+            let (spine_del, spine_ins) = split_spine(ColoredSpineNode::Spine(spine), next_metavar);
             AlignedSpineNode::BothChanged(del, InsSpineNode::Changed(ins), spine_del, spine_ins)
         }
     })
 }
 
 enum FlatDelSubtree<'t> {
-    Zipped(Subtree<DiffSpineNode<'t>>),
+    Zipped(Subtree<ColoredSpineNode<'t>>),
     Deleted(Subtree<DelNode<'t>>),
-    Inserted(Colored<Vec<Subtree<InsNode<'t>>>>),
+    Inserted(Vec<Subtree<InsNode<'t>>>),
 }
 
-fn flatten_del(seq: Vec<DiffSpineSeqNode>) -> impl Iterator<Item = FlatDelSubtree> {
+fn flatten_del(seq: Vec<ColoredSpineSeqNode>) -> impl Iterator<Item = FlatDelSubtree> {
     seq.into_iter()
         .map::<Box<dyn Iterator<Item = FlatDelSubtree>>, _>(|subtree| match subtree {
-            DiffSpineSeqNode::Zipped(spine) => {
+            ColoredSpineSeqNode::Zipped(spine) => {
                 Box::new(std::iter::once(FlatDelSubtree::Zipped(spine)))
             }
-            DiffSpineSeqNode::Deleted(del_seq) => {
+            ColoredSpineSeqNode::Deleted(del_seq) => {
                 Box::new(del_seq.into_iter().map(FlatDelSubtree::Deleted))
             }
-            DiffSpineSeqNode::Inserted(ins_list) => {
+            ColoredSpineSeqNode::Inserted(ins_list) => {
                 Box::new(std::iter::once(FlatDelSubtree::Inserted(ins_list)))
             }
         })
@@ -153,8 +150,8 @@ fn flatten_del(seq: Vec<DiffSpineSeqNode>) -> impl Iterator<Item = FlatDelSubtre
 }
 
 fn merge_spine_subtrees<'t>(
-    left: Vec<DiffSpineSeqNode<'t>>,
-    right: Vec<DiffSpineSeqNode<'t>>,
+    left: Vec<ColoredSpineSeqNode<'t>>,
+    right: Vec<ColoredSpineSeqNode<'t>>,
     next_metavar: &mut usize,
 ) -> Option<Vec<AlignedSpineSeqNode<'t>>> {
     let mut left_iter = flatten_del(left).peekable();
@@ -226,20 +223,20 @@ fn merge_spine_subtrees<'t>(
 }
 
 fn align_spine_with_unchanged<'t>(
-    tree: DiffSpineNode<'t>,
+    tree: ColoredSpineNode<'t>,
     next_metavar: &mut usize,
 ) -> AlignedSpineNode<'t> {
     match tree {
-        DiffSpineNode::Spine(spine) => AlignedSpineNode::Spine(
+        ColoredSpineNode::Spine(spine) => AlignedSpineNode::Spine(
             spine.convert_into(|node| align_spine_subtrees_with_unchanged(node, next_metavar)),
         ),
-        DiffSpineNode::Unchanged => AlignedSpineNode::Unchanged,
-        DiffSpineNode::Changed(del, ins) => AlignedSpineNode::OneChange(del, ins),
+        ColoredSpineNode::Unchanged => AlignedSpineNode::Unchanged,
+        ColoredSpineNode::Changed(del, ins) => AlignedSpineNode::OneChange(del, ins),
     }
 }
 
 fn align_spine_subtrees_with_unchanged<'t>(
-    subtrees: Vec<DiffSpineSeqNode<'t>>,
+    subtrees: Vec<ColoredSpineSeqNode<'t>>,
     next_metavar: &mut usize,
 ) -> Vec<AlignedSpineSeqNode<'t>> {
     flatten_del(subtrees)
@@ -265,8 +262,8 @@ fn align_spine_subtrees_with_unchanged<'t>(
 }
 
 pub fn align_spines<'t>(
-    left: DiffSpineNode<'t>,
-    right: DiffSpineNode<'t>,
+    left: ColoredSpineNode<'t>,
+    right: ColoredSpineNode<'t>,
     mut next_metavar: usize,
 ) -> Option<(AlignedSpineNode<'t>, usize)> {
     let merged = merge_spines(left, right, &mut next_metavar)?;

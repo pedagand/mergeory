@@ -1,14 +1,12 @@
 use crate::generic_tree::{Subtree, Tree};
-use crate::tree_formatter::TreeFormatter;
-use crate::{Colored, SynNode};
+use crate::tree_formatter::{TreeFormattable, TreeFormatter};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Metavariable(pub usize);
 
-#[derive(Clone)]
 pub enum ChangeNode<'t> {
-    InPlace(Colored<Tree<'t, Subtree<ChangeNode<'t>>>>),
-    Elided(Colored<Metavariable>),
+    InPlace(Tree<'t, Subtree<ChangeNode<'t>>>),
+    Elided(Metavariable),
 }
 
 pub enum DiffSpineNode<'t> {
@@ -20,32 +18,22 @@ pub enum DiffSpineNode<'t> {
 pub enum DiffSpineSeqNode<'t> {
     Zipped(Subtree<DiffSpineNode<'t>>),
     Deleted(Vec<Subtree<ChangeNode<'t>>>),
-    Inserted(Colored<Vec<Subtree<ChangeNode<'t>>>>),
+    Inserted(Vec<Subtree<ChangeNode<'t>>>),
 }
 
-impl<'t> ChangeNode<'t> {
-    pub fn from_syn(tree: &SynNode<'t>) -> Self {
-        ChangeNode::InPlace(Colored::new_white(
-            tree.0.map_subtrees(ChangeNode::from_syn),
-        ))
-    }
-
-    pub fn write_with(&self, fmt: &mut impl TreeFormatter) -> std::io::Result<()> {
+impl<'t> TreeFormattable for ChangeNode<'t> {
+    fn write_with<F: TreeFormatter>(&self, fmt: &mut F) -> std::io::Result<()> {
         match self {
-            ChangeNode::InPlace(node) => fmt.write_colored(node.colors, |fmt| {
-                node.data.write_with(fmt, |ch, fmt| ch.node.write_with(fmt))
-            }),
-            ChangeNode::Elided(mv) => {
-                fmt.write_colored(mv.colors, |fmt| fmt.write_metavariable(mv.data))
-            }
+            ChangeNode::InPlace(node) => node.write_with(fmt),
+            ChangeNode::Elided(mv) => fmt.write_metavariable(*mv),
         }
     }
 }
 
-impl<'t> DiffSpineNode<'t> {
-    pub fn write_with(&self, fmt: &mut impl TreeFormatter) -> std::io::Result<()> {
+impl<'t> TreeFormattable for DiffSpineNode<'t> {
+    fn write_with<F: TreeFormatter>(&self, fmt: &mut F) -> std::io::Result<()> {
         match self {
-            DiffSpineNode::Spine(spine) => spine.write_with(fmt, DiffSpineSeqNode::write_with),
+            DiffSpineNode::Spine(spine) => spine.write_with(fmt),
             DiffSpineNode::Unchanged => fmt.write_unchanged(),
             DiffSpineNode::Changed(del, ins) => {
                 fmt.write_changed(|fmt| del.write_with(fmt), |fmt| ins.write_with(fmt))
@@ -54,22 +42,16 @@ impl<'t> DiffSpineNode<'t> {
     }
 }
 
-impl<'t> DiffSpineSeqNode<'t> {
-    fn write_with(&self, fmt: &mut impl TreeFormatter) -> std::io::Result<()> {
+impl<'t> TreeFormattable for DiffSpineSeqNode<'t> {
+    fn write_with<F: TreeFormatter>(&self, fmt: &mut F) -> std::io::Result<()> {
         match self {
-            DiffSpineSeqNode::Zipped(node) => node.node.write_with(fmt),
-            DiffSpineSeqNode::Deleted(del_list) => fmt.write_deleted(|fmt| {
-                for del in del_list {
-                    del.node.write_with(fmt)?;
-                }
-                Ok(())
-            }),
-            DiffSpineSeqNode::Inserted(ins_list) => fmt.write_inserted(|fmt| {
-                for ins in &ins_list.data {
-                    ins.node.write_with(fmt)?;
-                }
-                Ok(())
-            }),
+            DiffSpineSeqNode::Zipped(node) => node.write_with(fmt),
+            DiffSpineSeqNode::Deleted(del_list) => {
+                fmt.write_deleted(|fmt| del_list.write_with(fmt))
+            }
+            DiffSpineSeqNode::Inserted(ins_list) => {
+                fmt.write_inserted(|fmt| ins_list.write_with(fmt))
+            }
         }
     }
 }
