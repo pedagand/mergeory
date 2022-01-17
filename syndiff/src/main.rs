@@ -6,8 +6,8 @@ use std::path::Path;
 use std::process::exit;
 use syndiff::{
     add_extra_blocks, apply_patch, canonicalize_metavars, compute_diff, count_conflicts,
-    merge_diffs, parse_source, remove_metavars, AnsiColoredTreeFormatter, PlainTreeFormatter,
-    SynNode, TextColoredTreeFormatter, TreeFormattable,
+    merge_diffs, parse_source, remove_metavars, AnsiColoredTreeFormatter, MergeOptions,
+    PlainTreeFormatter, SynNode, TextColoredTreeFormatter, TreeFormattable,
 };
 use tree_sitter::Parser;
 use tree_sitter_config::Config;
@@ -41,6 +41,8 @@ fn main() {
         .arg(Arg::with_name("colored").short("c").long("colored").help("Display difference node colors"))
         .arg(Arg::with_name("text-colored").short("C").long("text-colored").help("Display difference node colors as plain text without ANSI color codes"))
         .arg(Arg::with_name("merge-files").short("m").long("merge-files").requires("second-modified-file").help("If there are no conflicts, print the resulting merged file instead of the merged difference"))
+        .arg(Arg::with_name("allow-nested-deletions").short("d").long("allow-nested-deletions").requires("second-modified-file").help("Accept to merge a deletion nested into another deletion without conflict"))
+        .arg(Arg::with_name("ordered-insertions").short("o").long("ordered-insertions").requires("second-modified-file").help("Do not create insert order conflicts by always placing insertions in the first modified file before those of the second modified file"))
         .arg(Arg::with_name("quiet").short("q").long("quiet").requires("second-modified-file").help("Do not print anything, just compute the number of conflicts"))
         .arg(Arg::with_name("scope").long("scope").takes_value(true).help("Select the tree-sitter language by scope instead of file extension"))
         .arg(Arg::with_name("extra-blocks").short("b").long("extra-blocks").help("Add extra structure with additional blocks separated by empty lines"))
@@ -104,9 +106,11 @@ fn main() {
         None => {
             let diff_tree = compute_diff(&origin_tree, &first_modified_tree, no_elisions);
             if cmd_args.is_present("standalone") {
-                let standalone_tree =
-                    remove_metavars(merge_diffs(&diff_tree, &diff_tree).unwrap(), &origin_tree)
-                        .unwrap();
+                let standalone_tree = remove_metavars(
+                    merge_diffs(&diff_tree, &diff_tree, MergeOptions::default()).unwrap(),
+                    &origin_tree,
+                )
+                .unwrap();
                 print_tree(&standalone_tree, color_mode);
             } else {
                 print_tree(&diff_tree, color_mode);
@@ -124,7 +128,15 @@ fn main() {
             let first_diff = compute_diff(&origin_tree, &first_modified_tree, no_elisions);
             let second_diff = compute_diff(&origin_tree, &second_modified_tree, no_elisions);
 
-            let mut merged_diff = merge_diffs(&first_diff, &second_diff).unwrap();
+            let mut merged_diff = merge_diffs(
+                &first_diff,
+                &second_diff,
+                MergeOptions {
+                    allow_nested_deletions: cmd_args.is_present("allow-nested-deletions"),
+                    ordered_insertions: cmd_args.is_present("ordered-insertions"),
+                },
+            )
+            .unwrap();
             canonicalize_metavars(&mut merged_diff);
             let nb_conflicts = count_conflicts(&merged_diff);
 

@@ -63,12 +63,18 @@ fn flatten_ins_spine_seq(ins_spine_seq: Vec<InsSpineSeqNode>) -> Vec<Subtree<Cha
     ins_seq
 }
 
-fn can_inline_ins_in_del(ins: &InsSpineNode, del: &ChangeNode) -> bool {
+fn can_inline_ins_in_del(
+    ins: &InsSpineNode,
+    del: &ChangeNode,
+    allow_nested_deletions: bool,
+) -> bool {
     match (ins, del) {
         (InsSpineNode::Unchanged(_), _) => true,
         (_, ChangeNode::Elided(_)) => true,
         (InsSpineNode::Spine(ins_subtree), ChangeNode::InPlace(del_subtree)) => {
-            Tree::compare(ins_subtree, &del_subtree.data, can_inline_ins_seq_in_del)
+            Tree::compare(ins_subtree, &del_subtree.data, |i, d| {
+                can_inline_ins_seq_in_del(i, d, allow_nested_deletions)
+            })
         }
         (InsSpineNode::Changed(_), ChangeNode::InPlace(_)) => {
             // Change occured and it is not facing a metavariable: refuse inlining
@@ -77,7 +83,11 @@ fn can_inline_ins_in_del(ins: &InsSpineNode, del: &ChangeNode) -> bool {
     }
 }
 
-fn can_inline_ins_seq_in_del(ins_seq: &[InsSpineSeqNode], del_seq: &[Subtree<ChangeNode>]) -> bool {
+fn can_inline_ins_seq_in_del(
+    ins_seq: &[InsSpineSeqNode],
+    del_seq: &[Subtree<ChangeNode>],
+    allow_nested_deletions: bool,
+) -> bool {
     if ins_seq.len() != del_seq.len() {
         return false;
     }
@@ -87,9 +97,9 @@ fn can_inline_ins_seq_in_del(ins_seq: &[InsSpineSeqNode], del_seq: &[Subtree<Cha
         .zip(del_seq)
         .all(|(ins_spine_seq_node, del)| match ins_spine_seq_node {
             InsSpineSeqNode::Zipped(ins) if del.field == ins.field => {
-                can_inline_ins_in_del(&ins.node, &del.node)
+                can_inline_ins_in_del(&ins.node, &del.node, allow_nested_deletions)
             }
-            InsSpineSeqNode::Deleted => true, // This could be false to disallow nested deletions
+            InsSpineSeqNode::Deleted => allow_nested_deletions,
             _ => false,
         })
 }
@@ -172,11 +182,14 @@ fn register_kept_metavars<'t>(
 fn merge_ins_in_spine<'t>(
     node: AlignedSpineNode<'t>,
     metavars_status: &mut [MetavarInsReplacementList<'t>],
+    allow_nested_deletions: bool,
 ) -> InsMergedSpineNode<'t> {
     match node {
-        AlignedSpineNode::Spine(spine) => InsMergedSpineNode::Spine(
-            spine.map_children_into(|ch| merge_ins_in_spine_seq_node(ch, metavars_status)),
-        ),
+        AlignedSpineNode::Spine(spine) => {
+            InsMergedSpineNode::Spine(spine.map_children_into(|ch| {
+                merge_ins_in_spine_seq_node(ch, metavars_status, allow_nested_deletions)
+            }))
+        }
         AlignedSpineNode::Unchanged => InsMergedSpineNode::Unchanged,
         AlignedSpineNode::OneChange(del, ins) => InsMergedSpineNode::OneChange(
             register_kept_metavars(del, metavars_status),
@@ -184,8 +197,8 @@ fn merge_ins_in_spine<'t>(
         ),
         AlignedSpineNode::BothChanged(left_del, left_ins, right_del, right_ins) => {
             match (
-                can_inline_ins_in_del(&left_ins, &right_del),
-                can_inline_ins_in_del(&right_ins, &left_del),
+                can_inline_ins_in_del(&left_ins, &right_del, allow_nested_deletions),
+                can_inline_ins_in_del(&right_ins, &left_del, allow_nested_deletions),
             ) {
                 (true, true) | (false, false) => InsMergedSpineNode::BothChanged(
                     register_kept_metavars(left_del, metavars_status),
@@ -210,10 +223,11 @@ fn merge_ins_in_spine<'t>(
 fn merge_ins_in_spine_seq_node<'t>(
     seq_node: AlignedSpineSeqNode<'t>,
     metavars_status: &mut [MetavarInsReplacementList<'t>],
+    allow_nested_deletions: bool,
 ) -> InsMergedSpineSeqNode<'t> {
     match seq_node {
         AlignedSpineSeqNode::Zipped(node) => InsMergedSpineSeqNode::Zipped(
-            node.map(|node| merge_ins_in_spine(node, metavars_status)),
+            node.map(|node| merge_ins_in_spine(node, metavars_status, allow_nested_deletions)),
         ),
         AlignedSpineSeqNode::BothDeleted(field, left_del, right_del) => {
             InsMergedSpineSeqNode::BothDeleted(
@@ -223,7 +237,7 @@ fn merge_ins_in_spine_seq_node<'t>(
             )
         }
         AlignedSpineSeqNode::DeleteConflict(field, del, conflict_del, conflict_ins) => {
-            if can_inline_ins_in_del(&conflict_ins, &del) {
+            if can_inline_ins_in_del(&conflict_ins, &del, allow_nested_deletions) {
                 InsMergedSpineSeqNode::BothDeleted(
                     field,
                     inline_ins_in_del(conflict_ins, del, metavars_status),
@@ -248,9 +262,10 @@ fn merge_ins_in_spine_seq_node<'t>(
 pub fn merge_ins(
     input: AlignedSpineNode,
     nb_vars: usize,
+    allow_nested_deletions: bool,
 ) -> (InsMergedSpineNode, Vec<MetavarInsReplacementList>) {
     let mut metavars_status = Vec::new();
     metavars_status.resize_with(nb_vars, Vec::new);
-    let output = merge_ins_in_spine(input, &mut metavars_status);
+    let output = merge_ins_in_spine(input, &mut metavars_status, allow_nested_deletions);
     (output, metavars_status)
 }

@@ -1,13 +1,13 @@
 use goldenfile::Mint;
 use std::process::Command;
 
-fn check_diff(test_name: &str, i: usize) {
+fn check_diff(test_name: &str, suffix: &str) {
     let mut mint = Mint::new(format!("tests/prgms/{}", test_name));
-    let diff_file = mint.new_goldenfile(format!("diff{}.rs", i)).unwrap();
+    let diff_file = mint.new_goldenfile(format!("diff{}.rs", suffix)).unwrap();
 
     let diff_out = Command::new(env!("CARGO_BIN_EXE_syndiff"))
         .arg(format!("tests/prgms/{}/orig.rs", test_name))
-        .arg(format!("tests/prgms/{}/edit{}.rs", test_name, i))
+        .arg(format!("tests/prgms/{}/edit{}.rs", test_name, suffix))
         .stdout(diff_file)
         .output()
         .expect("Failed to launch syndiff");
@@ -16,31 +16,43 @@ fn check_diff(test_name: &str, i: usize) {
     assert!(diff_out.stderr.is_empty())
 }
 
-macro_rules! check_diff_tests {
-    { $($test_name:ident ($nb:expr),)* } => {
+macro_rules! check_one_diff_tests {
+    { $($test_name:ident,)* } => {
         $(#[test]
         fn $test_name() {
-            for i in 0..$nb {
-                check_diff(stringify!($test_name), i);
-            }
+            check_diff(stringify!($test_name), "");
         })*
     }
 }
 
-check_diff_tests! {
-    from_empty(1),
-    common_trailing(2),
-    remove_else(1),
-    change_sig(1),
-    trait_change(1),
-    sparse_vec(1),
-    change_and_move(1),
-    factorize(2),
-    cross_del(2),
-    cross_change(2),
-    cross_del_and_ins(2),
-    same_change(1),
-    double_del(2),
-    print_macro(2),
-    inlining(2),
+check_one_diff_tests! {
+    from_empty,
+    remove_else,
+    change_sig,
+    trait_change,
+    sparse_vec,
+    change_and_move,
+    same_change,
+}
+
+macro_rules! check_two_diffs_tests {
+    { $($test_name:ident,)* } => {
+        $(#[test]
+        fn $test_name() {
+            check_diff(stringify!($test_name), "_left");
+            check_diff(stringify!($test_name), "_right");
+        })*
+    }
+}
+
+check_two_diffs_tests! {
+    common_trailing,
+    factorize,
+    cross_del,
+    cross_change,
+    cross_del_and_ins,
+    double_del,
+    ord_conflict,
+    print_macro,
+    inlining,
 }

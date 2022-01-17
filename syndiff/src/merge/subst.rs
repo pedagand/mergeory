@@ -161,10 +161,16 @@ impl<'t> Substituter<'t> {
         }
     }
 
-    fn substitute_in_spine_node(&mut self, node: &mut MergedSpineNode<'t>) {
+    fn substitute_in_spine_node(
+        &mut self,
+        node: &mut MergedSpineNode<'t>,
+        ordered_insertions: bool,
+    ) {
         match node {
             MergedSpineNode::Spine(spine) => match spine {
-                Tree::Node(_, children) => self.substitute_in_spine_seq(children),
+                Tree::Node(_, children) => {
+                    self.substitute_in_spine_seq(children, ordered_insertions)
+                }
                 Tree::Leaf(_) => (),
             },
             MergedSpineNode::Unchanged => (),
@@ -175,11 +181,15 @@ impl<'t> Substituter<'t> {
         }
     }
 
-    fn substitute_in_spine_seq(&mut self, seq: &mut Vec<MergedSpineSeqNode<'t>>) {
+    fn substitute_in_spine_seq(
+        &mut self,
+        seq: &mut Vec<MergedSpineSeqNode<'t>>,
+        ordered_insertions: bool,
+    ) {
         for node in std::mem::take(seq) {
             match node {
                 MergedSpineSeqNode::Zipped(mut spine) => {
-                    self.substitute_in_spine_node(&mut spine.node);
+                    self.substitute_in_spine_node(&mut spine.node, ordered_insertions);
                     seq.push(MergedSpineSeqNode::Zipped(spine))
                 }
                 MergedSpineSeqNode::Deleted(mut del_seq) => {
@@ -233,6 +243,10 @@ impl<'t> Substituter<'t> {
                     } {
                         Some(merged_ins_seq) => {
                             seq.push(MergedSpineSeqNode::Inserted(merged_ins_seq))
+                        }
+                        None if ordered_insertions => {
+                            seq.push(MergedSpineSeqNode::Inserted(left_ins_seq));
+                            seq.push(MergedSpineSeqNode::Inserted(right_ins_seq));
                         }
                         None => seq.push(MergedSpineSeqNode::InsertOrderConflict(
                             left_ins_seq,
@@ -376,8 +390,9 @@ pub fn apply_metavar_substitutions<'t>(
     tree: &mut MergedSpineNode<'t>,
     del_subst: Vec<Option<DelNode<'t>>>,
     ins_subst: Vec<MetavarInsReplacementList<'t>>,
+    ordered_insertions: bool,
 ) {
     let mut subst = Substituter::new(del_subst, ins_subst);
-    subst.substitute_in_spine_node(tree);
+    subst.substitute_in_spine_node(tree, ordered_insertions);
     subst.remove_solved_conflicts_in_spine_node(tree);
 }

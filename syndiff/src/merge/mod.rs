@@ -25,9 +25,16 @@ use merge_ins::merge_ins;
 use metavar_renamer::rename_metavars;
 use subst::apply_metavar_substitutions;
 
+#[derive(Default)]
+pub struct MergeOptions {
+    pub allow_nested_deletions: bool,
+    pub ordered_insertions: bool,
+}
+
 pub fn merge_diffs<'t>(
     left: &DiffSpineNode<'t>,
     right: &DiffSpineNode<'t>,
+    options: MergeOptions,
 ) -> Option<MergedSpineNode<'t>> {
     let mut left = ColoredSpineNode::with_color(left, Color::Left);
     let mut right = ColoredSpineNode::with_color(right, Color::Right);
@@ -35,9 +42,14 @@ pub fn merge_diffs<'t>(
     let right_end_mv = rename_metavars(&mut right, left_end_mv);
     let (aligned, nb_metavars) = align_spines(left, right, right_end_mv)?;
 
-    let (ins_merged, ins_subst) = merge_ins(aligned, nb_metavars);
+    let (ins_merged, ins_subst) = merge_ins(aligned, nb_metavars, options.allow_nested_deletions);
     let (mut merged, del_subst) = merge_del(ins_merged, nb_metavars)?;
-    apply_metavar_substitutions(&mut merged, del_subst, ins_subst);
+    apply_metavar_substitutions(
+        &mut merged,
+        del_subst,
+        ins_subst,
+        options.ordered_insertions,
+    );
 
     Some(merged)
 }
