@@ -1,7 +1,5 @@
 use super::colors::{ColoredChangeNode, ColoredSpineNode, ColoredSpineSeqNode};
-use super::{
-    DelNode, InsNode, MergedInsNode, MergedSpineNode, MergedSpineSeqNode, MetavarInsReplacement,
-};
+use super::{DelNode, InsNode, MergedInsNode, MergedSpineNode, MergedSpineSeqNode};
 use crate::Metavariable;
 
 pub struct MetavarRenamer {
@@ -74,8 +72,14 @@ fn rename_metavars_in_del(del: &mut DelNode, renamer: &mut MetavarRenamer) {
         DelNode::MetavariableConflict(mv, del, repl) => {
             *mv = renamer.rename(*mv);
             rename_metavars_in_del(del, renamer);
-            if let MetavarInsReplacement::Inlined(ins) = repl {
-                rename_metavars_in_ins(ins, renamer);
+            for before_ins in &mut repl.ins_before {
+                rename_metavars_in_ins(before_ins, renamer);
+            }
+            if let Some(repl) = &mut repl.self_repl {
+                rename_metavars_in_ins(repl, renamer);
+            }
+            for after_ins in &mut repl.ins_after {
+                rename_metavars_in_ins(after_ins, renamer);
             }
         }
     }
@@ -87,7 +91,11 @@ fn rename_metavars_in_ins(ins: &mut InsNode, renamer: &mut MetavarRenamer) {
             .data
             .visit_mut(|sub| rename_metavars_in_ins(&mut sub.node, renamer)),
         InsNode::Elided(mv) => mv.data = renamer.rename(mv.data),
-        InsNode::Inlined(ins_repl) => rename_metavars_in_ins(&mut ins_repl.data, renamer),
+        InsNode::Inlined(ins_repl) => {
+            for ins in &mut ins_repl.data {
+                rename_metavars_in_ins(ins, renamer)
+            }
+        }
     }
 }
 

@@ -1,8 +1,6 @@
 use super::colors::Colored;
 use super::subst::merge_id_ins;
-use super::{
-    DelNode, InsNode, MergedInsNode, MergedSpineNode, MergedSpineSeqNode, MetavarInsReplacement,
-};
+use super::{DelNode, InsNode, MergedInsNode, MergedSpineNode, MergedSpineSeqNode};
 use crate::generic_tree::{Subtree, Tree};
 use crate::{Metavariable, SynNode};
 
@@ -166,7 +164,7 @@ impl<'t> MetavarRemover<'t> {
             match &self.metavar_replacements[mv.data.0] {
                 None => panic!("A metavariable appears in insertion but never in deletion"),
                 Some(repl) => InsNode::Inlined(Colored {
-                    data: Box::new(repl.clone()),
+                    data: vec![repl.clone()],
                     color: mv.color,
                 }),
             }
@@ -181,7 +179,11 @@ impl<'t> MetavarRemover<'t> {
                 .data
                 .visit_mut(|ch| self.replace_metavars_in_ins_node(&mut ch.node)),
             InsNode::Elided(mv) => *node = self.get_metavar_replacement(*mv),
-            InsNode::Inlined(repl) => self.replace_metavars_in_ins_node(&mut repl.data),
+            InsNode::Inlined(repl) => {
+                for ins in &mut repl.data {
+                    self.replace_metavars_in_ins_node(ins)
+                }
+            }
         }
     }
 
@@ -210,9 +212,11 @@ impl<'t> MetavarRemover<'t> {
             DelNode::Elided(_) => panic!("A metavariable was not removed in deletion tree"),
             DelNode::MetavariableConflict(_, del, repl) => {
                 self.replace_metavars_in_del_node(del);
-                match repl {
-                    MetavarInsReplacement::InferFromDel => (),
-                    MetavarInsReplacement::Inlined(ins) => self.replace_metavars_in_ins_node(ins),
+                if let Some(repl) = &mut repl.self_repl {
+                    self.replace_metavars_in_ins_node(repl);
+                }
+                for after_ins in repl.ins_before.iter_mut().chain(repl.ins_after.iter_mut()) {
+                    self.replace_metavars_in_ins_node(after_ins);
                 }
             }
         }

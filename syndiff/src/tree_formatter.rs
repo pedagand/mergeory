@@ -90,19 +90,15 @@ pub trait TreeFormatter {
         &mut self,
         mv: Metavariable,
         write_del: impl FnOnce(&mut Self) -> Result,
-        write_repl: Option<impl FnOnce(&mut Self) -> Result>,
+        write_repl: impl FnOnce(&mut Self) -> Result,
     ) -> Result {
         self.write_tag("mv_conflict", |fmt| {
             fmt.write_metavariable(mv)?;
             write!(fmt.output(), ": «")?;
             fmt.write_change_tree(ChangeType::Deletion, write_del)?;
-            write!(fmt.output(), "»")?;
-            if let Some(write_repl) = write_repl {
-                write!(fmt.output(), " <- «")?;
-                fmt.write_change_tree(ChangeType::Inline, write_repl)?;
-                write!(fmt.output(), "»")?;
-            }
-            Ok(())
+            write!(fmt.output(), "» <- «")?;
+            fmt.write_change_tree(ChangeType::Inline, write_repl)?;
+            write!(fmt.output(), "»")
         })
     }
 

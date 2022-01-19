@@ -14,7 +14,7 @@ enum ComputableSubst<T, U> {
 
 struct Substituter<'t> {
     del_subst: Vec<ComputableSubst<DelNode<'t>, Option<DelNode<'t>>>>,
-    ins_subst: Vec<ComputableSubst<Option<InsNode<'t>>, MetavarInsReplacementList<'t>>>,
+    ins_subst: Vec<ComputableSubst<Option<Vec<InsNode<'t>>>, MetavarInsReplacementList<'t>>>,
     ins_cycle_stack: Vec<(Metavariable, bool)>,
 }
 
@@ -63,15 +63,27 @@ impl<'t> Substituter<'t> {
                     self.ins_cycle_stack.push((mv.data, false));
                     let mut repl_ins = replacements
                         .into_iter()
-                        .map(|repl| match repl {
-                            MetavarInsReplacement::InferFromDel => {
-                                // Build the insertion substitution from the deletion substitution
-                                infer_ins_from_del(&self.find_del_subst(mv.data))
-                            }
-                            MetavarInsReplacement::Inlined(mut ins) => {
+                        .map(|repl| {
+                            let mut subst_list = Vec::new();
+                            for mut ins in repl.ins_before {
                                 self.substitute_in_ins_node(&mut ins);
-                                ins
+                                subst_list.push(ins)
                             }
+                            subst_list.push(match repl.self_repl {
+                                None => {
+                                    // Build the insertion substitution from the deletion substitution
+                                    infer_ins_from_del(&self.find_del_subst(mv.data))
+                                }
+                                Some(mut ins) => {
+                                    self.substitute_in_ins_node(&mut ins);
+                                    ins
+                                }
+                            });
+                            for mut ins in repl.ins_after {
+                                self.substitute_in_ins_node(&mut ins);
+                                subst_list.push(ins);
+                            }
+                            subst_list
                         })
                         .collect::<Vec<_>>();
                     let (cycle_mv, cycle) = self.ins_cycle_stack.pop().unwrap();
@@ -79,9 +91,16 @@ impl<'t> Substituter<'t> {
                     if !cycle {
                         // No cycle during computation on potential replacements, try to fuse them
                         let last_ins = repl_ins.pop().unwrap();
-                        repl_ins
-                            .into_iter()
-                            .try_fold(last_ins, |acc, ins| merge_id_ins(&acc, &ins))
+                        repl_ins.into_iter().try_fold(last_ins, |acc, ins| {
+                            if acc.len() == ins.len() {
+                                acc.iter()
+                                    .zip(&ins)
+                                    .map(|(l, r)| merge_id_ins(l, r))
+                                    .collect()
+                            } else {
+                                None
+                            }
+                        })
                     } else {
                         None
                     }
@@ -102,18 +121,18 @@ impl<'t> Substituter<'t> {
         match subst {
             Some(subst) => {
                 self.ins_subst[mv.data.0] = ComputableSubst::Computed(Some(subst.clone()));
-                match subst {
-                    InsNode::InPlace(Colored { color, .. })
+                match &subst[..] {
+                    [InsNode::InPlace(Colored { color, .. })
                     | InsNode::Elided(Colored { color, .. })
-                    | InsNode::Inlined(Colored { color, .. })
-                        if color == mv.color =>
+                    | InsNode::Inlined(Colored { color, .. })]
+                        if *color == mv.color =>
                     {
                         // If the replacement is a single item of the same color we do not have
                         // to wrap it as an inlined replacement
-                        subst
+                        subst.into_iter().next().unwrap()
                     }
                     _ => InsNode::Inlined(Colored {
-                        data: Box::new(subst),
+                        data: subst,
                         color: mv.color,
                     }),
                 }
@@ -150,7 +169,11 @@ impl<'t> Substituter<'t> {
                 .data
                 .visit_mut(|sub| self.substitute_in_ins_node(&mut sub.node)),
             InsNode::Elided(mv) => *node = self.find_ins_subst(*mv),
-            InsNode::Inlined(repl) => self.substitute_in_ins_node(&mut repl.data),
+            InsNode::Inlined(repl) => {
+                for ins in &mut repl.data {
+                    self.substitute_in_ins_node(ins)
+                }
+            }
         }
     }
 
@@ -273,6 +296,15 @@ impl<'t> Substituter<'t> {
         }
     }
 
+    fn substitute_in_repl(&mut self, repl: &mut MetavarInsReplacement<'t>) {
+        if let Some(ins) = &mut repl.self_repl {
+            self.substitute_in_ins_node(ins)
+        }
+        for ins in repl.ins_before.iter_mut().chain(repl.ins_after.iter_mut()) {
+            self.substitute_in_ins_node(ins)
+        }
+    }
+
     fn remove_solved_conflicts_in_del(&mut self, node: &mut DelNode<'t>) {
         match node {
             DelNode::InPlace(del) => del
@@ -285,26 +317,19 @@ impl<'t> Substituter<'t> {
                     ComputableSubst::Computed(Some(_)) => {
                         *node = std::mem::replace(del, DelNode::Elided(Colored::new_white(*mv)))
                     }
-                    ComputableSubst::Computed(None) => match repl {
-                        MetavarInsReplacement::InferFromDel => (),
-                        MetavarInsReplacement::Inlined(ins) => self.substitute_in_ins_node(ins),
-                    },
+                    ComputableSubst::Computed(None) => self.substitute_in_repl(repl),
                     ComputableSubst::Pending(_) => {
-                        match repl {
-                            MetavarInsReplacement::InferFromDel => {
-                                *node =
-                                    std::mem::replace(del, DelNode::Elided(Colored::new_white(*mv)))
-                            }
-                            MetavarInsReplacement::Inlined(ins) => {
-                                // We are dealing here with a subtree inlined into a metavariable
-                                // that was never inserted back.
-                                // Removing the conflict would arbitrarily drop a modification so
-                                // we keep the metavariable conflict.
-                                // We might accidentally call this too late and consider unused a
-                                // metavariable replacement used inside another metavariable
-                                // conflict, but all other solutions seem worse.
-                                self.substitute_in_ins_node(ins)
-                            }
+                        if repl.is_not_replaced() {
+                            *node = std::mem::replace(del, DelNode::Elided(Colored::new_white(*mv)))
+                        } else {
+                            // We are dealing here with a subtree inlined into a metavariable
+                            // that was never inserted back.
+                            // Removing the conflict would arbitrarily drop a modification so
+                            // we keep the metavariable conflict.
+                            // We might accidentally call this too late and consider unused a
+                            // metavariable replacement used inside another metavariable
+                            // conflict, but all other solutions seem worse.
+                            self.substitute_in_repl(repl)
                         }
                     }
                     ComputableSubst::Processing => {
@@ -384,9 +409,13 @@ pub fn merge_id_ins<'t>(left: &InsNode<'t>, right: &InsNode<'t>) -> Option<InsNo
                 }
             },
         )?)),
-        (InsNode::Inlined(left_repl), InsNode::Inlined(right_repl)) => Some(InsNode::Inlined(
-            Colored::merge(left_repl.as_ref(), right_repl.as_ref(), |l, r| {
-                Some(Box::new(merge_id_ins(l, r)?))
+        (InsNode::Inlined(left), InsNode::Inlined(right)) => Some(InsNode::Inlined(
+            Colored::merge(left.as_ref(), right.as_ref(), |l, r| {
+                if l.len() == r.len() {
+                    l.iter().zip(r).map(|(l, r)| merge_id_ins(l, r)).collect()
+                } else {
+                    None
+                }
             })?,
         )),
         _ => None,
@@ -403,7 +432,13 @@ fn is_del_equivalent_to_ins(del: &DelNode, ins: &InsNode) -> bool {
         (DelNode::InPlace(_), InsNode::Elided(_)) | (DelNode::Elided(_), InsNode::InPlace(_)) => {
             false
         }
-        (_, InsNode::Inlined(repl)) => is_del_equivalent_to_ins(del, &repl.data),
+        (_, InsNode::Inlined(repl)) => {
+            if repl.data.len() == 1 {
+                is_del_equivalent_to_ins(del, &repl.data[0])
+            } else {
+                false
+            }
+        }
     }
 }
 

@@ -5,9 +5,30 @@ use crate::tree_formatter::{TreeFormattable, TreeFormatter};
 use crate::Metavariable;
 
 #[derive(Clone)]
-pub enum MetavarInsReplacement<'t> {
-    InferFromDel,
-    Inlined(InsNode<'t>),
+pub struct MetavarInsReplacement<'t> {
+    pub ins_before: Vec<InsNode<'t>>,
+    pub self_repl: Option<InsNode<'t>>,
+    pub ins_after: Vec<InsNode<'t>>,
+}
+
+impl<'t> MetavarInsReplacement<'t> {
+    pub const NOT_REPLACED: MetavarInsReplacement<'static> = MetavarInsReplacement {
+        ins_before: Vec::new(),
+        self_repl: None,
+        ins_after: Vec::new(),
+    };
+
+    pub fn in_place(ins_repl: InsNode<'t>) -> Self {
+        MetavarInsReplacement {
+            ins_before: Vec::new(),
+            self_repl: Some(ins_repl),
+            ins_after: Vec::new(),
+        }
+    }
+
+    pub fn is_not_replaced(&self) -> bool {
+        self.ins_before.is_empty() && self.self_repl.is_none() && self.ins_after.is_empty()
+    }
 }
 
 #[derive(Clone)]
@@ -21,7 +42,7 @@ pub enum DelNode<'t> {
 pub enum InsNode<'t> {
     InPlace(Colored<Tree<'t, Subtree<InsNode<'t>>>>),
     Elided(Colored<Metavariable>),
-    Inlined(Colored<Box<InsNode<'t>>>),
+    Inlined(Colored<Vec<InsNode<'t>>>),
 }
 
 pub enum MergedInsNode<'t> {
@@ -64,9 +85,18 @@ impl<'t> TreeFormattable for DelNode<'t> {
             DelNode::MetavariableConflict(mv, del, repl) => fmt.write_mv_conflict(
                 *mv,
                 |fmt| del.write_with(fmt),
-                match repl {
-                    MetavarInsReplacement::InferFromDel => None,
-                    MetavarInsReplacement::Inlined(ins) => Some(|fmt: &mut F| ins.write_with(fmt)),
+                |fmt| {
+                    for ins_before in &repl.ins_before {
+                        ins_before.write_with(fmt)?;
+                    }
+                    match &repl.self_repl {
+                        None => fmt.write_metavariable(*mv)?,
+                        Some(repl) => repl.write_with(fmt)?,
+                    }
+                    for ins_after in &repl.ins_after {
+                        ins_after.write_with(fmt)?;
+                    }
+                    Ok(())
                 },
             ),
         }
@@ -99,9 +129,12 @@ impl<'t> TreeFormattable for InsNode<'t> {
             InsNode::Elided(mv) => {
                 fmt.write_colored(mv.color, |fmt| fmt.write_metavariable(mv.data))
             }
-            InsNode::Inlined(repl) => {
-                fmt.write_inlined(repl.color, |fmt| repl.data.write_with(fmt))
-            }
+            InsNode::Inlined(repl) => fmt.write_inlined(repl.color, |fmt| {
+                for ins in &repl.data {
+                    ins.write_with(fmt)?;
+                }
+                Ok(())
+            }),
         }
     }
 }

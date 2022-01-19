@@ -114,11 +114,11 @@ fn inline_ins_in_del<'t>(
         (ins_spine, ChangeNode::Elided(mv)) => {
             // Here we must clone the insert tree once to check for potential conflicts
             let ins = flatten_ins_spine(ins_spine);
-            metavars_status[mv.data.0].push(MetavarInsReplacement::Inlined(ins.clone()));
+            metavars_status[mv.data.0].push(MetavarInsReplacement::in_place(ins.clone()));
             DelNode::MetavariableConflict(
                 mv.data,
                 Box::new(DelNode::Elided(mv)),
-                MetavarInsReplacement::Inlined(ins),
+                MetavarInsReplacement::in_place(ins),
             )
         }
         (InsSpineNode::Spine(ins_subtree), ChangeNode::InPlace(del_subtree)) => {
@@ -169,11 +169,11 @@ fn register_kept_metavars<'t>(
             }))
         }
         ChangeNode::Elided(mv) => {
-            metavars_status[mv.data.0].push(MetavarInsReplacement::InferFromDel);
+            metavars_status[mv.data.0].push(MetavarInsReplacement::NOT_REPLACED);
             DelNode::MetavariableConflict(
                 mv.data,
                 Box::new(DelNode::Elided(mv)),
-                MetavarInsReplacement::InferFromDel,
+                MetavarInsReplacement::NOT_REPLACED,
             )
         }
     }
