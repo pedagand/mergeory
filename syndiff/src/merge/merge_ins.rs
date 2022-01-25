@@ -236,6 +236,19 @@ fn merge_ins_in_spine_seq_node<'t>(
                 register_kept_metavars(right_del, metavars_status),
             )
         }
+        AlignedSpineSeqNode::MovedAway(field, del_mv, del, ins_before, ins_spine, ins_after) => {
+            let repl = MetavarInsReplacement {
+                ins_before: ins_before.into_iter().map(InsNode::from).collect(),
+                self_repl: Some(flatten_ins_spine(ins_spine)),
+                ins_after: ins_after.into_iter().map(InsNode::from).collect(),
+            };
+            metavars_status[del_mv.data.0].push(repl.clone());
+            InsMergedSpineSeqNode::BothDeleted(
+                field,
+                DelNode::MetavariableConflict(del_mv.data, Box::new(DelNode::Elided(del_mv)), repl),
+                register_kept_metavars(del, metavars_status),
+            )
+        }
         AlignedSpineSeqNode::DeleteConflict(field, del, conflict_del, conflict_ins) => {
             if can_inline_ins_in_del(&conflict_ins, &del, allow_nested_deletions) {
                 InsMergedSpineSeqNode::BothDeleted(

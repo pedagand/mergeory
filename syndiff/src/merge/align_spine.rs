@@ -27,6 +27,14 @@ pub enum AlignedSpineNode<'t> {
 pub enum AlignedSpineSeqNode<'t> {
     Zipped(Subtree<AlignedSpineNode<'t>>),
     BothDeleted(Option<FieldId>, DelNode<'t>, DelNode<'t>),
+    MovedAway(
+        Option<FieldId>,
+        Colored<Metavariable>,
+        DelNode<'t>,
+        Vec<InsNode<'t>>,
+        InsSpineNode<'t>,
+        Vec<InsNode<'t>>,
+    ),
     DeleteConflict(Option<FieldId>, DelNode<'t>, DelNode<'t>, InsSpineNode<'t>),
     Inserted(Vec<Subtree<InsNode<'t>>>),
     InsertOrderConflict(Vec<Subtree<InsNode<'t>>>, Vec<Subtree<InsNode<'t>>>),
@@ -127,6 +135,283 @@ fn merge_spines<'t>(
     })
 }
 
+enum DelAlignedSubtree<'t> {
+    Zipped {
+        ins_before: Vec<Subtree<InsNode<'t>>>,
+        zipped_spine: Subtree<ColoredSpineNode<'t>>,
+        ins_after: Vec<Subtree<InsNode<'t>>>,
+    },
+    Deleted(Subtree<DelNode<'t>>),
+    InsertedAlone(Vec<Subtree<InsNode<'t>>>),
+}
+
+fn try_get_unified_field(seq: &[Subtree<InsNode>]) -> Option<Option<FieldId>> {
+    let mut without_sep_iter = seq.iter().filter(|subtree| {
+        !matches!(
+            subtree,
+            Subtree {
+                field: None,
+                node: InsNode::InPlace(Colored {
+                    data: Tree::Leaf(_),
+                    ..
+                })
+            }
+        )
+    });
+    let first_subtree = without_sep_iter.next()?;
+    for subtree in without_sep_iter {
+        if subtree.field != first_subtree.field {
+            return None;
+        }
+    }
+    Some(first_subtree.field)
+}
+
+fn is_spine_separator(subtree: &Subtree<ColoredSpineNode>) -> bool {
+    matches!(
+        subtree,
+        Subtree {
+            field: None,
+            node: ColoredSpineNode::Spine(Tree::Leaf(_))
+        }
+    )
+}
+
+fn align_on_del(seq: Vec<ColoredSpineSeqNode>) -> Vec<DelAlignedSubtree> {
+    let mut seq_iter = seq.into_iter().peekable();
+    let mut del_aligned_seq = Vec::new();
+
+    while let Some(node) = seq_iter.next() {
+        match node {
+            ColoredSpineSeqNode::Zipped(spine) => {
+                let ins_before = match del_aligned_seq.last() {
+                    Some(DelAlignedSubtree::InsertedAlone(ins_list))
+                        if !is_spine_separator(&spine)
+                            && try_get_unified_field(ins_list) == Some(spine.field) =>
+                    {
+                        match del_aligned_seq.pop() {
+                            Some(DelAlignedSubtree::InsertedAlone(ins_list)) => ins_list,
+                            _ => unreachable!(),
+                        }
+                    }
+                    _ => Vec::new(),
+                };
+                del_aligned_seq.push(DelAlignedSubtree::Zipped {
+                    ins_before,
+                    zipped_spine: spine,
+                    ins_after: Vec::new(),
+                })
+            }
+            ColoredSpineSeqNode::Deleted(del_seq) => {
+                for del in del_seq {
+                    del_aligned_seq.push(DelAlignedSubtree::Deleted(del));
+                }
+            }
+            ColoredSpineSeqNode::Inserted(ins_list) => match del_aligned_seq.last_mut() {
+                Some(DelAlignedSubtree::Zipped {
+                    zipped_spine,
+                    ins_after,
+                    ..
+                }) if !is_spine_separator(zipped_spine)
+                    && try_get_unified_field(&ins_list) == Some(zipped_spine.field) =>
+                {
+                    ins_after.extend(ins_list)
+                }
+                _ => del_aligned_seq.push(DelAlignedSubtree::InsertedAlone(ins_list)),
+            },
+        }
+    }
+
+    del_aligned_seq
+}
+
+fn merge_spine_subtrees<'t>(
+    left: Vec<ColoredSpineSeqNode<'t>>,
+    right: Vec<ColoredSpineSeqNode<'t>>,
+    next_metavar: &mut usize,
+) -> Option<Vec<AlignedSpineSeqNode<'t>>> {
+    let mut left_iter = align_on_del(left).into_iter().peekable();
+    let mut right_iter = align_on_del(right).into_iter().peekable();
+    let mut merged_subtrees = Vec::new();
+
+    while left_iter.peek().is_some() || right_iter.peek().is_some() {
+        let into_ins_list = |node| match node {
+            DelAlignedSubtree::InsertedAlone(ins_list) => ins_list,
+            _ => unreachable!(),
+        };
+
+        match (left_iter.peek(), right_iter.peek()) {
+            (
+                Some(DelAlignedSubtree::InsertedAlone(_)),
+                Some(DelAlignedSubtree::InsertedAlone(_)),
+            ) => {
+                // Insertion in both sides, consume both
+                let left_ins = into_ins_list(left_iter.next().unwrap());
+                let right_ins = into_ins_list(right_iter.next().unwrap());
+                merged_subtrees.push(AlignedSpineSeqNode::InsertOrderConflict(
+                    left_ins, right_ins,
+                ))
+            }
+            (Some(DelAlignedSubtree::InsertedAlone(_)), _) => {
+                // Only left side is an insertion, output it and continue.
+                merged_subtrees.push(AlignedSpineSeqNode::Inserted(into_ins_list(
+                    left_iter.next().unwrap(),
+                )))
+            }
+            (_, Some(DelAlignedSubtree::InsertedAlone(_))) => {
+                // Only right side is an insertion, output it and continue.
+                merged_subtrees.push(AlignedSpineSeqNode::Inserted(into_ins_list(
+                    right_iter.next().unwrap(),
+                )))
+            }
+            _ => {
+                // No insertion either in left or right, consume both or return None if not
+                // possible
+                match (left_iter.next()?, right_iter.next()?) {
+                    (
+                        DelAlignedSubtree::Zipped {
+                            ins_before: left_ins_before,
+                            zipped_spine: left_spine,
+                            ins_after: left_ins_after,
+                        },
+                        DelAlignedSubtree::Zipped {
+                            ins_before: right_ins_before,
+                            zipped_spine: right_spine,
+                            ins_after: right_ins_after,
+                        },
+                    ) => {
+                        if left_spine.field != right_spine.field {
+                            return None;
+                        }
+
+                        let push_merged_ins_seq =
+                            |left_seq: Vec<_>, right_seq: Vec<_>, merged_subtrees: &mut Vec<_>| {
+                                match (left_seq.is_empty(), right_seq.is_empty()) {
+                                    (true, true) => (),
+                                    (false, true) => merged_subtrees
+                                        .push(AlignedSpineSeqNode::Inserted(left_seq)),
+                                    (true, false) => merged_subtrees
+                                        .push(AlignedSpineSeqNode::Inserted(right_seq)),
+                                    (false, false) => merged_subtrees.push(
+                                        AlignedSpineSeqNode::InsertOrderConflict(
+                                            left_seq, right_seq,
+                                        ),
+                                    ),
+                                }
+                            };
+
+                        push_merged_ins_seq(
+                            left_ins_before,
+                            right_ins_before,
+                            &mut merged_subtrees,
+                        );
+                        merged_subtrees.push(AlignedSpineSeqNode::Zipped(Subtree {
+                            field: left_spine.field,
+                            node: merge_spines(left_spine.node, right_spine.node, next_metavar)?,
+                        }));
+                        push_merged_ins_seq(left_ins_after, right_ins_after, &mut merged_subtrees);
+                    }
+                    (
+                        DelAlignedSubtree::Deleted(left_del),
+                        DelAlignedSubtree::Deleted(right_del),
+                    ) => {
+                        if left_del.field != right_del.field {
+                            return None;
+                        }
+                        merged_subtrees.push(AlignedSpineSeqNode::BothDeleted(
+                            left_del.field,
+                            left_del.node,
+                            right_del.node,
+                        ))
+                    }
+                    (
+                        DelAlignedSubtree::Deleted(Subtree {
+                            field: del_field,
+                            node: DelNode::Elided(mv),
+                        }),
+                        DelAlignedSubtree::Zipped {
+                            ins_before,
+                            zipped_spine,
+                            ins_after,
+                        },
+                    )
+                    | (
+                        DelAlignedSubtree::Zipped {
+                            ins_before,
+                            zipped_spine,
+                            ins_after,
+                        },
+                        DelAlignedSubtree::Deleted(Subtree {
+                            field: del_field,
+                            node: DelNode::Elided(mv),
+                        }),
+                    ) => {
+                        if del_field != zipped_spine.field {
+                            return None;
+                        }
+                        let (spine_del, spine_ins) = split_spine(zipped_spine.node, next_metavar);
+                        let ins_before =
+                            ins_before.into_iter().map(|subtree| subtree.node).collect();
+                        let ins_after = ins_after.into_iter().map(|subtree| subtree.node).collect();
+                        merged_subtrees.push(AlignedSpineSeqNode::MovedAway(
+                            del_field, mv, spine_del, ins_before, spine_ins, ins_after,
+                        ))
+                    }
+                    (
+                        DelAlignedSubtree::Deleted(del),
+                        DelAlignedSubtree::Zipped {
+                            ins_before,
+                            zipped_spine,
+                            ins_after,
+                        },
+                    )
+                    | (
+                        DelAlignedSubtree::Zipped {
+                            ins_before,
+                            zipped_spine,
+                            ins_after,
+                        },
+                        DelAlignedSubtree::Deleted(del),
+                    ) => {
+                        if del.field != zipped_spine.field {
+                            return None;
+                        }
+                        let (spine_del, spine_ins) = split_spine(zipped_spine.node, next_metavar);
+
+                        if !ins_before.is_empty() {
+                            merged_subtrees.push(AlignedSpineSeqNode::Inserted(ins_before));
+                        }
+                        merged_subtrees.push(AlignedSpineSeqNode::DeleteConflict(
+                            del.field, del.node, spine_del, spine_ins,
+                        ));
+                        if !ins_after.is_empty() {
+                            merged_subtrees.push(AlignedSpineSeqNode::Inserted(ins_after));
+                        }
+                    }
+                    (DelAlignedSubtree::InsertedAlone(_), _)
+                    | (_, DelAlignedSubtree::InsertedAlone(_)) => {
+                        unreachable!()
+                    }
+                }
+            }
+        }
+    }
+    Some(merged_subtrees)
+}
+
+fn align_spine_with_unchanged<'t>(
+    tree: ColoredSpineNode<'t>,
+    next_metavar: &mut usize,
+) -> AlignedSpineNode<'t> {
+    match tree {
+        ColoredSpineNode::Spine(spine) => AlignedSpineNode::Spine(
+            spine.convert_into(|node| align_spine_subtrees_with_unchanged(node, next_metavar)),
+        ),
+        ColoredSpineNode::Unchanged => AlignedSpineNode::Unchanged,
+        ColoredSpineNode::Changed(del, ins) => AlignedSpineNode::OneChange(del, ins),
+    }
+}
+
 enum FlatDelSubtree<'t> {
     Zipped(Subtree<ColoredSpineNode<'t>>),
     Deleted(Subtree<DelNode<'t>>),
@@ -147,92 +432,6 @@ fn flatten_del(seq: Vec<ColoredSpineSeqNode>) -> impl Iterator<Item = FlatDelSub
             }
         })
         .flatten()
-}
-
-fn merge_spine_subtrees<'t>(
-    left: Vec<ColoredSpineSeqNode<'t>>,
-    right: Vec<ColoredSpineSeqNode<'t>>,
-    next_metavar: &mut usize,
-) -> Option<Vec<AlignedSpineSeqNode<'t>>> {
-    let mut left_iter = flatten_del(left).peekable();
-    let mut right_iter = flatten_del(right).peekable();
-    let mut merged_subtrees = Vec::new();
-
-    let into_ins_list = |node| match node {
-        FlatDelSubtree::Inserted(ins_list) => ins_list,
-        _ => unreachable!(),
-    };
-
-    while left_iter.peek().is_some() || right_iter.peek().is_some() {
-        merged_subtrees.push(match (left_iter.peek(), right_iter.peek()) {
-            (Some(FlatDelSubtree::Inserted(_)), Some(FlatDelSubtree::Inserted(_))) => {
-                // Insertion in both sides, consume both
-                let left_ins = into_ins_list(left_iter.next().unwrap());
-                let right_ins = into_ins_list(right_iter.next().unwrap());
-                AlignedSpineSeqNode::InsertOrderConflict(left_ins, right_ins)
-            }
-            (Some(FlatDelSubtree::Inserted(_)), _) => {
-                // Only left side is an insertion, output it and continue.
-                AlignedSpineSeqNode::Inserted(into_ins_list(left_iter.next().unwrap()))
-            }
-            (_, Some(FlatDelSubtree::Inserted(_))) => {
-                // Only right side is an insertion, output it and continue.
-                AlignedSpineSeqNode::Inserted(into_ins_list(right_iter.next().unwrap()))
-            }
-            _ => {
-                // No insertion either in left or right, consume both or return None if not
-                // possible
-                match (left_iter.next()?, right_iter.next()?) {
-                    (FlatDelSubtree::Zipped(left_spine), FlatDelSubtree::Zipped(right_spine)) => {
-                        if left_spine.field != right_spine.field {
-                            return None;
-                        }
-                        AlignedSpineSeqNode::Zipped(Subtree {
-                            field: left_spine.field,
-                            node: merge_spines(left_spine.node, right_spine.node, next_metavar)?,
-                        })
-                    }
-                    (FlatDelSubtree::Deleted(left_del), FlatDelSubtree::Deleted(right_del)) => {
-                        if left_del.field != right_del.field {
-                            return None;
-                        }
-                        AlignedSpineSeqNode::BothDeleted(
-                            left_del.field,
-                            left_del.node,
-                            right_del.node,
-                        )
-                    }
-                    (FlatDelSubtree::Deleted(del), FlatDelSubtree::Zipped(spine))
-                    | (FlatDelSubtree::Zipped(spine), FlatDelSubtree::Deleted(del)) => {
-                        if del.field != spine.field {
-                            return None;
-                        }
-                        let (spine_del, spine_ins) = split_spine(spine.node, next_metavar);
-                        AlignedSpineSeqNode::DeleteConflict(
-                            del.field, del.node, spine_del, spine_ins,
-                        )
-                    }
-                    (FlatDelSubtree::Inserted(_), _) | (_, FlatDelSubtree::Inserted(_)) => {
-                        unreachable!()
-                    }
-                }
-            }
-        })
-    }
-    Some(merged_subtrees)
-}
-
-fn align_spine_with_unchanged<'t>(
-    tree: ColoredSpineNode<'t>,
-    next_metavar: &mut usize,
-) -> AlignedSpineNode<'t> {
-    match tree {
-        ColoredSpineNode::Spine(spine) => AlignedSpineNode::Spine(
-            spine.convert_into(|node| align_spine_subtrees_with_unchanged(node, next_metavar)),
-        ),
-        ColoredSpineNode::Unchanged => AlignedSpineNode::Unchanged,
-        ColoredSpineNode::Changed(del, ins) => AlignedSpineNode::OneChange(del, ins),
-    }
 }
 
 fn align_spine_subtrees_with_unchanged<'t>(

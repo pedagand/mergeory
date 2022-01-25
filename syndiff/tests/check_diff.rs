@@ -55,4 +55,5 @@ check_two_diffs_tests! {
     ord_conflict,
     print_macro,
     inlining,
+    add_mutex,
 }
