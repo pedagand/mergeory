@@ -21,6 +21,18 @@ parser.add_argument(
 parser.add_argument(
     "-r", "--ratio", action="store_true", help="show ratio instead of cardinals"
 )
+parser.add_argument(
+    "-p",
+    "--only-parsed",
+    action="store_true",
+    help="filter out files that do not parse or commits that contain a non parsable file",
+)
+parser.add_argument(
+    "-w",
+    "--ignore-whitespace",
+    action="store_true",
+    help="ignore differences that occur in whitespaces only",
+)
 group = parser.add_mutually_exclusive_group()
 group.add_argument(
     "-m",
@@ -37,12 +49,21 @@ group.add_argument(
 args = parser.parse_args()
 
 
+def is_identical(merge_res):
+    if args.ignore_whitespace:
+        return merge_res.same_without_space
+    else:
+        return merge_res.same_as_backported_file
+
+
 def result_score(merge_res):
-    if merge_res == SuccessfulMerge(True):
-        return 2
-    elif isinstance(merge_res, SuccessfulMerge):
-        return 1
-    return 0
+    if isinstance(merge_res, SuccessfulMerge):
+        if is_identical(merge_res):
+            return 2
+        else:
+            return 1
+    else:
+        return 0
 
 
 def commit_score(pr, merge_tool):
@@ -56,9 +77,10 @@ def commit_score(pr, merge_tool):
 def compare_commit_mergeability(commit, merge_tool1, merge_tool2):
     table = np.zeros((3, 3), dtype=int)
     for file in commit.conflicting_files:
-        res1 = file.merge_results[merge_tool1]
-        res2 = file.merge_results[merge_tool2]
-        table[result_score(res1)][result_score(res2)] += 1
+        if not args.only_parsed or file.can_parse:
+            res1 = file.merge_results[merge_tool1]
+            res2 = file.merge_results[merge_tool2]
+            table[result_score(res1)][result_score(res2)] += 1
     return table
 
 
@@ -66,7 +88,9 @@ def compare_merge_conflicts(commit_list, merge_tool1, merge_tool2):
     table = np.zeros((3, 3), dtype=int)
     for commit in commit_list:
         if args.full_commit:
-            if commit.only_c_conflicts:
+            if commit.only_c_conflicts and (
+                not args.only_parsed or commit.can_parse_conflicts
+            ):
                 res1 = commit_score(commit, merge_tool1)
                 res2 = commit_score(commit, merge_tool2)
                 table[res1][res2] += 1

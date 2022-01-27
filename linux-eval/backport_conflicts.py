@@ -3,6 +3,7 @@ from merge_tools import TimeoutExpired
 from merge_tool_list import MERGE_TOOLS
 import os
 import filecmp
+import subprocess
 from dataclasses import dataclass
 
 
@@ -11,34 +12,43 @@ class ReleaseBranch:
         self.branch = branch
         self.initial_release = initial_release
 
-    def find_backported_commits(self, repo):
-        if not hasattr(self, "backported_commits"):
-            self.backported_commits = []
-            initial_commit = repo.commit(self.initial_release)
-            for commit in repo.iter_commits(self.branch):
-                if commit == initial_commit:
-                    return
-                message_lines = commit.message.splitlines()
-                if len(message_lines) < 3:
-                    continue
-                upstream_line = message_lines[2].split()
-                if (
-                    len(upstream_line) == 3
-                    and upstream_line[0] == "commit"
-                    and upstream_line[2] == "upstream."
-                ):
-                    try:
-                        upstream_commit = repo.commit(upstream_line[1])
-                    except:
-                        print(
-                            "Upstream commit could not be found for {}".format(
-                                commit.hexsha
-                            )
+    def update_backported_commits(self, repo):
+        old_backported_commits = []
+        if hasattr(self, "backported_commits"):
+            old_backported_commits = self.backported_commits
+
+        self.backported_commits = []
+        initial_commit = repo.commit(self.initial_release)
+        for commit in repo.iter_commits(self.branch):
+            if commit == initial_commit:
+                return
+            if (
+                len(old_backported_commits) > 0
+                and old_backported_commits[0].release_commit == commit.hexsha
+            ):
+                self.backported_commits += old_backported_commits
+                return
+            message_lines = commit.message.splitlines()
+            if len(message_lines) < 3:
+                continue
+            upstream_line = message_lines[2].split()
+            if (
+                len(upstream_line) == 3
+                and upstream_line[0] == "commit"
+                and upstream_line[2] == "upstream."
+            ):
+                try:
+                    upstream_commit = repo.commit(upstream_line[1])
+                except:
+                    print(
+                        "Upstream commit could not be found for {}".format(
+                            commit.hexsha
                         )
-                        continue
-                    self.backported_commits.append(
-                        BackportedCommit(commit.hexsha, upstream_commit.hexsha)
                     )
+                    continue
+                self.backported_commits.append(
+                    BackportedCommit(commit.hexsha, upstream_commit.hexsha)
+                )
 
     def __repr__(self):
         return "ReleaseBranch({})".format(self.branch)
@@ -93,13 +103,17 @@ class BackportedCommit:
                 else:
                     self.only_c_conflicts = False
 
+        self.can_parse_conflicts = True
         for conflict_file in self.conflicting_files:
             conflict_file.compute_merge(repo, timeout)
+            if not conflict_file.can_parse:
+                self.can_parse_conflicts = False
 
 
 @dataclass
 class SuccessfulMerge:
     same_as_backported_file: bool
+    same_without_space: bool
 
 
 @dataclass
@@ -153,13 +167,14 @@ class ConflictingFile:
         if isinstance(self.merge_results[tool], TimedoutMerge):
             if timeout is None:
                 return True
-            if timeout > self.merge_results[tool].timeout:
+            if timeout > self.merge_results[tool].elapsed_time:
                 return True
         return False
 
     def compute_merge(self, repo, timeout=None):
         files = self.write_files(repo, "/tmp")
         backported_file = self.write_backported_file(repo, "/tmp")
+
         for (tool, merge_fn) in MERGE_TOOLS.items():
             if self.need_recomputation(tool, timeout):
                 merged_filename = "/tmp/merged"
@@ -169,13 +184,29 @@ class ConflictingFile:
                     )
                     if merge_exit_code == 0:
                         self.merge_results[tool] = SuccessfulMerge(
-                            filecmp.cmp(backported_file, merged_filename, shallow=False)
+                            filecmp.cmp(
+                                backported_file, merged_filename, shallow=False
+                            ),
+                            subprocess.call(
+                                ["diff", "-wBq", backported_file, merged_filename],
+                                stdout=subprocess.DEVNULL,
+                            )
+                            == 0,
                         )
                     else:
                         self.merge_results[tool] = FailedMerge(merge_exit_code)
                 except TimeoutExpired:
                     self.merge_results[tool] = TimedoutMerge(timeout)
                 os.remove(merged_filename)
+
+        # Check that tree-siter can parse the conflicting file before removing it
+        self.can_parse = True
         for file in files:
+            exit_code = subprocess.call(
+                ["tree-sitter", "parse", "-q", file], stdout=subprocess.DEVNULL
+            )
+            if exit_code != 0:
+                self.can_parse = False
             os.remove(file)
+
         os.remove(backported_file)

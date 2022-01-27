@@ -1,6 +1,11 @@
 #!/bin/bash
-SYNDIFF=../../../syndiff/target/release/syndiff
-SYNDIFF_OPT=--no-elisions
+SYNDIFF=${SYNDIFF:-../../../syndiff/target/release/syndiff}
+out_name=${1:-syndiff}
 
-for f in */*.dev_base.c; do $SYNDIFF $SYNDIFF_OPT -m $f ${f%.dev_base.c}.modif.c ${f%.dev_base.c}.release_base.c > ${f%.dev_base.c}.syndiff.c; done
-for f in */*.dev_base.h; do $SYNDIFF $SYNDIFF_OPT -m $f ${f%.dev_base.h}.modif.h ${f%.dev_base.h}.release_base.h > ${f%.dev_base.h}.syndiff.h; done
+for f in */*.dev_base.{c,h}
+do
+    ext=${f: -1}
+    base_name=${f%.dev_base.$ext}
+    $SYNDIFF -m $base_name.dev_base.$ext $base_name.modif.$ext $base_name.release_base.$ext > $base_name.$out_name.$ext
+done
+

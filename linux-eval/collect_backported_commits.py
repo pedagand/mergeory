@@ -29,7 +29,7 @@ linux_repo = Repo("linux")
 linux_branch = ReleaseBranch(
     "stable/linux-{}.y".format(args.linux_version), "v{}".format(args.linux_version)
 )
-linux_branch.find_backported_commits(linux_repo)
+linux_branch.update_backported_commits(linux_repo)
 
 for commit in tqdm(linux_branch.backported_commits):
     commit.update_conflicting_files(linux_repo, args.timeout)

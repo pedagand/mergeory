@@ -34,6 +34,7 @@ args = parser.parse_args()
 
 branch = pickle.load(open(args.commit_list, "rb"))
 repo = git.Repo("linux")
+branch.update_backported_commits(repo)
 
 for commit in tqdm(branch.backported_commits):
     if args.recompute:

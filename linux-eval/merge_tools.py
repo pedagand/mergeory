@@ -44,3 +44,32 @@ def syndiff_merger(cmd):
         )
 
     return merge_file_with_syndiff
+
+
+def remove_indent_in_file(in_filename):
+    (filename_root, filename_ext) = os.path.splitext(in_filename)
+    out_filename = filename_root + "_noindent" + filename_ext
+    with open(in_filename, "rb") as infile, open(out_filename, "wb") as outfile:
+        for line in infile.readlines():
+            outfile.write(line.strip() + b"\n")
+    return out_filename
+
+
+def without_indent(merger):
+    def remove_indent_and_merge(base, pr, master, out=None, timeout=None):
+        noindent_base = remove_indent_in_file(base)
+        noindent_pr = remove_indent_in_file(pr)
+        noindent_master = remove_indent_in_file(master)
+        exit_code = merger(
+            noindent_base,
+            noindent_pr,
+            noindent_master,
+            out=out,
+            timeout=timeout,
+        )
+        os.remove(noindent_base)
+        os.remove(noindent_pr)
+        os.remove(noindent_master)
+        return exit_code
+
+    return remove_indent_and_merge
