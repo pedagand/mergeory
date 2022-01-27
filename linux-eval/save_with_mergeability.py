@@ -58,7 +58,22 @@ parser.add_argument(
     metavar="tool",
     help="take only files where the merged output is different than the backported version",
 )
+parser.add_argument(
+    "-w",
+    "--ignore-whitespace",
+    action="store_true",
+    help="ignore differences that occur in whitespaces only",
+)
 args = parser.parse_args()
+
+
+def is_identical(merge_res):
+    if not isinstance(merge_res, SuccessfulMerge):
+        return False
+    if args.ignore_whitespace:
+        return merge_res.same_without_space
+    else:
+        return merge_res.same_as_backported_file
 
 
 def results_match_constraints(results):
@@ -75,10 +90,10 @@ def results_match_constraints(results):
         if results[tool] != FailedMerge(code):
             return False
     for tool in args.same_as_backported:
-        if results[tool] != SuccessfulMerge(True):
+        if not is_identical(results[tool]):
             return False
     for tool in args.different_than_backported:
-        if results[tool] == SuccessfulMerge(True):
+        if is_identical(results[tool]):
             return False
     return True
 
