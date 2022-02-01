@@ -1,4 +1,4 @@
-use super::colors::{Color, Colored, ColoredChangeNode};
+use super::colors::{Color, Colored, ColoredChangeNode as ChangeNode};
 use crate::generic_tree::{FieldId, Subtree, Tree};
 use crate::syn_tree::SynNode;
 use crate::tree_formatter::{TreeFormattable, TreeFormatter};
@@ -17,7 +17,12 @@ pub enum DelNode<'t> {
     MetavariableConflict(Metavariable, Box<DelNode<'t>>, MetavarInsReplacement<'t>),
 }
 
-pub type InsNode<'t> = ColoredChangeNode<'t>;
+#[derive(Clone)]
+pub enum InsNode<'t> {
+    InPlace(Colored<Tree<'t, Subtree<InsNode<'t>>>>),
+    Elided(Colored<Metavariable>),
+    Inlined(Colored<Box<InsNode<'t>>>),
+}
 
 pub enum MergedInsNode<'t> {
     InPlace(Tree<'t, Subtree<MergedInsNode<'t>>>),
@@ -68,9 +73,22 @@ impl<'t> TreeFormattable for DelNode<'t> {
     }
 }
 
-impl<'t> InsNode<'t> {
-    pub fn from_syn(tree: &SynNode<'t>) -> Self {
-        InsNode::InPlace(Colored::new_white(tree.0.map_subtrees(InsNode::from_syn)))
+impl<'t> From<&SynNode<'t>> for InsNode<'t> {
+    fn from(tree: &SynNode<'t>) -> Self {
+        InsNode::InPlace(Colored::new_white(
+            tree.0.map_subtrees(|sub| InsNode::from(sub)),
+        ))
+    }
+}
+
+impl<'t> From<ChangeNode<'t>> for InsNode<'t> {
+    fn from(tree: ChangeNode<'t>) -> Self {
+        match tree {
+            ChangeNode::InPlace(node) => {
+                InsNode::InPlace(node.map(|node| node.map_subtrees_into(|sub| InsNode::from(sub))))
+            }
+            ChangeNode::Elided(mv) => InsNode::Elided(mv),
+        }
     }
 }
 
@@ -80,6 +98,9 @@ impl<'t> TreeFormattable for InsNode<'t> {
             InsNode::InPlace(node) => node.write_with(fmt),
             InsNode::Elided(mv) => {
                 fmt.write_colored(mv.color, |fmt| fmt.write_metavariable(mv.data))
+            }
+            InsNode::Inlined(repl) => {
+                fmt.write_inlined(repl.color, |fmt| repl.data.write_with(fmt))
             }
         }
     }
@@ -99,10 +120,10 @@ impl<'t> TreeFormattable for MergedInsNode<'t> {
     }
 }
 
-impl<'t> MergedSpineNode<'t> {
-    pub fn from_syn(tree: &SynNode<'t>) -> Self {
+impl<'t> From<&SynNode<'t>> for MergedSpineNode<'t> {
+    fn from(tree: &SynNode<'t>) -> Self {
         MergedSpineNode::Spine(tree.0.map_children(|sub| {
-            MergedSpineSeqNode::Zipped(sub.as_ref().map(MergedSpineNode::from_syn))
+            MergedSpineSeqNode::Zipped(sub.as_ref().map(|sub| MergedSpineNode::from(sub)))
         }))
     }
 }

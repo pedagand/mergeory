@@ -102,7 +102,21 @@ impl<'t> Substituter<'t> {
         match subst {
             Some(subst) => {
                 self.ins_subst[mv.data.0] = ComputableSubst::Computed(Some(subst.clone()));
-                subst
+                match subst {
+                    InsNode::InPlace(Colored { color, .. })
+                    | InsNode::Elided(Colored { color, .. })
+                    | InsNode::Inlined(Colored { color, .. })
+                        if color == mv.color =>
+                    {
+                        // If the replacement is a single item of the same color we do not have
+                        // to wrap it as an inlined replacement
+                        subst
+                    }
+                    _ => InsNode::Inlined(Colored {
+                        data: Box::new(subst),
+                        color: mv.color,
+                    }),
+                }
             }
             None => {
                 // Save conflict and return the given metavariable (keep the color to help manual
@@ -136,6 +150,7 @@ impl<'t> Substituter<'t> {
                 .data
                 .visit_mut(|sub| self.substitute_in_ins_node(&mut sub.node)),
             InsNode::Elided(mv) => *node = self.find_ins_subst(*mv),
+            InsNode::Inlined(repl) => self.substitute_in_ins_node(&mut repl.data),
         }
     }
 
@@ -369,6 +384,11 @@ pub fn merge_id_ins<'t>(left: &InsNode<'t>, right: &InsNode<'t>) -> Option<InsNo
                 }
             },
         )?)),
+        (InsNode::Inlined(left_repl), InsNode::Inlined(right_repl)) => Some(InsNode::Inlined(
+            Colored::merge(left_repl.as_ref(), right_repl.as_ref(), |l, r| {
+                Some(Box::new(merge_id_ins(l, r)?))
+            })?,
+        )),
         _ => None,
     }
 }
@@ -383,6 +403,7 @@ fn is_del_equivalent_to_ins(del: &DelNode, ins: &InsNode) -> bool {
         (DelNode::InPlace(_), InsNode::Elided(_)) | (DelNode::Elided(_), InsNode::InPlace(_)) => {
             false
         }
+        (_, InsNode::Inlined(repl)) => is_del_equivalent_to_ins(del, &repl.data),
     }
 }
 

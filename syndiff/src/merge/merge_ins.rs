@@ -1,6 +1,6 @@
 use super::align_spine::{AlignedSpineNode, AlignedSpineSeqNode, InsSpineNode, InsSpineSeqNode};
 use super::colors::{Colored, ColoredChangeNode as ChangeNode};
-use super::{DelNode, MergedInsNode, MetavarInsReplacement};
+use super::{DelNode, InsNode, MergedInsNode, MetavarInsReplacement};
 use crate::generic_tree::{FieldId, Subtree, Tree};
 
 pub enum InsMergedSpineNode<'t> {
@@ -12,16 +12,16 @@ pub enum InsMergedSpineNode<'t> {
 pub enum InsMergedSpineSeqNode<'t> {
     Zipped(Subtree<InsMergedSpineNode<'t>>),
     BothDeleted(Option<FieldId>, DelNode<'t>, DelNode<'t>),
-    DeleteConflict(Option<FieldId>, DelNode<'t>, DelNode<'t>, ChangeNode<'t>),
-    Inserted(Vec<Subtree<ChangeNode<'t>>>),
-    InsertOrderConflict(Vec<Subtree<ChangeNode<'t>>>, Vec<Subtree<ChangeNode<'t>>>),
+    DeleteConflict(Option<FieldId>, DelNode<'t>, DelNode<'t>, InsNode<'t>),
+    Inserted(Vec<Subtree<InsNode<'t>>>),
+    InsertOrderConflict(Vec<Subtree<InsNode<'t>>>, Vec<Subtree<InsNode<'t>>>),
 }
 
 pub type MetavarInsReplacementList<'t> = Vec<MetavarInsReplacement<'t>>;
 
-fn merge_ins_nodes<'t>(left: ChangeNode<'t>, right: ChangeNode<'t>) -> MergedInsNode<'t> {
+fn merge_ins_nodes<'t>(left: InsNode<'t>, right: InsNode<'t>) -> MergedInsNode<'t> {
     match (left, right) {
-        (ChangeNode::InPlace(left_node), ChangeNode::InPlace(right_node))
+        (InsNode::InPlace(left_node), InsNode::InPlace(right_node))
             if Tree::compare_subtrees(&left_node.data, &right_node.data, |_, _| true) =>
         {
             MergedInsNode::InPlace(
@@ -35,17 +35,17 @@ fn merge_ins_nodes<'t>(left: ChangeNode<'t>, right: ChangeNode<'t>) -> MergedIns
     }
 }
 
-fn flatten_ins_spine(ins_spine: InsSpineNode) -> ChangeNode {
+fn flatten_ins_spine(ins_spine: InsSpineNode) -> InsNode {
     match ins_spine {
-        InsSpineNode::Spine(ins_subtree) => ChangeNode::InPlace(Colored::new_white(
+        InsSpineNode::Spine(ins_subtree) => InsNode::InPlace(Colored::new_white(
             ins_subtree.convert_into(flatten_ins_spine_seq),
         )),
-        InsSpineNode::Unchanged(mv) => ChangeNode::Elided(Colored::new_white(mv)),
-        InsSpineNode::Changed(ins) => ins,
+        InsSpineNode::Unchanged(mv) => InsNode::Elided(Colored::new_white(mv)),
+        InsSpineNode::Changed(ins) => ins.into(),
     }
 }
 
-fn flatten_ins_spine_seq(ins_spine_seq: Vec<InsSpineSeqNode>) -> Vec<Subtree<ChangeNode>> {
+fn flatten_ins_spine_seq(ins_spine_seq: Vec<InsSpineSeqNode>) -> Vec<Subtree<InsNode>> {
     let mut ins_seq = Vec::new();
     for ins_spine_seq_node in ins_spine_seq {
         match ins_spine_seq_node {
@@ -55,7 +55,7 @@ fn flatten_ins_spine_seq(ins_spine_seq: Vec<InsSpineSeqNode>) -> Vec<Subtree<Cha
             InsSpineSeqNode::Deleted => (),
             InsSpineSeqNode::Inserted(ins_list) => {
                 for ins in ins_list {
-                    ins_seq.push(ins)
+                    ins_seq.push(ins.map(InsNode::from))
                 }
             }
         }
@@ -193,7 +193,7 @@ fn merge_ins_in_spine<'t>(
         AlignedSpineNode::Unchanged => InsMergedSpineNode::Unchanged,
         AlignedSpineNode::OneChange(del, ins) => InsMergedSpineNode::OneChange(
             register_kept_metavars(del, metavars_status),
-            MergedInsNode::SingleIns(ins),
+            MergedInsNode::SingleIns(ins.into()),
         ),
         AlignedSpineNode::BothChanged(left_del, left_ins, right_del, right_ins) => {
             match (
@@ -252,9 +252,20 @@ fn merge_ins_in_spine_seq_node<'t>(
                 )
             }
         }
-        AlignedSpineSeqNode::Inserted(ins_vec) => InsMergedSpineSeqNode::Inserted(ins_vec),
+        AlignedSpineSeqNode::Inserted(ins_vec) => InsMergedSpineSeqNode::Inserted(
+            ins_vec
+                .into_iter()
+                .map(|sub| sub.map(InsNode::from))
+                .collect(),
+        ),
         AlignedSpineSeqNode::InsertOrderConflict(left, right) => {
-            InsMergedSpineSeqNode::InsertOrderConflict(left, right)
+            InsMergedSpineSeqNode::InsertOrderConflict(
+                left.into_iter().map(|sub| sub.map(InsNode::from)).collect(),
+                right
+                    .into_iter()
+                    .map(|sub| sub.map(InsNode::from))
+                    .collect(),
+            )
         }
     }
 }

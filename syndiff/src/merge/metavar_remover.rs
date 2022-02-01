@@ -61,7 +61,7 @@ impl<'t> MetavarRemover<'t> {
                     self.metavar_conflict.resize(mv_id + 1, false);
                 }
 
-                let ins_repl = InsNode::from_syn(source);
+                let ins_repl = source.into();
                 match &self.metavar_replacements[mv_id] {
                     None => self.metavar_replacements[mv_id] = Some(ins_repl),
                     Some(cur_repl) => {
@@ -97,7 +97,7 @@ impl<'t> MetavarRemover<'t> {
                     self.remove_metavars_in_spine_seq(spine_ch, source_ch)
                 })?)
             }
-            MergedSpineNode::Unchanged => MergedSpineNode::from_syn(source),
+            MergedSpineNode::Unchanged => source.into(),
             MergedSpineNode::Changed(del, ins) => {
                 MergedSpineNode::Changed(self.remove_metavars_in_del_node(del, source)?, ins)
             }
@@ -165,7 +165,10 @@ impl<'t> MetavarRemover<'t> {
         if !self.metavar_conflict[mv.data.0] {
             match &self.metavar_replacements[mv.data.0] {
                 None => panic!("A metavariable appears in insertion but never in deletion"),
-                Some(repl) => repl.clone(),
+                Some(repl) => InsNode::Inlined(Colored {
+                    data: Box::new(repl.clone()),
+                    color: mv.color,
+                }),
             }
         } else {
             InsNode::Elided(mv)
@@ -178,6 +181,7 @@ impl<'t> MetavarRemover<'t> {
                 .data
                 .visit_mut(|ch| self.replace_metavars_in_ins_node(&mut ch.node)),
             InsNode::Elided(mv) => *node = self.get_metavar_replacement(*mv),
+            InsNode::Inlined(repl) => self.replace_metavars_in_ins_node(&mut repl.data),
         }
     }
 

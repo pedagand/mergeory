@@ -1,5 +1,7 @@
 use super::colors::{ColoredChangeNode, ColoredSpineNode, ColoredSpineSeqNode};
-use super::{DelNode, MergedInsNode, MergedSpineNode, MergedSpineSeqNode, MetavarInsReplacement};
+use super::{
+    DelNode, InsNode, MergedInsNode, MergedSpineNode, MergedSpineSeqNode, MetavarInsReplacement,
+};
 use crate::Metavariable;
 
 pub struct MetavarRenamer {
@@ -69,13 +71,23 @@ fn rename_metavars_in_del(del: &mut DelNode, renamer: &mut MetavarRenamer) {
             .data
             .visit_mut(|sub| rename_metavars_in_del(&mut sub.node, renamer)),
         DelNode::Elided(mv) => mv.data = renamer.rename(mv.data),
-        DelNode::MetavariableConflict(mv, del, ins) => {
+        DelNode::MetavariableConflict(mv, del, repl) => {
             *mv = renamer.rename(*mv);
             rename_metavars_in_del(del, renamer);
-            if let MetavarInsReplacement::Inlined(ins) = ins {
-                rename_metavars_in_change(ins, renamer);
+            if let MetavarInsReplacement::Inlined(ins) = repl {
+                rename_metavars_in_ins(ins, renamer);
             }
         }
+    }
+}
+
+fn rename_metavars_in_ins(ins: &mut InsNode, renamer: &mut MetavarRenamer) {
+    match ins {
+        InsNode::InPlace(ins) => ins
+            .data
+            .visit_mut(|sub| rename_metavars_in_ins(&mut sub.node, renamer)),
+        InsNode::Elided(mv) => mv.data = renamer.rename(mv.data),
+        InsNode::Inlined(ins_repl) => rename_metavars_in_ins(&mut ins_repl.data, renamer),
     }
 }
 
@@ -85,10 +97,10 @@ fn rename_metavars_in_merged_ins(ins: &mut MergedInsNode, renamer: &mut MetavarR
             ins.visit_mut(|sub| rename_metavars_in_merged_ins(&mut sub.node, renamer))
         }
         MergedInsNode::Elided(mv) => *mv = renamer.rename(*mv),
-        MergedInsNode::SingleIns(ins) => rename_metavars_in_change(ins, renamer),
+        MergedInsNode::SingleIns(ins) => rename_metavars_in_ins(ins, renamer),
         MergedInsNode::Conflict(left_ins, right_ins) => {
-            rename_metavars_in_change(left_ins, renamer);
-            rename_metavars_in_change(right_ins, renamer);
+            rename_metavars_in_ins(left_ins, renamer);
+            rename_metavars_in_ins(right_ins, renamer);
         }
     }
 }
@@ -121,17 +133,17 @@ fn rename_metavars_in_merged_spine_subtree(
         }
         MergedSpineSeqNode::DeleteConflict(_, del, ins) => {
             rename_metavars_in_del(del, renamer);
-            rename_metavars_in_change(ins, renamer);
+            rename_metavars_in_ins(ins, renamer);
         }
         MergedSpineSeqNode::Inserted(ins_list) => {
             for ins in ins_list {
-                rename_metavars_in_change(&mut ins.node, renamer);
+                rename_metavars_in_ins(&mut ins.node, renamer);
             }
         }
         MergedSpineSeqNode::InsertOrderConflict(left_ins_list, right_ins_list) => {
             for ins_list in [left_ins_list, right_ins_list] {
                 for ins in ins_list {
-                    rename_metavars_in_change(&mut ins.node, renamer);
+                    rename_metavars_in_ins(&mut ins.node, renamer);
                 }
             }
         }

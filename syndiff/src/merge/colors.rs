@@ -82,7 +82,6 @@ impl<T: TreeFormattable> TreeFormattable for Colored<T> {
     }
 }
 
-#[derive(Clone)]
 pub enum ColoredChangeNode<'t> {
     InPlace(Colored<Tree<'t, Subtree<ColoredChangeNode<'t>>>>),
     Elided(Colored<Metavariable>),
