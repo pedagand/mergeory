@@ -78,6 +78,14 @@ pub trait TreeFormatter {
         })
     }
 
+    fn write_inlined(
+        &mut self,
+        color: Color,
+        write_ins: impl FnOnce(&mut Self) -> Result,
+    ) -> Result {
+        self.write_colored(color, write_ins)
+    }
+
     fn write_mv_conflict(
         &mut self,
         mv: Metavariable,
@@ -272,6 +280,18 @@ impl<O: std::io::Write> TreeFormatter for AnsiColoredTreeFormatter<O> {
         self.parent_color = prev_parent_color;
         self.change_type = prev_change_type;
         Ok(())
+    }
+
+    fn write_inlined(
+        &mut self,
+        color: Color,
+        write_ins: impl FnOnce(&mut Self) -> Result,
+    ) -> Result {
+        self.write_colored(color, |fmt| {
+            write!(fmt.output(), "“")?;
+            write_ins(fmt)?;
+            write!(fmt.output(), "”")
+        })
     }
 }
 

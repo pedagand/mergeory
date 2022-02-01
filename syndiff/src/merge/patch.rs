@@ -10,7 +10,8 @@ fn standalone_ins_to_syn(node: InsNode) -> Option<SynNode> {
                 .map(|sub| sub.try_map(standalone_ins_to_syn))
                 .collect()
         })?)),
-        _ => None,
+        InsNode::Inlined(repl) => standalone_ins_to_syn(*repl.data),
+        InsNode::Elided(_) => None,
     }
 }
 
@@ -22,7 +23,7 @@ fn standalone_merged_ins_to_syn(node: MergedInsNode) -> Option<SynNode> {
                 .collect()
         })?)),
         MergedInsNode::SingleIns(ins) => standalone_ins_to_syn(ins),
-        _ => None,
+        MergedInsNode::Elided(_) | MergedInsNode::Conflict(..) => None,
     }
 }
 
