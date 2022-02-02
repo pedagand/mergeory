@@ -13,11 +13,15 @@ impl<'t> TreeFormattable for SynNode<'t> {
 fn build_syn_tree<'t>(
     cursor: &mut tree_sitter::TreeCursor,
     source: &'t [u8],
+    ignore_whitespace: bool,
     root: bool,
 ) -> SynNode<'t> {
     let node = cursor.node();
     if !node.is_named() {
-        return SynNode(Tree::Leaf(Token::new(&source[node.byte_range()])));
+        return SynNode(Tree::Leaf(Token::new(
+            &source[node.byte_range()],
+            ignore_whitespace,
+        )));
     }
     let kind = node.kind_id();
     let mut children = Vec::new();
@@ -34,10 +38,13 @@ fn build_syn_tree<'t>(
                 // Never loose any byte by recreating leaf node
                 children.push(Subtree {
                     field: None,
-                    node: SynNode(Tree::Leaf(Token::new(&source[cur_byte..start_byte]))),
+                    node: SynNode(Tree::Leaf(Token::new(
+                        &source[cur_byte..start_byte],
+                        ignore_whitespace,
+                    ))),
                 });
             }
-            let subtree = build_syn_tree(cursor, source, false);
+            let subtree = build_syn_tree(cursor, source, ignore_whitespace, false);
             children.push(Subtree {
                 field,
                 node: subtree,
@@ -54,16 +61,23 @@ fn build_syn_tree<'t>(
     if cur_byte < end_byte {
         children.push(Subtree {
             field: None,
-            node: SynNode(Tree::Leaf(Token::new(&source[cur_byte..end_byte]))),
+            node: SynNode(Tree::Leaf(Token::new(
+                &source[cur_byte..end_byte],
+                ignore_whitespace,
+            ))),
         })
     }
     SynNode(Tree::Node(kind, children))
 }
 
-pub fn parse_source<'t>(source: &'t [u8], parser: &mut Parser) -> Option<SynNode<'t>> {
+pub fn parse_source<'t>(
+    source: &'t [u8],
+    parser: &mut Parser,
+    ignore_whitespace: bool,
+) -> Option<SynNode<'t>> {
     parser.reset();
     let tree = parser.parse(source, None)?;
-    let syn_tree = build_syn_tree(&mut tree.walk(), source, true);
+    let syn_tree = build_syn_tree(&mut tree.walk(), source, ignore_whitespace, true);
     Some(syn_tree)
 }
 

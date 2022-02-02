@@ -12,9 +12,17 @@ pub struct Token<'t> {
 }
 
 impl<'t> Token<'t> {
-    pub fn new(bytes: &'t [u8]) -> Self {
+    pub fn new(bytes: &'t [u8], ignore_whitespace: bool) -> Self {
         let mut hasher = DefaultHasher::new();
-        bytes.hash(&mut hasher);
+        if ignore_whitespace {
+            for byte in bytes {
+                if *byte != b' ' && *byte != b'\t' {
+                    byte.hash(&mut hasher);
+                }
+            }
+        } else {
+            bytes.hash(&mut hasher);
+        }
         Token {
             hash: hasher.finish(),
             bytes,

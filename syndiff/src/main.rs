@@ -46,6 +46,7 @@ fn main() {
         .arg(Arg::with_name("quiet").short("q").long("quiet").requires("second-modified-file").help("Do not print anything, just compute the number of conflicts"))
         .arg(Arg::with_name("scope").long("scope").takes_value(true).help("Select the tree-sitter language by scope instead of file extension"))
         .arg(Arg::with_name("extra-blocks").short("b").long("extra-blocks").help("Add extra structure with additional blocks separated by empty lines"))
+        .arg(Arg::with_name("ignore-whitespace").short("w").long("ignore-whitespace").help("Ignore differences in whitespace, take the spacing of the first modified file when a choice has to be made"))
         .get_matches_safe()
         .unwrap_or_else(|err| {
             eprintln!("{}", err);
@@ -80,6 +81,7 @@ fn main() {
         exit(-2);
     });
 
+    let ignore_whitespace = cmd_args.is_present("ignore-whitespace");
     let extra_blocks = cmd_args.is_present("extra-blocks");
     let no_elisions = cmd_args.is_present("no-elisions");
     let color_mode = if cmd_args.is_present("text-colored") {
@@ -91,7 +93,13 @@ fn main() {
     };
 
     let origin_src = read_file(&origin_filename);
-    let origin_tree = parse_tree(&origin_src, &origin_filename, &mut parser, extra_blocks);
+    let origin_tree = parse_tree(
+        &origin_src,
+        &origin_filename,
+        &mut parser,
+        ignore_whitespace,
+        extra_blocks,
+    );
 
     let first_modified_filename = cmd_args.value_of_os("first-modified-file").unwrap();
     let first_modified_src = read_file(&first_modified_filename);
@@ -99,6 +107,7 @@ fn main() {
         &first_modified_src,
         &first_modified_filename,
         &mut parser,
+        ignore_whitespace,
         extra_blocks,
     );
 
@@ -122,6 +131,7 @@ fn main() {
                 &second_modified_src,
                 &second_modified_filename,
                 &mut parser,
+                ignore_whitespace,
                 extra_blocks,
             );
 
@@ -171,9 +181,10 @@ fn parse_tree<'t>(
     source: &'t [u8],
     filename: &OsStr,
     parser: &mut Parser,
+    ignore_whitespace: bool,
     extra_blocks: bool,
 ) -> SynNode<'t> {
-    let origin_tree = parse_source(source, parser).unwrap_or_else(|| {
+    let origin_tree = parse_source(source, parser, ignore_whitespace).unwrap_or_else(|| {
         eprintln!("Unable to parse {}", filename.to_string_lossy());
         exit(-2)
     });
