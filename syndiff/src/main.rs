@@ -1,5 +1,6 @@
 use clap::{App, Arg};
 use std::cmp::min;
+use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::fs::read;
 use std::path::Path;
@@ -38,6 +39,7 @@ fn main() {
         .arg(Arg::with_name("second-modified-file").required(false).help("Path of the second modified file. If provided, perform a three-way merge."))
         .arg(Arg::with_name("standalone").short("s").long("standalone").help("Remove all elisions and unchanged nodes in the final output"))
         .arg(Arg::with_name("no-elisions").long("no-elisions").help("Do not try to elide moved code when computing diff"))
+        .arg(Arg::with_name("elision-whitelist").long("elision-whitelist").takes_value(true).conflicts_with("no-elisions").help("Only try to perform elisions on nodes with a tree-sitter kind listed in the whitelist file"))
         .arg(Arg::with_name("colored").short("c").long("colored").help("Display difference node colors"))
         .arg(Arg::with_name("text-colored").short("C").long("text-colored").help("Display difference node colors as plain text without ANSI color codes"))
         .arg(Arg::with_name("merge-files").short("m").long("merge-files").requires("second-modified-file").help("If there are no conflicts, print the resulting merged file instead of the merged difference"))
@@ -83,7 +85,24 @@ fn main() {
 
     let ignore_whitespace = cmd_args.is_present("ignore-whitespace");
     let extra_blocks = cmd_args.is_present("extra-blocks");
-    let no_elisions = cmd_args.is_present("no-elisions");
+    let elision_whitelist = if cmd_args.is_present("no-elisions") {
+        Some(HashSet::new())
+    } else if let Some(whitelist_filename) = cmd_args.value_of_os("elision-whitelist") {
+        let whitelist_file = read_file(&whitelist_filename);
+        let mut whitelist = HashSet::new();
+        for kind_str in whitelist_file.split(|c| char::from(*c).is_ascii_whitespace()) {
+            let kind_str = String::from_utf8_lossy(kind_str);
+            let kind_id = language.id_for_node_kind(&kind_str, true);
+            if kind_id == 0 {
+                eprintln!("Unknown node kind `{}` for parser", kind_str);
+                exit(-2);
+            }
+            whitelist.insert(kind_id);
+        }
+        Some(whitelist)
+    } else {
+        None
+    };
     let color_mode = if cmd_args.is_present("text-colored") {
         ColorMode::TextColored
     } else if cmd_args.is_present("colored") {
@@ -113,7 +132,7 @@ fn main() {
 
     match cmd_args.value_of_os("second-modified-file") {
         None => {
-            let diff_tree = compute_diff(&origin_tree, &first_modified_tree, no_elisions);
+            let diff_tree = compute_diff(&origin_tree, &first_modified_tree, &elision_whitelist);
             if cmd_args.is_present("standalone") {
                 let standalone_tree = remove_metavars(
                     merge_diffs(&diff_tree, &diff_tree, MergeOptions::default()).unwrap(),
@@ -135,8 +154,8 @@ fn main() {
                 extra_blocks,
             );
 
-            let first_diff = compute_diff(&origin_tree, &first_modified_tree, no_elisions);
-            let second_diff = compute_diff(&origin_tree, &second_modified_tree, no_elisions);
+            let first_diff = compute_diff(&origin_tree, &first_modified_tree, &elision_whitelist);
+            let second_diff = compute_diff(&origin_tree, &second_modified_tree, &elision_whitelist);
 
             let mut merged_diff = merge_diffs(
                 &first_diff,

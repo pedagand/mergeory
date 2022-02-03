@@ -1,33 +1,43 @@
 use super::alignment::{AlignedNode, AlignedSeqNode};
 use super::weight::{HashSum, WeightedNode};
 use super::{ChangeNode, DiffSpineNode, DiffSpineSeqNode, Metavariable};
-use crate::generic_tree::Tree;
+use crate::generic_tree::{NodeKind, Tree};
 use std::collections::{HashMap, HashSet};
 
-fn collect_node_hashes(tree: &WeightedNode, hash_set: &mut HashSet<HashSum>) {
-    if matches!(tree.node, Tree::Leaf(_)) {
-        return; // Do not elide leaf nodes
+fn collect_node_hashes(
+    tree: &WeightedNode,
+    hash_set: &mut HashSet<HashSum>,
+    kind_whitelist: &Option<HashSet<NodeKind>>,
+) {
+    match (&tree.node, kind_whitelist) {
+        (Tree::Leaf(_), _) => return,
+        (Tree::Node(kind, _), Some(kind_whitelist)) if !kind_whitelist.contains(&kind) => (),
+        _ => {
+            hash_set.insert(tree.hash);
+        }
     }
-    hash_set.insert(tree.hash);
     tree.node
-        .visit(|sub| collect_node_hashes(&sub.node, hash_set));
+        .visit(|sub| collect_node_hashes(&sub.node, hash_set, kind_whitelist));
 }
 
 fn collect_change_node_hashes(
     tree: &AlignedNode,
     del_hash_set: &mut HashSet<HashSum>,
     ins_hash_set: &mut HashSet<HashSum>,
+    kind_whitelist: &Option<HashSet<NodeKind>>,
 ) {
     match tree {
         AlignedNode::Spine(spine, del_hash, ins_hash) => {
             del_hash_set.insert(*del_hash);
             ins_hash_set.insert(*ins_hash);
-            spine.visit(|sub| collect_changed_subtree_hashes(sub, del_hash_set, ins_hash_set))
+            spine.visit(|sub| {
+                collect_changed_subtree_hashes(sub, del_hash_set, ins_hash_set, kind_whitelist)
+            })
         }
         AlignedNode::Unchanged(_) => (),
         AlignedNode::Changed(del, ins) => {
-            collect_node_hashes(del, del_hash_set);
-            collect_node_hashes(ins, ins_hash_set);
+            collect_node_hashes(del, del_hash_set, kind_whitelist);
+            collect_node_hashes(ins, ins_hash_set, kind_whitelist);
         }
     }
 }
@@ -36,19 +46,20 @@ fn collect_changed_subtree_hashes(
     subtree: &AlignedSeqNode,
     del_hash_set: &mut HashSet<HashSum>,
     ins_hash_set: &mut HashSet<HashSum>,
+    kind_whitelist: &Option<HashSet<NodeKind>>,
 ) {
     match subtree {
         AlignedSeqNode::Zipped(node) => {
-            collect_change_node_hashes(&node.node, del_hash_set, ins_hash_set)
+            collect_change_node_hashes(&node.node, del_hash_set, ins_hash_set, kind_whitelist)
         }
         AlignedSeqNode::Deleted(del_list) => {
             for del in del_list {
-                collect_node_hashes(&del.node, del_hash_set)
+                collect_node_hashes(&del.node, del_hash_set, kind_whitelist)
             }
         }
         AlignedSeqNode::Inserted(ins_list) => {
             for ins in ins_list {
-                collect_node_hashes(&ins.node, ins_hash_set)
+                collect_node_hashes(&ins.node, ins_hash_set, kind_whitelist)
             }
         }
     }
@@ -150,11 +161,14 @@ fn collect_changed_subtree_elisions(
     }
 }
 
-fn find_wanted_elisions(tree: &AlignedNode) -> HashSet<HashSum> {
+fn find_wanted_elisions(
+    tree: &AlignedNode,
+    kind_whitelist: &Option<HashSet<NodeKind>>,
+) -> HashSet<HashSum> {
     // Find the common subtrees between deleted and inserted nodes
     let mut del_hashes = HashSet::new();
     let mut ins_hashes = HashSet::new();
-    collect_change_node_hashes(tree, &mut del_hashes, &mut ins_hashes);
+    collect_change_node_hashes(tree, &mut del_hashes, &mut ins_hashes, kind_whitelist);
     let possible_elisions = &del_hashes & &ins_hashes;
 
     // Find which of the common subtrees will actually be elided in both trees.
@@ -334,13 +348,9 @@ fn elide_changed_subtree<'t>(
 
 pub fn find_metavariable_elisions<'t>(
     tree: &AlignedNode<'t>,
-    skip_elisions: bool,
+    kind_whitelist: &Option<HashSet<NodeKind>>,
 ) -> DiffSpineNode<'t> {
-    let elisions = if !skip_elisions {
-        find_wanted_elisions(tree)
-    } else {
-        HashSet::new()
-    };
+    let elisions = find_wanted_elisions(tree, kind_whitelist);
     let mut name_generator = MetavarNameGenerator::default();
     elide_change_nodes(tree, &elisions, &mut name_generator)
 }
