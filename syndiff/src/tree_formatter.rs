@@ -7,7 +7,6 @@ type Result = std::io::Result<()>;
 pub enum ChangeType {
     Deletion,
     Insertion,
-    Inline,
 }
 
 pub trait TreeFormatter {
@@ -99,7 +98,7 @@ pub trait TreeFormatter {
             write!(fmt.output(), "»")?;
             if let Some(write_repl) = write_repl {
                 write!(fmt.output(), " <- «")?;
-                fmt.write_change_tree(ChangeType::Inline, write_repl)?;
+                fmt.write_change_tree(ChangeType::Insertion, write_repl)?;
                 write!(fmt.output(), "»")?;
             }
             Ok(())
@@ -297,15 +296,14 @@ impl<O: std::io::Write> TreeFormatter for AnsiColoredTreeFormatter<O> {
 
 impl<O: std::io::Write> AnsiColoredTreeFormatter<O> {
     fn style_for_color(&self, color: Color) -> ansi_term::Style {
-        match color {
-            Color::White => ansi_term::Style::new(),
-            Color::Left => ansi_term::Color::Yellow.bold(),
-            Color::Right => ansi_term::Color::Cyan.bold(),
-            Color::Both => match self.change_type.as_ref().unwrap() {
-                ChangeType::Deletion => ansi_term::Color::Red.bold(),
-                ChangeType::Insertion => ansi_term::Color::Green.bold(),
-                ChangeType::Inline => ansi_term::Color::White.bold(),
-            },
+        match (color, self.change_type.as_ref().unwrap()) {
+            (Color::White, _) => ansi_term::Color::White.normal(),
+            (Color::Left, ChangeType::Deletion) => ansi_term::Color::Fixed(9).normal(),
+            (Color::Left, ChangeType::Insertion) => ansi_term::Color::Fixed(11).normal(),
+            (Color::Right, ChangeType::Deletion) => ansi_term::Color::Fixed(12).normal(),
+            (Color::Right, ChangeType::Insertion) => ansi_term::Color::Fixed(14).normal(),
+            (Color::Both, ChangeType::Deletion) => ansi_term::Color::Fixed(13).normal(),
+            (Color::Both, ChangeType::Insertion) => ansi_term::Color::Fixed(10).normal(),
         }
     }
 
