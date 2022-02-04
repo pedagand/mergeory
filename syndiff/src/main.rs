@@ -15,6 +15,11 @@ use tree_sitter_config::Config;
 use tree_sitter_loader::Loader;
 
 fn main() {
+    std::panic::set_hook(Box::new(|panic_info| {
+        eprintln!("syndiff {}", panic_info);
+        exit(-3)
+    }));
+
     let cmd_args = App::new("Syndiff")
         .version("0.2")
         .author("Guillaume Bertholon <guillaume.bertholon@ens.fr>")

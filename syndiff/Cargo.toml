@@ -16,3 +16,5 @@ ansi_term = "0.12"
 [dev-dependencies]
 goldenfile = "1.1"
 
+[profile.release]
+panic = "abort"
