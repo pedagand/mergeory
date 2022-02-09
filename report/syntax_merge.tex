@@ -77,15 +77,10 @@ $\par\vspace{0.5em}}
 
 \maketitle
 
-\section{Computing difference between syntax trees}
+\newcommand{\TODO}[1]{\textcolor{red}{$\langle$ TODO:} #1 \textcolor{red}{$\rangle$}}
 
-\paragraph{Generic syntax tree}
-Before starting we want to define a unified syntax tree type that can represent
-any parsed file in any language. For that we will use a tree with labelled
-nodes and arbitrary list of possibly labeled children, and take the convention
-that leaves represent tokens in the input file. We can make a lossless tree by
-ensuring that the tree depth-first traversal, yields all the symbols of the
-original file.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Syntax of trees
 
 \newcommand{\aNode}{\ensuremath{\mathsf{node}}}
 \newcommand{\aField}{\ensuremath{\mathsf{field}}}
@@ -93,12 +88,30 @@ original file.
 \newcommand{\aTree}{\ensuremath{\mathsf{t}}}
 \newcommand{\many}[1]{\ensuremath{\overrightarrow{#1}}}
 
-\newcommand{\defNode}[2]{ #1 \{ #2 \}}
-\newcommand{\defField}[2]{#1 : #2}
+\newcommand{\defNode}[2]{\ensuremath{#1 \{ #2 \}}}
+\newcommand{\defField}[2]{\ensuremath{#1 : #2}}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+\section{Computing difference between syntax trees}
+
+\paragraph{Generic syntax tree}
+Before starting we want to define a unified syntax tree type that can
+represent any parsed file in any language. \TODO{Rather: ``generic''
+  datastructure to represent parse trees. Key intuition: use tagged
+  sum (thanks to \defNode{-}{=}) of named products (thanks to
+  \defField{-}{=}).}
+
+For that we will use a tree with labelled
+nodes and arbitrary list of possibly labeled children, and take the convention
+that leaves represent tokens in the input file. We can make a lossless tree by
+ensuring that the tree depth-first traversal, yields all the symbols of the
+original file.
 
 This gives the following grammar where where $\vec{T}$ denotes a list of
 elements of $T$, $node$s are language-dependant and $field$s depend on the
-parent node:
+parent node: \TODO{ie. there is a notion of well-formed tree (typing)}
 %
 \[\begin{array}{lcll}
 \aTree & ::= & & \text{(generic syntax tree)} \\
@@ -117,13 +130,15 @@ conciseness.
 We encode program differences as a new kind of syntax tree, but with additional
 constructors for unchanged, deleted, inserted, changed and moved code.
 
+
+
 Basically, a difference can be viewed as two syntax trees, a deleted one, and
 an
-inserted one. Therefore the simplest valid difference from code $d$ to code $i$
+inserted one. \TODO{too soon:} Therefore the simplest valid difference from code $d$ to code $i$
 is simply the change $\change{d}{i}$, removing all $d$ and inserting $i$ as a
 replacement.
 
-However, to ease later fusion and produce less redundant and more readable
+\TODO{Way too soon:} However, to ease later fusion and produce less redundant and more readable
 output, we refine the produced difference tree using the following algorithm
 (each step will be detailed later):
 \begin{itemize}
