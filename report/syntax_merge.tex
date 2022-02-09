@@ -87,15 +87,24 @@ that leaves represent tokens in the input file. We can make a lossless tree by
 ensuring that the tree depth-first traversal, yields all the symbols of the
 original file.
 
+\newcommand{\aNode}{\ensuremath{\mathsf{node}}}
+\newcommand{\aField}{\ensuremath{\mathsf{field}}}
+\newcommand{\aAtom}{\ensuremath{\mathsf{atom}}}
+\newcommand{\aTree}{\ensuremath{\mathsf{t}}}
+\newcommand{\many}[1]{\ensuremath{\overrightarrow{#1}}}
+
+\newcommand{\defNode}[2]{ #1 \{ #2 \}}
+\newcommand{\defField}[2]{#1 : #2}
+
 This gives the following grammar where where $\vec{T}$ denotes a list of
 elements of $T$, $node$s are language-dependant and $field$s depend on the
 parent node:
-\begin{typgrammar}
-  \typarg{Tree}{T} &::= \synnode{\mathit{node}}{\vec{T}} \typsep
-\syntoken{\mathit{token}}\\
-  \typarg{Subtree}{T} &::= \synfield{\mathit{field}}{T}\\
-  \typ{SyntaxTree} &::= \typarg{Tree}{\typarg{Subtree}{\typ{SyntaxTree}}}\\
-\end{typgrammar}
+%
+\[\begin{array}{lcll}
+\aTree & ::= & & \text{(generic syntax tree)} \\
+       &  |  & \defNode{\aNode}{\many{\defField{\aField}{\aTree}}} & \text{(node)} \\
+       &  |  & \aAtom & \text{(token)}
+\end{array}\]
 
 This kind of trees are directly extracted from Tree-sitter that can work on
 most common programming languages. Although Tree-sitter tree drops some tokens
