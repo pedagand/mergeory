@@ -364,11 +364,11 @@ unchanged nodes.
 At the end, our difference algorithm produces a syntax tree that respects the
 following grammar:
 \begin{typgrammar}
-  \typ{SpineTree} &::= \typarg{Tree}{\typarg{Subtree}{\typ{SpineChild}}}
-\typsep \id \typsep
+  \typ{SpineTree} &::= \typarg{Tree}{\typ{SpineChild}} \typsep \id \typsep
 \change{\typ{ChangeTree}}{\typ{ChangeTree}}\\
-  \typ{SpineChild} &::= \typ{SpineTree} \typsep \del{\typ{ChangeTree}} \typsep
-\ins{\typ{ChangeTree}}\\
+  \typ{SpineChild} &::= \typarg{Subtree}{\typ{SpineTree}} \typsep
+\del{\typarg{Subtree}{\typ{ChangeTree}}} \typsep
+\ins{\typarg{Subtree}{\typ{ChangeTree}}}\\
   \typ{ChangeTree} &::= \typarg{Tree}{\typarg{Subtree}{\typ{ChangeTree}}}
 \typsep \alpha\\
 \end{typgrammar}
