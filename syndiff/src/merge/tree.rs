@@ -85,7 +85,7 @@ impl<'t> From<ChangeNode<'t>> for InsNode<'t> {
     fn from(tree: ChangeNode<'t>) -> Self {
         match tree {
             ChangeNode::InPlace(node) => {
-                InsNode::InPlace(node.map(|node| node.map_subtrees_into(|sub| InsNode::from(sub))))
+                InsNode::InPlace(node.map(|node| node.map_subtrees_into(InsNode::from)))
             }
             ChangeNode::Elided(mv) => InsNode::Elided(mv),
         }
@@ -123,7 +123,7 @@ impl<'t> TreeFormattable for MergedInsNode<'t> {
 impl<'t> From<&SynNode<'t>> for MergedSpineNode<'t> {
     fn from(tree: &SynNode<'t>) -> Self {
         MergedSpineNode::Spine(tree.0.map_children(|sub| {
-            MergedSpineSeqNode::Zipped(sub.as_ref().map(|sub| MergedSpineNode::from(sub)))
+            MergedSpineSeqNode::Zipped(sub.as_ref().map(MergedSpineNode::from))
         }))
     }
 }

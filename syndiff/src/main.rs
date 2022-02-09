@@ -93,7 +93,7 @@ fn main() {
     let elision_whitelist = if cmd_args.is_present("no-elisions") {
         Some(HashSet::new())
     } else if let Some(whitelist_filename) = cmd_args.value_of_os("elision-whitelist") {
-        let whitelist_file = read_file(&whitelist_filename);
+        let whitelist_file = read_file(whitelist_filename);
         let mut whitelist = HashSet::new();
         for kind_str in whitelist_file.split(|c| char::from(*c).is_ascii_whitespace()) {
             let kind_str = String::from_utf8_lossy(kind_str);
@@ -116,20 +116,20 @@ fn main() {
         ColorMode::NoColors
     };
 
-    let origin_src = read_file(&origin_filename);
+    let origin_src = read_file(origin_filename);
     let origin_tree = parse_tree(
         &origin_src,
-        &origin_filename,
+        origin_filename,
         &mut parser,
         ignore_whitespace,
         extra_blocks,
     );
 
     let first_modified_filename = cmd_args.value_of_os("first-modified-file").unwrap();
-    let first_modified_src = read_file(&first_modified_filename);
+    let first_modified_src = read_file(first_modified_filename);
     let first_modified_tree = parse_tree(
         &first_modified_src,
-        &first_modified_filename,
+        first_modified_filename,
         &mut parser,
         ignore_whitespace,
         extra_blocks,
@@ -150,10 +150,10 @@ fn main() {
             }
         }
         Some(second_modified_filename) => {
-            let second_modified_src = read_file(&second_modified_filename);
+            let second_modified_src = read_file(second_modified_filename);
             let second_modified_tree = parse_tree(
                 &second_modified_src,
-                &second_modified_filename,
+                second_modified_filename,
                 &mut parser,
                 ignore_whitespace,
                 extra_blocks,
