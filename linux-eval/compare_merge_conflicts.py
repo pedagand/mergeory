@@ -3,6 +3,7 @@ from backport_conflicts import SuccessfulMerge, FailedMerge, MERGE_TOOLS
 import numpy as np
 from tabulate import tabulate
 import argparse
+from enum import IntEnum
 
 
 parser = argparse.ArgumentParser()
@@ -26,6 +27,12 @@ parser.add_argument(
     "--only-parsed",
     action="store_true",
     help="filter out files that do not parse or commits that contain a non parsable file",
+)
+parser.add_argument(
+    "-t",
+    "--include-trivial",
+    action="store_true",
+    help="include the files that all the tools can merge identically to upstream",
 )
 parser.add_argument(
     "-w",
@@ -56,20 +63,36 @@ def is_identical(merge_res):
         return merge_res.same_as_backported_file
 
 
-def result_score(merge_res):
+class Score(IntEnum):
+    FAILURE = 0
+    DIFFERENT = 1
+    IDENTICAL = 2
+    TRIVIAL = 3
+
+
+def result_score(merge_results, merge_tool):
+    merge_res = merge_results[merge_tool]
     if isinstance(merge_res, SuccessfulMerge):
         if is_identical(merge_res):
-            return 2
+            if args.include_trivial:
+                return Score.IDENTICAL
+            else:
+                for other_res in merge_results.values():
+                    if not isinstance(other_res, SuccessfulMerge) or not is_identical(
+                        other_res
+                    ):
+                        return Score.IDENTICAL
+                return Score.TRIVIAL
         else:
-            return 1
+            return Score.DIFFERENT
     else:
-        return 0
+        return Score.FAILURE
 
 
 def commit_score(pr, merge_tool):
-    score = 2
+    score = Score.IDENTICAL
     for file in pr.conflicting_files:
-        file_score = result_score(file.merge_results[merge_tool])
+        file_score = result_score(file.merge_results, merge_tool)
         score = min(score, file_score)
     return score
 
@@ -78,9 +101,11 @@ def compare_commit_mergeability(commit, merge_tool1, merge_tool2):
     table = np.zeros((3, 3), dtype=int)
     for file in commit.conflicting_files:
         if not args.only_parsed or file.can_parse:
-            res1 = file.merge_results[merge_tool1]
-            res2 = file.merge_results[merge_tool2]
-            table[result_score(res1)][result_score(res2)] += 1
+            res1 = result_score(file.merge_results, merge_tool1)
+            if res1 == Score.TRIVIAL:
+                continue
+            res2 = result_score(file.merge_results, merge_tool2)
+            table[res1][res2] += 1
     return table
 
 
@@ -92,6 +117,8 @@ def compare_merge_conflicts(commit_list, merge_tool1, merge_tool2):
                 not args.only_parsed or commit.can_parse_conflicts
             ):
                 res1 = commit_score(commit, merge_tool1)
+                if res1 == Score.TRIVIAL:
+                    continue
                 res2 = commit_score(commit, merge_tool2)
                 table[res1][res2] += 1
         else:
@@ -113,16 +140,16 @@ for tool1 in MERGE_TOOLS.keys():
         result_names = [" failure", " different", " same"]
         if args.only_mergeability:
             result_names = [" failure", " success"]
-            table[1] += table[2]
-            table = np.delete(table, 2, 0)
-            table[:, 1] += table[:, 2]
-            table = np.delete(table, 2, 1)
+            table[Score.IDENTICAL] += table[Score.DIFFERENT]
+            table = np.delete(table, Score.DIFFERENT, 0)
+            table[:, Score.IDENTICAL] += table[:, Score.DIFFERENT]
+            table = np.delete(table, Score.DIFFERENT, 1)
         elif args.only_backported_equiv:
             result_names = [" different", " same"]
-            table[0] += table[1]
-            table = np.delete(table, 1, 0)
-            table[:, 0] += table[:, 1]
-            table = np.delete(table, 1, 1)
+            table[Score.FAILURE] += table[Score.DIFFERENT]
+            table = np.delete(table, Score.DIFFERENT, 0)
+            table[:, Score.FAILURE] += table[:, Score.DIFFERENT]
+            table = np.delete(table, Score.DIFFERENT, 1)
 
         header = ""
         floatfmt = "g"
