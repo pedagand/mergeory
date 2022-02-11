@@ -1,7 +1,17 @@
 use super::weight::{HashSum, Weight, WeightedNode, SPINE_LEAF_WEIGHT};
 use crate::generic_tree::{Subtree, Tree};
-use std::cmp::{max, Ordering, Reverse};
-use std::collections::BinaryHeap;
+use std::cmp::Ordering;
+
+mod minimal;
+mod patience;
+
+#[derive(Clone, Copy)]
+pub struct SubtreeAlignmentAlgorithm(
+    fn(&[Subtree<WeightedNode>], &[Subtree<WeightedNode>], &mut Vec<SeqNodeAlignment>) -> Weight,
+);
+
+pub use minimal::MINIMAL_ALIGNMENT;
+pub use patience::PATIENCE_ALIGNMENT;
 
 pub enum AlignedNode<'t> {
     Spine(Tree<'t, AlignedSeqNode<'t>>, HashSum, HashSum),
@@ -53,13 +63,18 @@ impl Ord for SeqNodeAlignment {
     }
 }
 
-fn compute_node_alignment(del: &WeightedNode, ins: &WeightedNode) -> (Weight, NodeAlignment) {
+fn compute_node_alignment(
+    del: &WeightedNode,
+    ins: &WeightedNode,
+    align_subtree_algorithm: SubtreeAlignmentAlgorithm,
+) -> (Weight, NodeAlignment) {
     if del == ins {
         return (SPINE_LEAF_WEIGHT, NodeAlignment::Copy);
     }
     match (&del.node, &ins.node) {
         (Tree::Node(del_kind, del_sub), Tree::Node(ins_kind, ins_sub)) if del_kind == ins_kind => {
-            let (cost, sub_align) = compute_subtrees_alignment(del_sub, ins_sub);
+            let mut sub_align = Vec::new();
+            let cost = align_subtree_algorithm.0(del_sub, ins_sub, &mut sub_align);
             if cost < del.weight + ins.weight {
                 (cost, NodeAlignment::Zip(sub_align))
             } else {
@@ -68,111 +83,6 @@ fn compute_node_alignment(del: &WeightedNode, ins: &WeightedNode) -> (Weight, No
         }
         _ => (del.weight + ins.weight, NodeAlignment::Replace),
     }
-}
-
-#[derive(PartialEq, Eq, PartialOrd, Ord)]
-struct AlignmentAStarNode {
-    estimated_cost: Reverse<Weight>,
-    source_edge: Option<SeqNodeAlignment>,
-    cost: Weight,
-    del_pos: usize,
-    ins_pos: usize,
-}
-
-impl AlignmentAStarNode {
-    fn new(
-        cost: Weight,
-        del_pos: usize,
-        ins_pos: usize,
-        source_edge: Option<SeqNodeAlignment>,
-    ) -> Self {
-        AlignmentAStarNode {
-            estimated_cost: Reverse(cost + SPINE_LEAF_WEIGHT * max(del_pos, ins_pos)),
-            source_edge,
-            cost,
-            del_pos,
-            ins_pos,
-        }
-    }
-}
-
-fn compute_subtrees_alignment(
-    del_seq: &[Subtree<WeightedNode>],
-    ins_seq: &[Subtree<WeightedNode>],
-) -> (Weight, Vec<SeqNodeAlignment>) {
-    // Using an A* pathfinding approach:
-    // Nodes are pair of position in both sequences, edges are edit operations, distance is cost.
-    // Goal: arrive at position (0, 0) from (n, m).
-    let mut visited_nodes = Vec::new();
-    visited_nodes.resize_with((del_seq.len() + 1) * (ins_seq.len() + 1), Default::default);
-    let node_index = |del_pos, ins_pos| del_pos + ins_pos * (del_seq.len() + 1);
-
-    let mut to_visit_heap = BinaryHeap::new();
-    to_visit_heap.push(AlignmentAStarNode::new(
-        0,
-        del_seq.len(),
-        ins_seq.len(),
-        None,
-    ));
-
-    let cost;
-    loop {
-        let node = to_visit_heap.pop().unwrap();
-        match &mut visited_nodes[node_index(node.del_pos, node.ins_pos)] {
-            Some(_) => continue,
-            visit_node => *visit_node = Some(node.source_edge),
-        };
-        if node.del_pos == 0 && node.ins_pos == 0 {
-            cost = node.cost;
-            break;
-        }
-
-        if node.del_pos > 0 {
-            to_visit_heap.push(AlignmentAStarNode::new(
-                node.cost + del_seq[node.del_pos - 1].node.weight,
-                node.del_pos - 1,
-                node.ins_pos,
-                Some(SeqNodeAlignment::Delete),
-            ));
-        }
-        if node.ins_pos > 0 {
-            to_visit_heap.push(AlignmentAStarNode::new(
-                node.cost + ins_seq[node.ins_pos - 1].node.weight,
-                node.del_pos,
-                node.ins_pos - 1,
-                Some(SeqNodeAlignment::Insert),
-            ));
-        }
-        if node.del_pos > 0 && node.ins_pos > 0 {
-            let del = &del_seq[node.del_pos - 1];
-            let ins = &ins_seq[node.ins_pos - 1];
-            if del.field == ins.field {
-                let (cost, align) = compute_node_alignment(&del.node, &ins.node);
-                to_visit_heap.push(AlignmentAStarNode::new(
-                    node.cost + cost,
-                    node.del_pos - 1,
-                    node.ins_pos - 1,
-                    Some(SeqNodeAlignment::Zip(align)),
-                ));
-            }
-        }
-    }
-
-    // Reconstruct the edit sequence from visited nodes
-    let mut cur_coord = (0, 0);
-    let mut alignment = Vec::new();
-    while let Some(align_op) = visited_nodes[node_index(cur_coord.0, cur_coord.1)]
-        .take()
-        .unwrap()
-    {
-        cur_coord = match &align_op {
-            SeqNodeAlignment::Zip(_) => (cur_coord.0 + 1, cur_coord.1 + 1),
-            SeqNodeAlignment::Delete => (cur_coord.0 + 1, cur_coord.1),
-            SeqNodeAlignment::Insert => (cur_coord.0, cur_coord.1 + 1),
-        };
-        alignment.push(align_op)
-    }
-    (cost, alignment)
 }
 
 fn align_nodes<'t>(
@@ -242,7 +152,11 @@ fn align_subtrees<'t>(
     aligned_vec
 }
 
-pub fn align_trees<'t>(del: WeightedNode<'t>, ins: WeightedNode<'t>) -> AlignedNode<'t> {
-    let (_, align) = compute_node_alignment(&del, &ins);
+pub fn align_trees<'t>(
+    del: WeightedNode<'t>,
+    ins: WeightedNode<'t>,
+    subtree_algorithm: SubtreeAlignmentAlgorithm,
+) -> AlignedNode<'t> {
+    let (_, align) = compute_node_alignment(&del, &ins, subtree_algorithm);
     align_nodes(del, ins, align)
 }

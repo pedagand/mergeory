@@ -3,12 +3,13 @@ mod elision;
 mod tree;
 mod weight;
 
+pub use alignment::{MINIMAL_ALIGNMENT, PATIENCE_ALIGNMENT};
 pub use tree::Metavariable;
 pub use tree::{ChangeNode, DiffSpineNode, DiffSpineSeqNode};
 
 use crate::generic_tree::NodeKind;
 use crate::syn_tree::SynNode;
-use alignment::align_trees;
+use alignment::{align_trees, SubtreeAlignmentAlgorithm};
 use elision::find_metavariable_elisions;
 use std::collections::HashSet;
 use weight::weight_tree;
@@ -17,6 +18,7 @@ pub fn compute_diff<'t>(
     origin_tree: &SynNode<'t>,
     modified_tree: &SynNode<'t>,
     kind_whitelist: &Option<HashSet<NodeKind>>,
+    align_subtree_algorithm: SubtreeAlignmentAlgorithm,
 ) -> DiffSpineNode<'t> {
     // Hash the syntax trees and compute their weights
     let mut origin_weighted_tree = weight_tree(origin_tree);
@@ -25,7 +27,11 @@ pub fn compute_diff<'t>(
 
     // Merge the common parts from both trees to create a spine of unchanged
     // structure.
-    let aligned_tree = align_trees(origin_weighted_tree, modified_weighted_tree);
+    let aligned_tree = align_trees(
+        origin_weighted_tree,
+        modified_weighted_tree,
+        align_subtree_algorithm,
+    );
 
     // Compute the difference as a deletion and an insertion tree by eliding
     // parts reused from original to modified
