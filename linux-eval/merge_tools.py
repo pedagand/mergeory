@@ -12,18 +12,23 @@ def merge_file_with_git(base, pr, master, out=None, timeout=None):
     )
 
 
-def compute_and_apply_patch(base, pr, master, out=None, timeout=None):
-    if out is None:
-        out = subprocess.DEVNULL
-    with subprocess.Popen(["diff", "-p", base, pr], stdout=subprocess.PIPE) as diff:
-        exit_value = subprocess.call(
-            ["patch", "--force", "-s", "-r", "-", "-o", "-", master],
-            stdin=diff.stdout,
-            stderr=subprocess.DEVNULL,
-            stdout=out,
-            timeout=timeout,
-        )
-    return exit_value
+def patch_merger(diff_opt, patch_opt):
+    def compute_and_apply_patch(base, pr, master, out=None, timeout=None):
+        if out is None:
+            out = subprocess.DEVNULL
+        with subprocess.Popen(
+            ["diff"] + diff_opt + ["-p", base, pr], stdout=subprocess.PIPE
+        ) as diff:
+            exit_value = subprocess.call(
+                ["patch"] + patch_opt + ["--force", "-s", "-r", "-", "-o", "-", master],
+                stdin=diff.stdout,
+                stderr=subprocess.DEVNULL,
+                stdout=out,
+                timeout=timeout,
+            )
+        return exit_value
+
+    return compute_and_apply_patch
 
 
 def syndiff_merger(cmd):
