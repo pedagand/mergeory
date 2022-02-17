@@ -4,7 +4,9 @@ mod merge;
 mod syn_tree;
 mod tree_formatter;
 
-pub use crate::diff::{compute_diff, DiffSpineNode, Metavariable};
+pub use crate::diff::{
+    compute_diff, DiffSpineNode, Metavariable, MINIMAL_ALIGNMENT, PATIENCE_ALIGNMENT,
+};
 pub use crate::merge::{
     apply_patch, canonicalize_metavars, count_conflicts, merge_diffs, remove_metavars,
     MergeOptions, MergedSpineNode,

@@ -11,7 +11,7 @@ fn collect_node_hashes(
 ) {
     match (&tree.node, kind_whitelist) {
         (Tree::Leaf(_), _) => return,
-        (Tree::Node(kind, _), Some(kind_whitelist)) if !kind_whitelist.contains(&kind) => (),
+        (Tree::Node(kind, _), Some(kind_whitelist)) if !kind_whitelist.contains(kind) => (),
         _ => {
             hash_set.insert(tree.hash);
         }

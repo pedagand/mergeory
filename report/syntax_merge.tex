@@ -156,11 +156,11 @@ following grammar:
 \TODO{Discuss identity vs copy}
 
 \begin{typgrammar}
-  \typ{SpineTree} &::= \typarg{Tree}{\typarg{Subtree}{\typ{SpineChild}}}
-\typsep \id \typsep
+  \typ{SpineTree} &::= \typarg{Tree}{\typ{SpineChild}} \typsep \id \typsep
 \change{\typ{ChangeTree}}{\typ{ChangeTree}}\\
-  \typ{SpineChild} &::= \typ{SpineTree} \typsep \del{\typ{ChangeTree}} \typsep
-\ins{\typ{ChangeTree}}\\
+  \typ{SpineChild} &::= \typarg{Subtree}{\typ{SpineTree}} \typsep
+\del{\typarg{Subtree}{\typ{ChangeTree}}} \typsep
+\ins{\typarg{Subtree}{\typ{ChangeTree}}}\\
   \typ{ChangeTree} &::= \typarg{Tree}{\typarg{Subtree}{\typ{ChangeTree}}}
 \typsep \alpha\\
 \end{typgrammar}
@@ -423,7 +423,6 @@ deletion or insertion hash) should occur on a spine node, we have to split it
 into a deletion tree and an insertion tree before performing the elision. This
 is always possible and rather easy to do if we keep the required information on
 unchanged nodes.
-
 
 \paragraph{Intuitive semantics of difference tree}
 \label{sec:diff_application}

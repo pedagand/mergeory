@@ -55,6 +55,7 @@ check_merge_tests! {
     ord_conflict,
     print_macro,
     inlining,
+    disjoint,
 }
 
 macro_rules! check_merge_tests_with_opt {

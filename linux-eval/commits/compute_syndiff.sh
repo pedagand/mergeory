@@ -1,4 +1,6 @@
 #!/bin/bash
+shopt -s nullglob
+
 SYNDIFF=${SYNDIFF:-../../../syndiff/target/release/syndiff}
 out_name=${1:-syndiff}
 

@@ -8,7 +8,8 @@ use std::process::exit;
 use syndiff::{
     add_extra_blocks, apply_patch, canonicalize_metavars, compute_diff, count_conflicts,
     merge_diffs, parse_source, remove_metavars, AnsiColoredTreeFormatter, MergeOptions,
-    PlainTreeFormatter, SynNode, TextColoredTreeFormatter, TreeFormattable,
+    PlainTreeFormatter, SynNode, TextColoredTreeFormatter, TreeFormattable, MINIMAL_ALIGNMENT,
+    PATIENCE_ALIGNMENT,
 };
 use tree_sitter::Parser;
 use tree_sitter_config::Config;
@@ -54,6 +55,7 @@ fn main() {
         .arg(Arg::with_name("scope").long("scope").takes_value(true).help("Select the tree-sitter language by scope instead of file extension"))
         .arg(Arg::with_name("extra-blocks").short("b").long("extra-blocks").help("Add extra structure with additional blocks separated by empty lines"))
         .arg(Arg::with_name("ignore-whitespace").short("w").long("ignore-whitespace").help("Ignore differences in whitespace, take the spacing of the first modified file when a choice has to be made"))
+        .arg(Arg::with_name("patience").long("patience").help("Use the patience diff algorithm for subtree sequences"))
         .get_matches_safe()
         .unwrap_or_else(|err| {
             eprintln!("{}", err);
@@ -93,7 +95,7 @@ fn main() {
     let elision_whitelist = if cmd_args.is_present("no-elisions") {
         Some(HashSet::new())
     } else if let Some(whitelist_filename) = cmd_args.value_of_os("elision-whitelist") {
-        let whitelist_file = read_file(&whitelist_filename);
+        let whitelist_file = read_file(whitelist_filename);
         let mut whitelist = HashSet::new();
         for kind_str in whitelist_file.split(|c| char::from(*c).is_ascii_whitespace()) {
             let kind_str = String::from_utf8_lossy(kind_str);
@@ -108,6 +110,11 @@ fn main() {
     } else {
         None
     };
+    let align_subtree_algorithm = if cmd_args.is_present("patience") {
+        PATIENCE_ALIGNMENT
+    } else {
+        MINIMAL_ALIGNMENT
+    };
     let color_mode = if cmd_args.is_present("text-colored") {
         ColorMode::TextColored
     } else if cmd_args.is_present("colored") {
@@ -116,20 +123,20 @@ fn main() {
         ColorMode::NoColors
     };
 
-    let origin_src = read_file(&origin_filename);
+    let origin_src = read_file(origin_filename);
     let origin_tree = parse_tree(
         &origin_src,
-        &origin_filename,
+        origin_filename,
         &mut parser,
         ignore_whitespace,
         extra_blocks,
     );
 
     let first_modified_filename = cmd_args.value_of_os("first-modified-file").unwrap();
-    let first_modified_src = read_file(&first_modified_filename);
+    let first_modified_src = read_file(first_modified_filename);
     let first_modified_tree = parse_tree(
         &first_modified_src,
-        &first_modified_filename,
+        first_modified_filename,
         &mut parser,
         ignore_whitespace,
         extra_blocks,
@@ -137,7 +144,12 @@ fn main() {
 
     match cmd_args.value_of_os("second-modified-file") {
         None => {
-            let diff_tree = compute_diff(&origin_tree, &first_modified_tree, &elision_whitelist);
+            let diff_tree = compute_diff(
+                &origin_tree,
+                &first_modified_tree,
+                &elision_whitelist,
+                align_subtree_algorithm,
+            );
             if cmd_args.is_present("standalone") {
                 let standalone_tree = remove_metavars(
                     merge_diffs(&diff_tree, &diff_tree, MergeOptions::default()).unwrap(),
@@ -150,17 +162,27 @@ fn main() {
             }
         }
         Some(second_modified_filename) => {
-            let second_modified_src = read_file(&second_modified_filename);
+            let second_modified_src = read_file(second_modified_filename);
             let second_modified_tree = parse_tree(
                 &second_modified_src,
-                &second_modified_filename,
+                second_modified_filename,
                 &mut parser,
                 ignore_whitespace,
                 extra_blocks,
             );
 
-            let first_diff = compute_diff(&origin_tree, &first_modified_tree, &elision_whitelist);
-            let second_diff = compute_diff(&origin_tree, &second_modified_tree, &elision_whitelist);
+            let first_diff = compute_diff(
+                &origin_tree,
+                &first_modified_tree,
+                &elision_whitelist,
+                align_subtree_algorithm,
+            );
+            let second_diff = compute_diff(
+                &origin_tree,
+                &second_modified_tree,
+                &elision_whitelist,
+                align_subtree_algorithm,
+            );
 
             let mut merged_diff = merge_diffs(
                 &first_diff,

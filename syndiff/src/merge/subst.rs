@@ -168,9 +168,8 @@ impl<'t> Substituter<'t> {
                 self.substitute_in_ins_node(right_ins);
 
                 // Try to solve the insertion conflict after substitution
-                match merge_id_ins(&left_ins, &right_ins) {
-                    Some(merged_ins) => *node = MergedInsNode::SingleIns(merged_ins),
-                    None => (),
+                if let Some(merged_ins) = merge_id_ins(left_ins, right_ins) {
+                    *node = MergedInsNode::SingleIns(merged_ins)
                 }
             }
         }
