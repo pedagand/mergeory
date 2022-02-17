@@ -83,8 +83,11 @@ history_parser = subparser.add_parser(
     "history", help="show a single tool results across branches"
 )
 history_parser.set_defaults(action="history")
-history_parser.add_argument("tool", help="the tool that will be shown")
-history_parser.add_argument("branches", nargs="+", help="the set of branches to show")
+history_parser.add_argument(
+    "tool",
+    help="the tool that will be shown, if set to 'trivial' counts the number of trivial commits instead",
+)
+history_parser.add_argument("branches", nargs="*", help="the set of branches to show")
 args = parser.parse_args()
 
 
@@ -102,6 +105,13 @@ class Score(IntEnum):
     TRIVIAL = 3
 
 
+def is_trivial(merge_results):
+    for res in merge_results.values():
+        if not isinstance(res, SuccessfulMerge) or not is_identical(res):
+            return False
+    return True
+
+
 def result_score(merge_results, merge_tool):
     merge_res = merge_results[merge_tool]
     if isinstance(merge_res, SuccessfulMerge):
@@ -109,12 +119,10 @@ def result_score(merge_results, merge_tool):
             if args.include_trivial:
                 return Score.IDENTICAL
             else:
-                for other_res in merge_results.values():
-                    if not isinstance(other_res, SuccessfulMerge) or not is_identical(
-                        other_res
-                    ):
-                        return Score.IDENTICAL
-                return Score.TRIVIAL
+                if is_trivial(merge_results):
+                    return Score.TRIVIAL
+                else:
+                    return Score.IDENTICAL
         else:
             return Score.DIFFERENT
     else:
@@ -330,6 +338,31 @@ def show_history():
     print(make_table(headers, res_list))
 
 
+def show_trivial_history():
+    res_list = []
+    for branch_name in args.branches:
+        branch = pickle.load(open(branch_name, "rb"))
+        counts = [0, 0]
+        for commit in branch.backported_commits:
+            if args.full_commit:
+                if commit.only_c_conflicts and (
+                    not args.only_parsed or commit.can_parse_conflicts
+                ):
+                    trivial = True
+                    for file in commit.conflicting_files:
+                        if not is_trivial(file.merge_results):
+                            trivial = False
+                    counts[int(trivial)] += 1
+            else:
+                for file in commit.conflicting_files:
+                    if not args.only_parsed or file.can_parse:
+                        counts[int(is_trivial(file.merge_results))] += 1
+        res_list.append([branch.branch] + counts)
+
+    headers = ["branch", "interesting", "trivial"]
+    print(make_table(headers, res_list))
+
+
 if args.action == "compare":
     branch = pickle.load(open(args.branch, "rb"))
     if args.list:
@@ -340,4 +373,7 @@ elif args.action == "list":
     branch = pickle.load(open(args.branch, "rb"))
     show_result_list(branch)
 elif args.action == "history":
-    show_history()
+    if args.tool == "trivial":
+        show_trivial_history()
+    else:
+        show_history()
