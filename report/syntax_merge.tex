@@ -113,7 +113,7 @@ original file.
 
 This gives the following grammar where where $\vec{T}$ denotes a list of
 elements of $T$, $node$s are language-dependant and $field$s depend on the
-parent node: \TODO{ie. there is a notion of well-formed tree (typing)}
+parent node: \TODO{ie. there is a notion of well-formed tree (typing, field names are unique in a constructor)}
 %
 \[\begin{array}{lcll}
 \aSum(X)  & ::= & & \\
@@ -151,10 +151,23 @@ constructors for unchanged, deleted, inserted, changed and moved code.
 
 Basically, a difference tree can be viewed as two syntax trees, a deleted one, and
 an
-inserted one.
-At the end, our difference algorithm produces a syntax tree that respects the
-following grammar:
-%
+inserted one. 
+
+\TODO{Add examples of node replacement, field deletion, field insertion}
+
+\TODO{What's the point of this representation?} (compared to two trees, one to delete, the other to insert)
+\begin{itemize}
+\item compactly represent shared bits (spines)
+\item localize changes (spine = path to a change)
+\item resilience to orthogonal changes (patterns)
+\end{itemize}
+
+\TODO{Add examples of the above properties}
+
+\TODO{Example: identity vs copy}
+
+\TODO{Remark: non-linearity in patterns}
+
 \[\begin{array}{lcll}
 \aSpineSum(W) & ::= & & \text{(difference of constructor)} \\
         & |   & \aSum(W) & \text{(spine)} \\
