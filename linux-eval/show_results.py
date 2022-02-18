@@ -56,6 +56,12 @@ subparser = parser.add_subparsers(
 compare_parser = subparser.add_parser("compare", help="compare tool results two by two")
 compare_parser.set_defaults(action="compare")
 compare_parser.add_argument(
+    "-l",
+    "--list",
+    action="store_true",
+    help="display results as a flat list of tool pairs",
+)
+compare_parser.add_argument(
     "branch", help="the branch on which the merge tools are compared"
 )
 compare_parser.add_argument(
@@ -77,8 +83,11 @@ history_parser = subparser.add_parser(
     "history", help="show a single tool results across branches"
 )
 history_parser.set_defaults(action="history")
-history_parser.add_argument("tool", help="the tool that will be shown")
-history_parser.add_argument("branches", nargs="+", help="the set of branches to show")
+history_parser.add_argument(
+    "tool",
+    help="the tool that will be shown, if set to 'trivial' counts the number of trivial commits instead",
+)
+history_parser.add_argument("branches", nargs="*", help="the set of branches to show")
 args = parser.parse_args()
 
 
@@ -96,6 +105,13 @@ class Score(IntEnum):
     TRIVIAL = 3
 
 
+def is_trivial(merge_results):
+    for res in merge_results.values():
+        if not isinstance(res, SuccessfulMerge) or not is_identical(res):
+            return False
+    return True
+
+
 def result_score(merge_results, merge_tool):
     merge_res = merge_results[merge_tool]
     if isinstance(merge_res, SuccessfulMerge):
@@ -103,12 +119,10 @@ def result_score(merge_results, merge_tool):
             if args.include_trivial:
                 return Score.IDENTICAL
             else:
-                for other_res in merge_results.values():
-                    if not isinstance(other_res, SuccessfulMerge) or not is_identical(
-                        other_res
-                    ):
-                        return Score.IDENTICAL
-                return Score.TRIVIAL
+                if is_trivial(merge_results):
+                    return Score.TRIVIAL
+                else:
+                    return Score.IDENTICAL
         else:
             return Score.DIFFERENT
     else:
@@ -187,9 +201,7 @@ def make_table(headers, data):
     return tabulate(data, headers=headers, tablefmt=args.style, floatfmt=floatfmt)
 
 
-def compare_tools(branch, tool1, tool2):
-    table = compare_merge_conflicts(branch.backported_commits, tool1, tool2)
-
+def normalize_comparison_table(table):
     if args.only_mergeability:
         table[Score.IDENTICAL] += table[Score.DIFFERENT]
         table = np.delete(table, Score.DIFFERENT, 0)
@@ -200,19 +212,86 @@ def compare_tools(branch, tool1, tool2):
         table = np.delete(table, Score.DIFFERENT, 0)
         table[:, Score.FAILURE] += table[:, Score.DIFFERENT]
         table = np.delete(table, Score.DIFFERENT, 1)
-
-    column_names = get_column_names()
-    header = ""
     if args.ratio:
         count = sum(sum(table))
-        header = "N = {}".format(count)
-        table = table * 100 / count
+        table *= 100 / count
 
+
+def show_one_tool_comparison_table(branch, tool1, tool2):
+    table = compare_merge_conflicts(branch.backported_commits, tool1, tool2)
+    normalize_comparison_table(table)
+
+    column_names = get_column_names()
     pretty_table = [
         [tool1 + " " + column_names[i]] + list(table[i]) for i in range(len(table))
     ]
-    headers = [header] + [tool2 + " " + col_name for col_name in column_names]
+    headers = [""] + [tool2 + " " + col_name for col_name in column_names]
+
     print(make_table(headers, pretty_table))
+
+
+def show_tool_comparison_tables(branch):
+    if args.tool:
+        if args.other_tool:
+            show_one_tool_comparison_table(branch, args.tool, args.other_tool)
+        else:
+            for tool2 in MERGE_TOOLS.keys():
+                if args.tool == tool2:
+                    continue
+                try:
+                    show_one_tool_comparison_table(branch, args.tool, tool2)
+                    print()
+                except KeyError as err:
+                    if err.args[0] == args.tool:
+                        raise
+                    continue
+    else:
+        for tool1 in MERGE_TOOLS.keys():
+            for tool2 in MERGE_TOOLS.keys():
+                if tool1 >= tool2:
+                    continue
+                try:
+                    show_one_tool_comparison_table(branch, tool1, tool2)
+                    print()
+                except KeyError:
+                    continue
+
+
+def tool_comparison_entry(branch, tool1, tool2):
+    table = compare_merge_conflicts(branch.backported_commits, tool1, tool2)
+    normalize_comparison_table(table)
+    return [tool1, tool2] + list(table.flatten())
+
+
+def show_tool_comparison_list(branch):
+    res_list = []
+    if args.tool:
+        if args.other_tool:
+            res_list.append(tool_comparison_entry(branch, args.tool, args.other_tool))
+        else:
+            for tool2 in MERGE_TOOLS.keys():
+                try:
+                    res_list.append(tool_comparison_entry(branch, args.tool, tool2))
+                except KeyError as err:
+                    if err.args[0] == args.tool:
+                        raise
+    else:
+        for tool1 in MERGE_TOOLS.keys():
+            for tool2 in MERGE_TOOLS.keys():
+                if tool1 > tool2:
+                    continue
+                try:
+                    res_list.append(tool_comparison_entry(branch, tool1, tool2))
+                except KeyError:
+                    pass
+
+    single_column_names = get_column_names()
+    headers = ["tool1", "tool2"] + [
+        res1 + "-" + res2
+        for res1 in single_column_names
+        for res2 in single_column_names
+    ]
+    print(make_table(headers, res_list))
 
 
 def normalize_results(score):
@@ -234,7 +313,7 @@ def normalize_results(score):
     return score
 
 
-def list_results(branch):
+def show_result_list(branch):
     res_list = []
     for tool_name in MERGE_TOOLS.keys():
         try:
@@ -259,34 +338,42 @@ def show_history():
     print(make_table(headers, res_list))
 
 
+def show_trivial_history():
+    res_list = []
+    for branch_name in args.branches:
+        branch = pickle.load(open(branch_name, "rb"))
+        counts = [0, 0]
+        for commit in branch.backported_commits:
+            if args.full_commit:
+                if commit.only_c_conflicts and (
+                    not args.only_parsed or commit.can_parse_conflicts
+                ):
+                    trivial = True
+                    for file in commit.conflicting_files:
+                        if not is_trivial(file.merge_results):
+                            trivial = False
+                    counts[int(trivial)] += 1
+            else:
+                for file in commit.conflicting_files:
+                    if not args.only_parsed or file.can_parse:
+                        counts[int(is_trivial(file.merge_results))] += 1
+        res_list.append([branch.branch] + counts)
+
+    headers = ["branch", "interesting", "trivial"]
+    print(make_table(headers, res_list))
+
+
 if args.action == "compare":
     branch = pickle.load(open(args.branch, "rb"))
-    if args.tool:
-        if args.other_tool:
-            compare_tools(branch, args.tool, args.other_tool)
-        else:
-            for tool2 in MERGE_TOOLS.keys():
-                if args.tool == tool2:
-                    continue
-                try:
-                    compare_tools(branch, args.tool, tool2)
-                    print()
-                except KeyError as err:
-                    if err.args[0] == args.tool:
-                        raise
-                    continue
+    if args.list:
+        show_tool_comparison_list(branch)
     else:
-        for tool1 in MERGE_TOOLS.keys():
-            for tool2 in MERGE_TOOLS.keys():
-                if tool1 >= tool2:
-                    continue
-                try:
-                    compare_tools(branch, tool1, tool2)
-                    print()
-                except KeyError:
-                    continue
+        show_tool_comparison_tables(branch)
 elif args.action == "list":
     branch = pickle.load(open(args.branch, "rb"))
-    list_results(branch)
+    show_result_list(branch)
 elif args.action == "history":
-    show_history()
+    if args.tool == "trivial":
+        show_trivial_history()
+    else:
+        show_history()
