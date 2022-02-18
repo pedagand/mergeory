@@ -82,14 +82,16 @@ $\par\vspace{0.5em}}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Syntax of trees
 
-\newcommand{\aNode}{\ensuremath{\mathsf{node}}}
-\newcommand{\aField}{\ensuremath{\mathsf{field}}}
-\newcommand{\aAtom}{\ensuremath{\mathsf{atom}}}
+\newcommand{\aNode}{\ensuremath{\mathit{node}}}
+\newcommand{\aField}{\ensuremath{\mathit{field}}}
+\newcommand{\aAtom}{\ensuremath{\mathit{atom}}}
 \newcommand{\aTree}{\ensuremath{\mathsf{t}}}
+\newcommand{\aSum}{\ensuremath{\mathsf{s}}}
+\newcommand{\aProd}{\ensuremath{\mathsf{p}}}
 \newcommand{\many}[1]{\ensuremath{\overrightarrow{#1}}}
 
 \newcommand{\defNode}[2]{\ensuremath{#1 \{ #2 \}}}
-\newcommand{\defField}[2]{\ensuremath{#1 : #2}}
+\newcommand{\defField}[2]{\ensuremath{#1\!: #2}}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -114,15 +116,23 @@ elements of $T$, $node$s are language-dependant and $field$s depend on the
 parent node: \TODO{ie. there is a notion of well-formed tree (typing)}
 %
 \[\begin{array}{lcll}
+\aSum(X)  & ::= & & \\
+          & |   & \defNode{\aNode}{\many{X}} & \text{(constructor)} \\
+\\
+\aProd(X) & ::= & & \\
+          & |   & \defField{\aField}{X} & \text{(accessor)} \\
+\\
 \aTree & ::= & & \text{(generic syntax tree)} \\
-       &  |  & \defNode{\aNode}{\many{\defField{\aField}{\aTree}}} & \text{(node)} \\
+       &  |  & \aSum(\aProd(\aTree)) & \text{(node)} \\
        &  |  & \aAtom & \text{(token)}
 \end{array}\]
 
-This kind of trees are directly extracted from Tree-sitter that can work on
+\TODO{Give an example, on C code}
+
+This kind of trees are directly extracted from Tree-sitter \TODO{ref. needed} that can work on
 most common programming languages. Although Tree-sitter tree drops some tokens
 of the input files (like space) in its tree, we can still build a lossless tree
-by recreating missing leaves from span information.
+by recreating missing leaves from span information \TODO{mention earlier and how they fit in the algebraic model}.
 In the examples later, we will not use lossless trees for the sake of
 conciseness.
 
@@ -130,12 +140,14 @@ conciseness.
 We encode program differences as a new kind of syntax tree, but with additional
 constructors for unchanged, deleted, inserted, changed and moved code.
 
-\newcommand{\aSpine}{\ensuremath{\mathsf{s}}}
-\newcommand{\aCTree}{\ensuremath{\mathsf{c}}}
+\newcommand{\aSpineSum}{\ensuremath{\aSum\!\aSum}}
+\newcommand{\aSpineProd}{\ensuremath{\aProd\!\aProd}}
+\newcommand{\aDiffTree}{\ensuremath{\aTree\!\aTree}}
+\newcommand{\aPatternTree}{\ensuremath{\mathsf{pat}}}
 \newcommand{\aVar}{\ensuremath{\alpha}}
 \newcommand{\defCopy}{\ensuremath{\square}}
 \newcommand{\defIdent}[2]{\defNode{#1}{#2}}
-\newcommand{\defReplace}[2]{\del{#1} \mapsto \ins{#2}}xs
+\newcommand{\defReplace}[2]{\del{#1} \mapsto \ins{#2}}
 
 Basically, a difference tree can be viewed as two syntax trees, a deleted one, and
 an
@@ -144,26 +156,28 @@ At the end, our difference algorithm produces a syntax tree that respects the
 following grammar:
 %
 \[\begin{array}{lcll}
-\aSpine & ::= & & \text{(difference tree)} \\
-        & |   & \defIdent{\aNode}{\many{\defField{\aField}{\aCTree}}} & \text{(spine)} \\
-        & |   & \defCopy & \text{(copy)} \\
-        & |   & \defReplace \aCTree \aCTree & \text{(replace)} \\
-\aCTree & ::= & & \text{(pattern)} \\
+\aSpineSum(W) & ::= & & \text{(difference of constructor)} \\
+        & |   & \aSum(W) & \text{(spine)} \\
+%        & |   & \defCopy & \text{(node copy)} \\
+% Remark: \defCopy may be necessary if we want to talk about the no-pattern version
+        & |   & \defReplace \aPatternTree \aPatternTree & \text{(node replacement)} \\
+\\
+\aSpineProd(W) & ::= & & \text{(difference of projection)} \\
+                 & |   & \aProd(W) & \text{(spine)} \\
+                 & |   & \del{\aProd(\aPatternTree)} & \text{(field deletion)} \\
+                 & |   & \ins{\aProd(\aPatternTree)} & \text{(field insertion)} \\
+\\
+\aPatternTree & ::= & & \text{(pattern)} \\
+        & |   & \aSum(\aProd(\aPatternTree)) & \text{(deep pattern)}\\
         & |   & \aVar & \text{(variable)} \\
-        & |   & \aSpine & \text{(change)}
+\\
+\aDiffTree & ::= & & \text{(difference of tree)} \\
+           & |   & \aSpineSum(\aSpineProd(\aDiffTree))
 \end{array}\]
+
 
 \TODO{Discuss identity vs copy}
 
-\begin{typgrammar}
-  \typ{SpineTree} &::= \typarg{Tree}{\typ{SpineChild}} \typsep \id \typsep
-\change{\typ{ChangeTree}}{\typ{ChangeTree}}\\
-  \typ{SpineChild} &::= \typarg{Subtree}{\typ{SpineTree}} \typsep
-\del{\typarg{Subtree}{\typ{ChangeTree}}} \typsep
-\ins{\typarg{Subtree}{\typ{ChangeTree}}}\\
-  \typ{ChangeTree} &::= \typarg{Tree}{\typarg{Subtree}{\typ{ChangeTree}}}
-\typsep \alpha\\
-\end{typgrammar}
 We can see that difference trees are composed by spine nodes (reusing
 $\typ{Tree}$
 constructs), unchanged holes ($\square$) or local changes ($\change{d}{i}$). In
