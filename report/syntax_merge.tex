@@ -188,22 +188,92 @@ inserted one.
            & |   & \aSpineSum(\aSpineProd(\aDiffTree))
 \end{array}\]
 
+\paragraph{Formal semantics of difference trees}
 
-\TODO{Discuss identity vs copy}
+The implied function of a difference tree is formally defined as follows: let
+us suppose that we have $\Gamma$ a function from meta-variables (occurring in
+the difference tree) to syntax trees. In practice, $\Gamma$ is constrained
+enough to be always uniquely inferred by the algorithm presented in the
+previous paragraph because each meta-variable occur at least once.
 
-We can see that difference trees are composed by spine nodes (reusing
-$\typ{Tree}$
-constructs), unchanged holes ($\square$) or local changes ($\change{d}{i}$). In
-their spine elements, if there are sequences, their elements can be either
-spine trees themselves, inserted new trees or deleted trees. To finish,
-inside inserted or deleted code, we can arbitrarily replace any node by a
-meta-variable.
+We denote by $h :: \vec{t}$ a sequence containing at least one element, and by
+$[]$ the empty sequence.
+
+A judgment $\Gamma \vdash t(d) = i$ means that under meta-variable replacements
+$\Gamma$, the difference tree $t$ applied to $d$ is well defined and returns
+$i$. The judgment $\Gamma \vdash c(d)$ means that the change $c$ is compatible
+with the original tree $d$ under meta-variable replacements $\Gamma$.
+
+We extend $\Gamma$ on $\typ{ChangeTree}$, as the function that recursively
+replaces any meta-variable in a $\typ{ChangeTree}$ by the corresponding
+replacement syntax tree thus producing a $\typ{SyntaxTree}$.
+
+\newcommand{\DiffApply}[4]{#1 \:|\: #2(#3) \leadsto #4}
+\newcommand{\aEnv}{\rho}
+\newcommand{\subst}[2]{#2[#1]}
+
+Then, we have the following syntax-driven rules:
+
+\begin{center}
+  \fbox{$\DiffApply \aEnv \aDiffTree \aTree \aTree$}
+\end{center}
+
+\begin{prooftree}
+ \AxiomC{$\DiffApply \aEnv {\aSpineProd_i} {\many \aProd} {\aProd'_i}$}
+ \RightLabel{\textsc{Ctor-Spine}}
+ \UnaryInfC{$\DiffApply \aEnv
+                        {\defNode \aNode {\many \aSpineProd}}
+                        {\defNode \aNode {\many \aProd}}
+                        {\defNode \aNode {\many {\aProd'}}}$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\subst \rho {\aPatternTree_s} = \aTree$}
+ \RightLabel{\textsc{Ctor-Change}}
+ \UnaryInfC{$\DiffApply \aEnv
+                        {\defReplace {\aPatternTree_s} {\aPatternTree_t}}
+                        {\aTree}
+                        {\subst \rho {\aPatternTree_t}}$}
+\end{prooftree}
+
+\begin{center}
+  \fbox{$\DiffApply \aEnv \aSpineProd {\many \aProd} \aProd$}
+\end{center}
+
+\begin{prooftree}
+ \AxiomC{$\defField \aField \aTree \in \many \aProd$}
+ \AxiomC{$\DiffApply \aEnv \aDiffTree \aTree {\aTree'}$}
+ \RightLabel{\textsc{Proj-Spine}}
+ \BinaryInfC{$\DiffApply \aEnv
+                         {\defField \aField \aDiffTree}
+                         {\many \aProd}
+                         {\defField \aField \aTree'}$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{}
+ \RightLabel{\textsc{Proj-Ins}}
+ \UnaryInfC{$\DiffApply \aEnv
+                        {\ins {\defField \aField \aPatternTree}}
+                        {\many \aProd}
+                        {\defField \aField {\subst \rho \aPatternTree}}$}
+\end{prooftree}
+
+\begin{prooftree}
+ \AxiomC{$\defField \aField {\subst \rho \aPatternTree} \in {\many \aProd}$}
+ \RightLabel{\textsc{Proj-Del}}
+ \UnaryInfC{$\DiffApply \aEnv
+                        {\del {\defField \aField \aPatternTree}}
+                        {\many \aProd}
+                        {\epsilon}$}
+\end{prooftree}
 
 
+\vspace{1em}
+Syntax trees for which no well-founded judgment exist are outside the domain of
+the difference tree.
 
-\TODO{too soon:} Therefore the simplest valid difference from code $d$ to code $i$
-is simply the change $\change{d}{i}$, removing all $d$ and inserting $i$ as a
-replacement.
+\section{Computing difference trees}
 
 \TODO{Way too soon:} However, to ease later fusion and produce less redundant and more readable
 output, we refine the produced difference tree using the following algorithm
@@ -568,125 +638,6 @@ However, $3 + 4$ is not in the domain of neither $\change{3 - \alpha}{9 +
 \alpha}$ ($3$ and $4$ are different subtrees and cannot be both placed in the
 same meta-variable).
 
-\paragraph{Formal semantics of difference trees}
-
-The implied function of a difference tree is formally defined as follows: let
-us suppose that we have $\Gamma$ a function from meta-variables (occurring in
-the difference tree) to syntax trees. In practice, $\Gamma$ is constrained
-enough to be always uniquely inferred by the algorithm presented in the
-previous paragraph because each meta-variable occur at least once.
-
-We denote by $h :: \vec{t}$ a sequence containing at least one element, and by
-$[]$ the empty sequence.
-
-A judgment $\Gamma \vdash t(d) = i$ means that under meta-variable replacements
-$\Gamma$, the difference tree $t$ applied to $d$ is well defined and returns
-$i$. The judgment $\Gamma \vdash c(d)$ means that the change $c$ is compatible
-with the original tree $d$ under meta-variable replacements $\Gamma$.
-
-We extend $\Gamma$ on $\typ{ChangeTree}$, as the function that recursively
-replaces any meta-variable in a $\typ{ChangeTree}$ by the corresponding
-replacement syntax tree thus producing a $\typ{SyntaxTree}$.
-
-Then, we have the following syntax-driven rules:
-
-\begin{minipage}{0.45\textwidth}
-
-\begin{prooftree}
- \AxiomC{}
- \RightLabel{\textsc{Id}}
- \UnaryInfC{$\Gamma \vdash \id(t) = t$}
-\end{prooftree}
-
-\begin{prooftree}
- \AxiomC{$\Gamma \vdash \vec{t}(\vec{d_t}) = \vec{i_t}$}
- \RightLabel{\textsc{Spine}}
- \UnaryInfC{$\Gamma \vdash \synnode{n}{\vec{t}}(\synnode{n}{\vec{d_t}}) =
-\synnode{n}{\vec{i_t}}$}
-\end{prooftree}
-
-
-\begin{prooftree}
- \AxiomC{$\Gamma \vdash t(d) = i$}
- \AxiomC{$\Gamma \vdash \vec{r}(\vec{d_r}) = \vec{i_r}$}
- \RightLabel{\textsc{SeqZip}}
- \BinaryInfC{$\Gamma \vdash
-(\synfield{f}{t}::\vec{r})(\synfield{f}{d}::\vec{d_r}) =
-\synfield{f}{i}::\vec{i_r}$}
-\end{prooftree}
-
-\begin{prooftree}
- \AxiomC{$\Gamma \vdash \vec{r}(\vec{d_r}) = \vec{i_r}$}
- \RightLabel{\textsc{SeqIns}}
- \UnaryInfC{$\Gamma \vdash (\ins{\synfield{f}{c}}::\vec{r})(\vec{d_r}) =
-\synfield{f}{\Gamma(c)} :: \vec{i_r}$}
-\end{prooftree}
-
-\begin{prooftree}
- \AxiomC{$\Gamma \vdash \vec{c_t}(\vec{d_t})$}
- \RightLabel{\textsc{DelSyn}}
- \UnaryInfC{$\Gamma \vdash \synnode{n}{\vec{c_t}}
-(\synnode{n}{\vec{d_t}})$}
-\end{prooftree}
-
-\begin{prooftree}
- \AxiomC{}
- \RightLabel{\textsc{DelEmpty}}
- \UnaryInfC{$\Gamma \vdash []([])$}
-\end{prooftree}
-
-\end{minipage}\hfill\begin{minipage}{0.45\textwidth}
-
-\begin{prooftree}
- \AxiomC{$\Gamma \vdash d(t)$}
- \RightLabel{\textsc{Change}}
- \UnaryInfC{$\Gamma \vdash (\change{d}{i})(t) = \Gamma(i)$}
-\end{prooftree}
-
-\begin{prooftree}
- \AxiomC{}
- \RightLabel{\textsc{SameLeaf}}
- \UnaryInfC{$\Gamma \vdash \syntoken{l}(\syntoken{l}) = \syntoken{l}$}
-\end{prooftree}
-
-\begin{prooftree}
- \AxiomC{$\Gamma \vdash c(d)$}
- \AxiomC{$\Gamma \vdash \vec{r}(\vec{d_r}) = \vec{i_r}$}
- \RightLabel{\textsc{SeqDel}}
- \BinaryInfC{$\Gamma \vdash
-(\del{\synfield{f}{c}}::\vec{r})(\synfield{f}{d}::\vec{d_r}) = \vec{i_r}$}
-\end{prooftree}
-
-\begin{prooftree}
- \AxiomC{}
- \RightLabel{\textsc{SeqEmpty}}
- \UnaryInfC{$\Gamma \vdash []([]) = []$}
-\end{prooftree}
-
-\begin{prooftree}
- \AxiomC{$\Gamma(\alpha) = d$}
- \RightLabel{\textsc{DelMv}}
- \UnaryInfC{$\Gamma \vdash \alpha(d)$}
-\end{prooftree}
-
-\begin{prooftree}
- \AxiomC{}
- \RightLabel{\textsc{DelLeaf}}
- \UnaryInfC{$\Gamma \vdash \syntoken{l}(\syntoken{l})$}
-\end{prooftree}
-
-\begin{prooftree}
- \AxiomC{$\Gamma \vdash c(d)$}
- \AxiomC{$\Gamma \vdash \vec{r}(\vec{d_r})$}
- \RightLabel{\textsc{DelZip}}
- \BinaryInfC{$\Gamma \vdash
-(\synfield{f}{c}::\vec{r})(\synfield{f}{d}::\vec{d_r})$}
-\end{prooftree}
-\end{minipage}
-
-\vspace{1em}
-Syntax trees for which no well-founded judgment exist are outside the domain of
-the difference tree.
 
 \section{Merging syntactic difference trees}
 A merging algorithm takes two differences and produce another difference that
