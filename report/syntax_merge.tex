@@ -82,9 +82,9 @@ $\par\vspace{0.5em}}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Syntax of trees
 
-\newcommand{\aNode}{\ensuremath{\mathit{node}}}
-\newcommand{\aField}{\ensuremath{\mathit{field}}}
-\newcommand{\aAtom}{\ensuremath{\mathit{atom}}}
+\newcommand{\aNode}{\ensuremath{\mathfrak{n}}}
+\newcommand{\aField}{\ensuremath{\mathfrak{f}}}
+\newcommand{\aAtom}{\ensuremath{\mathfrak{at}}}
 \newcommand{\aTree}{\ensuremath{\mathsf{t}}}
 \newcommand{\aSum}{\ensuremath{\mathsf{s}}}
 \newcommand{\aProd}{\ensuremath{\mathsf{p}}}
@@ -116,11 +116,9 @@ elements of $T$, $node$s are language-dependant and $field$s depend on the
 parent node: \TODO{ie. there is a notion of well-formed tree (typing, field names are unique in a constructor)}
 %
 \[\begin{array}{lcll}
-\aSum(X)  & ::= & & \\
-          & |   & \defNode{\aNode}{\many{X}} & \text{(constructor)} \\
+\aSum(X)  & ::= & \defNode{\aNode}{\many{X}} & \text{(constructor)} \\
 \\
-\aProd(X) & ::= & & \\
-          & |   & \defField{\aField}{X} & \text{(accessor)} \\
+\aProd(X) & ::= & \defField{\aField}{X} & \text{(accessor)} \\
 \\
 \aTree & ::= & & \text{(generic syntax tree)} \\
        &  |  & \aSum(\aProd(\aTree)) & \text{(node)} \\
@@ -173,7 +171,7 @@ inserted one.
         & |   & \aSum(W) & \text{(spine)} \\
 %        & |   & \defCopy & \text{(node copy)} \\
 % Remark: \defCopy may be necessary if we want to talk about the no-pattern version
-        & |   & \defReplace \aPatternTree \aPatternTree & \text{(node replacement)} \\
+        & |   & \defReplace \aPatternTree \aPatternTree & \text{(constructor replacement)} \\
 \\
 \aSpineProd(W) & ::= & & \text{(difference of projection)} \\
                  & |   & \aProd(W) & \text{(spine)} \\
@@ -184,8 +182,7 @@ inserted one.
         & |   & \aSum(\aProd(\aPatternTree)) & \text{(deep pattern)}\\
         & |   & \aVar & \text{(variable)} \\
 \\
-\aDiffTree & ::= & & \text{(difference of tree)} \\
-           & |   & \aSpineSum(\aSpineProd(\aDiffTree))
+\aDiffTree & ::= & \aSpineSum(\aSpineProd(\aDiffTree)) & \text{(difference of tree)} \\
 \end{array}\]
 
 \paragraph{Formal semantics of difference trees}
