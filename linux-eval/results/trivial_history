@@ -1,0 +1,8 @@
+branch          interesting    trivial
+linux-3.16.y           3780       9512
+linux-4.4.y            2801       9289
+linux-4.9.y            2247       9304
+linux-4.14.y           1613       9063
+linux-4.19.y           1179       7732
+linux-5.4.y             742       5933
+linux-5.10.y            395       3822

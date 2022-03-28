@@ -62,6 +62,12 @@ compare_parser.add_argument(
     help="display results as a flat list of tool pairs",
 )
 compare_parser.add_argument(
+    "-R",
+    "--one-fail-ratio",
+    action="store_true",
+    help="show ratio among tests that fail on at least one of the two compared tools",
+)
+compare_parser.add_argument(
     "branch", help="the branch on which the merge tools are compared"
 )
 compare_parser.add_argument(
@@ -214,6 +220,8 @@ def normalize_comparison_table(table):
         table = np.delete(table, Score.DIFFERENT, 1)
     if args.ratio:
         count = sum(sum(table))
+        if args.one_fail_ratio:
+            count -= table[-1][-1]
         table *= 100 / count
 
 
@@ -365,6 +373,8 @@ def show_trivial_history():
 
 if args.action == "compare":
     branch = pickle.load(open(args.branch, "rb"))
+    if args.one_fail_ratio:
+        args.ratio = True
     if args.list:
         show_tool_comparison_list(branch)
     else:
